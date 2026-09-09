@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-wayne-red: #a61b1b;
+  --color-wayne-red-dark: #7d1212;
+  --color-wayne-cream: #fff8e7;
+  --color-wayne-ink: #211b18;
+  --color-wayne-muted: #6f625c;
+  --color-wayne-border: #dfd4c7;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  background: var(--color-wayne-cream);
+  color: var(--color-wayne-ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgb(166 27 27 / 8%), transparent 28rem),
+    var(--color-wayne-cream);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}

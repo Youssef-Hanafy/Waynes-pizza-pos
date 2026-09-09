@@ -1,0 +1,3 @@
+# Phase 1 Completion Report — Public Site + Menu Admin
+
+Implemented a responsive public site, dynamic store content/settings, category/item/variant/modifier administration, image processing/storage, customer/POS visibility, sold-out state, scheduled availability, and archive-safe menu records. The migration is `20260908010000_phase1_public_menu.sql`; no new runtime secrets beyond the documented Supabase variables are required. Automated schema, validation, and public-menu tests are committed. Owner acceptance requires creating a real menu item and confirming its public rendering, visibility, sold-out, and archive behavior. Live menu content and prices remain owner-controlled operational data.

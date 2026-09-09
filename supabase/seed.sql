@@ -1,0 +1,2 @@
+-- Phase 0 reference data is inserted by the migration.
+-- Create the real owner Auth user with `npm run seed:owner`; credentials never belong in SQL.

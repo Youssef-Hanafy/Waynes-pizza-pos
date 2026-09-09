@@ -1,0 +1,3 @@
+# Phase 2 Completion Report — Cart, Customers, and Test Orders
+
+Implemented fulfillment selection, cart, modifier validation, item/order notes, customer capture and phone normalization, address and consent records, integer-cent totals, idempotent test/manual order creation, permanent snapshots, and confirmation/status pages. The migration is `20260908020000_phase2_orders.sql`; the Phase 0–5 remediation migration adds corrected overnight-hours behavior and checkout rate limiting. Automated cart/order/migration tests are committed. Owner acceptance requires staging pickup and delivery orders using a real menu and verified operational settings; live cards remain deferred.

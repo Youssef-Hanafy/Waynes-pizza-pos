@@ -1,0 +1,3 @@
+# Phase 4 Completion Report — Front POS
+
+Implemented a permission-protected touch POS for anonymous walk-ins and identified phone pickup/delivery orders, customer lookup/create, address selection, modifiers, notes, test/manual or cash designation, controlled discounts, and reuse of the canonical order transaction. The migration is `20260908040000_phase4_front_pos.sql`; remediation fixes retry idempotency, stale-address clearing, modifier display, and line reconfiguration. Scheduled menu availability intentionally applies to public online ordering only; active POS-visible non-sold-out items are sellable by staff. Owner acceptance requires staged walk-in and phone-order walkthroughs with real menu items.

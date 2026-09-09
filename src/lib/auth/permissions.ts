@@ -1,0 +1,34 @@
+import { z } from "zod";
+
+export const roleSchema = z.enum(["owner", "manager", "cashier", "kitchen", "driver", "marketing_readonly"]);
+export type AppRole = z.infer<typeof roleSchema>;
+
+export const permissionSchema = z.enum([
+  "admin.access",
+  "staff.view",
+  "staff.manage",
+  "settings.manage",
+  "menu.manage",
+  "content.manage",
+  "orders.view",
+  "pos.access",
+  "pos.discount.manage",
+  "printing.manage",
+  "printing.process",
+  "kitchen.access",
+  "driver.access"
+]);
+export type Permission = z.infer<typeof permissionSchema>;
+
+export const accessSchema = z.object({
+  profile_id: z.uuid(),
+  display_name: z.string().min(1),
+  role: roleSchema,
+  permissions: z.array(permissionSchema)
+});
+
+export type CurrentAccess = z.infer<typeof accessSchema>;
+
+export function hasPermission(access: Pick<CurrentAccess, "permissions"> | null, permission: Permission) {
+  return access?.permissions.includes(permission) ?? false;
+}
