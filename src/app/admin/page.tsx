@@ -10,6 +10,7 @@ const areas = [
   { href: "/pos", title: "Front POS", description: "Enter fast walk-in pickup and identified phone pickup or delivery orders." },
   { href: "/admin/orders", title: "Orders", description: "Search order history and inspect customer, item, totals, and timeline snapshots." },
   { href: "/admin/calendar", title: "Order calendar", description: "Review daily order counts and active sales, then drill into any business date." },
+  { href: "/admin/reports", title: "Reports", description: "Authoritative sales, refund, source, fulfillment, payment, and item reporting with CSV exports." },
   { href: "/admin/menu", title: "Menu", description: "Categories, items, variants, modifiers, photos, visibility, and sold-out status." },
   { href: "/admin/settings", title: "Website & business settings", description: "Hours, public details, page copy, notices, social links, SEO, and ordering configuration." },
 ];

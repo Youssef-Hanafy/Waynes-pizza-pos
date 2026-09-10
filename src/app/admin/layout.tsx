@@ -13,6 +13,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     hasPermission(access, "menu.manage") && ["/admin/menu", "Menu"],
     hasPermission(access, "orders.view") && ["/admin/orders", "Orders"],
     hasPermission(access, "orders.view") && ["/admin/calendar", "Calendar"],
+    hasPermission(access, "reports.view") && ["/admin/reports", "Reports"],
     hasPermission(access, "pos.access") && ["/pos", "POS"],
     hasPermission(access, "kitchen.access") && ["/kitchen", "Kitchen"],
     hasPermission(access, "printing.manage") && ["/admin/printing", "Printing"],
