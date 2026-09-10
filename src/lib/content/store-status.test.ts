@@ -32,6 +32,28 @@ describe("store status", () => {
       ),
     ).toBe(false);
   });
+  it("carries an overnight special-hours override into the next calendar day", () => {
+    const settings = {
+      ...defaultSettings,
+      special_hours: [
+        {
+          id: crypto.randomUUID(),
+          service_date: "2026-09-11",
+          label: "Late Friday",
+          closed: false,
+          opens_at: "20:00:00",
+          closes_at: "02:00:00",
+          public_note: "",
+        },
+      ],
+    };
+    expect(
+      isStoreOpenNow(settings, new Date("2026-09-12T05:00:00Z")),
+    ).toBe(true);
+    expect(
+      isStoreOpenNow(settings, new Date("2026-09-12T06:00:00Z")),
+    ).toBe(false);
+  });
   it("honors the manual ordering toggle", () => {
     expect(
       isStoreOpenNow(

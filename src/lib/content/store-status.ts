@@ -29,9 +29,7 @@ export function isStoreOpenNow(settings: StatusSettings, now = new Date()) {
   );
   const date = `${part("year")}-${part("month")}-${part("day")}`;
   const currentMinutes = Number(part("hour")) * 60 + Number(part("minute"));
-  const special = settings.special_hours.find(
-    (entry) => entry.service_date === date,
-  );
+  const special = settings.special_hours.find((entry) => entry.service_date === date);
   if (special)
     return (
       !special.closed &&
@@ -47,6 +45,21 @@ export function isStoreOpenNow(settings: StatusSettings, now = new Date()) {
     inCurrentWindow(today.open, today.close, currentMinutes)
   )
     return true;
+  // A special-hours entry belongs to its service date. Its overnight portion
+  // must remain open after midnight on the following calendar date; regular
+  // hours cannot safely stand in for that override.
+  const yesterdaySpecial = settings.special_hours.find(
+    (entry) => entry.service_date === previousDate(date),
+  );
+  if (
+    yesterdaySpecial &&
+    !yesterdaySpecial.closed &&
+    yesterdaySpecial.opens_at !== null &&
+    yesterdaySpecial.closes_at !== null &&
+    minutes(yesterdaySpecial.opens_at) > minutes(yesterdaySpecial.closes_at) &&
+    currentMinutes < minutes(yesterdaySpecial.closes_at)
+  )
+    return true;
   const yesterday = settings.business_hours[dayKeys[(dayIndex + 6) % 7]];
   return (
     !yesterday.closed &&
@@ -55,6 +68,12 @@ export function isStoreOpenNow(settings: StatusSettings, now = new Date()) {
     minutes(yesterday.open) > minutes(yesterday.close) &&
     currentMinutes < minutes(yesterday.close)
   );
+}
+
+function previousDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const previous = new Date(Date.UTC(year, month - 1, day - 1));
+  return previous.toISOString().slice(0, 10);
 }
 
 function inCurrentWindow(open: string, close: string, current: number) {

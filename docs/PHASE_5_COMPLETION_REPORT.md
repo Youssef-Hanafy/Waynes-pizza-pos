@@ -64,13 +64,13 @@ Executed successfully:
 ```text
 npm run lint       PASS
 npm run typecheck  PASS
-npm run test       PASS — 22 files, 137 tests
+npm run test       PASS — 24 files, 142 tests
 npm run build      PASS
 ```
 
 Phase 5 tests cover online and POS ticket publication after commit, modifier/routing snapshots, restricted kitchen data, reload recovery, authorization boundaries, transitions/timestamps/audit events, print leases, expired lease inspection, durable failures, retries, rollback behavior, and the printer worker's offline/timeout/acknowledgement-loss behavior.
 
-`supabase/tests/006_phase5_kitchen_printing.test.sql` is also included for a transactional hosted pgTAP run; it rolls back its fixtures.
+`supabase/tests/006_phase5_kitchen_printing.test.sql` and `007_phase0_5_special_hours.test.sql` are included for transactional pgTAP runs; they roll back their fixtures. The staging-only Playwright vertical-slice suite now also creates online/POS orders and reconciles their KDS/print-queue records when explicitly configured.
 
 ## Exact manual verification steps
 

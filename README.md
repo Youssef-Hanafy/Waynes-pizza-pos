@@ -6,7 +6,7 @@ Standalone Wayne's Pizza operating-system repository. The product source of trut
 
 Phases 0–5 are implemented: a secure foundation; public site and editable menu; idempotent test/manual online ordering; permanent order history and calendar; front-counter/phone POS; and KDS plus a durable print queue abstraction. Live card processing, drivers, reports, CRM automation, physical printers, and production cutover remain intentionally deferred.
 
-Read the phase completion reports in `docs/` and `docs/PHASE_0_5_REMEDIATION.md` before deploying. The app is **not** ready to replace the existing POS until the production checklist is completed.
+Read the phase completion reports in `docs/`, [`docs/PHASE_0_5_REMEDIATION.md`](docs/PHASE_0_5_REMEDIATION.md), and the required [`staging acceptance runbook`](docs/PHASE_0_5_STAGING_ACCEPTANCE.md) before deploying. The app is **not** ready to replace the existing POS until the production checklist is completed.
 
 ## Local setup
 
@@ -38,6 +38,8 @@ Use separate Supabase projects and secrets for local, staging, and production. T
 - `npm run test:db` (requires a running local Supabase stack)
 - `npm run verify` (all checks except the Docker-backed RLS suite)
 - `npm run test:e2e` (isolated staging only; install a Playwright browser first with `npx playwright install chromium`)
+
+The browser suite is intentionally skipped unless `E2E_RUN_STAGING=1` and its isolated staging credentials/storage states are supplied. It creates real staging orders and must never target production. Follow [`docs/PHASE_0_5_STAGING_ACCEPTANCE.md`](docs/PHASE_0_5_STAGING_ACCEPTANCE.md) to install the non-production fixture and run it.
 
 ## Production readiness gate
 
