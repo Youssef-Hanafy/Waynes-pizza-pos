@@ -76,6 +76,21 @@ async function openOwnerContext(browser: Browser) {
   return browser.newContext({ storageState: ownerStorageState! });
 }
 
+async function assertExactlyOneOrderForPhone(
+  owner: Page,
+  phone: string,
+  orderNumber: string,
+  source: "Online" | "Phone",
+) {
+  // `/admin/orders` is backed by the server-authorized `wayne_admin_orders`
+  // database projection. Its total is an authoritative count, unlike a
+  // client-side DOM count or an order-confirmation redirect.
+  await owner.goto(`/admin/orders?q=${phone}`);
+  await expect(owner.getByRole("heading", { name: "1 order", exact: true })).toBeVisible();
+  await expect(owner.getByText(orderNumber, { exact: true })).toHaveCount(1);
+  await expect(owner.getByText(source, { exact: true })).toBeVisible();
+}
+
 test.describe("Phase 0–5 staging vertical slice", () => {
   test.skip(
     !runStaging,
@@ -125,12 +140,8 @@ test.describe("Phase 0–5 staging vertical slice", () => {
 
     const ownerContext = await openOwnerContext(browser);
     const owner = await ownerContext.newPage();
-    await owner.goto(`/admin/orders?q=${pickupPhone}`);
-    await expect(owner.getByText(pickupOrder, { exact: true })).toBeVisible();
-    await expect(owner.getByText("Online")).toBeVisible();
-    await owner.goto(`/admin/orders?q=${phoneOrderPhone}`);
-    await expect(owner.getByText(phoneOrder, { exact: true })).toBeVisible();
-    await expect(owner.getByText("Phone")).toBeVisible();
+    await assertExactlyOneOrderForPhone(owner, pickupPhone, pickupOrder, "Online");
+    await assertExactlyOneOrderForPhone(owner, phoneOrderPhone, phoneOrder, "Phone");
 
     await owner.goto("/admin/calendar");
     const today = owner.getByRole("link", { name: /today/i });

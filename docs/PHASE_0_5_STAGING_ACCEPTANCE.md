@@ -13,7 +13,7 @@ This is the required evidence path for the first vertical-slice milestone. It is
 
 ## Required human verification
 
-The automated journey creates online pickup and delivery, POS walk-in and phone-delivery orders; verifies their history/calendar/KDS/print jobs; reloads KDS; and transitions a ticket through ready. A manager must additionally:
+The automated journey creates online pickup and delivery, POS walk-in and phone-delivery orders; double-clicks checkout; verifies the server-authoritative order-history total is exactly one for the unique checkout phone; verifies history/calendar/KDS/print jobs; reloads KDS; and transitions a ticket through ready. A manager must additionally:
 
 1. Confirm the date summary count and active sales equal the four created orders.
 2. Open each order detail and verify snapshots, source, payment designation, modifier, and notes.
