@@ -12,6 +12,8 @@ export const permissionSchema = z.enum([
   "content.manage",
   "orders.view",
   "reports.view",
+  "customers.view",
+  "segments.manage",
   "pos.access",
   "pos.discount.manage",
   "printing.manage",
