@@ -181,6 +181,11 @@ revoke all on function public.wayne_claim_hanafy_outbox(text), public.wayne_fini
   public.wayne_outbox_from_customer_event()
   from public, anon, authenticated;
 
+-- Phase 8 left this SECURITY DEFINER helper callable through the public API,
+-- which would return any customer's name/phone/email given their UUID. Only
+-- the outbox triggers need it.
+revoke all on function public.wayne_customer_hanafy_properties(uuid) from public, anon, authenticated;
+
 -- Schedule delivery where the platform provides pg_net + pg_cron (Supabase).
 -- Local/PGlite databases skip this block; the Next worker route still works.
 do $outer$
