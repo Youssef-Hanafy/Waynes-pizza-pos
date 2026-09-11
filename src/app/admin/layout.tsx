@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     hasPermission(access, "pos.access") && ["/pos", "POS"],
     hasPermission(access, "kitchen.access") && ["/kitchen", "Kitchen"],
     hasPermission(access, "printing.manage") && ["/admin/printing", "Printing"],
+    hasPermission(access, "integrations.manage") && ["/admin/integrations", "Integration"],
     hasPermission(access, "content.manage") && ["/admin/settings", "Website"],
   ].filter((link): link is [string, string] => Boolean(link));
 

@@ -19,7 +19,8 @@ export const permissionSchema = z.enum([
   "printing.manage",
   "printing.process",
   "kitchen.access",
-  "driver.access"
+  "driver.access",
+  "integrations.manage"
 ]);
 export type Permission = z.infer<typeof permissionSchema>;
 
