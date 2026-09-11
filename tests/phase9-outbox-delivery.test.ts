@@ -96,6 +96,8 @@ describe("Phase 9 database-native Hanafy outbox delivery", () => {
   it("keeps delivery functions away from browser roles", async () => {
     await database.exec("begin; set local role authenticated;");
     await expect(database.query("select public.wayne_dispatch_hanafy_outbox(1)")).rejects.toThrow(/permission denied/i);
+    await database.exec("rollback");
+    await database.exec("begin; set local role authenticated;");
     await expect(database.query("select public.wayne_customer_hanafy_properties(gen_random_uuid())")).rejects.toThrow(/permission denied/i);
     await database.exec("rollback");
   });
