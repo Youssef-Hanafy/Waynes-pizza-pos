@@ -11,9 +11,11 @@ values
   ('30000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner@test.local', '', now(), '{}', '{"display_name":"Test Owner"}'),
   ('30000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cashier@test.local', '', now(), '{}', '{"display_name":"Test Cashier"}');
 
+-- Staff accounts start inactive since the Phase 0-8 remediation; fixtures activate them.
 update public.profiles
-set role_id = (select id from public.roles where code = 'owner')
+set role_id = (select id from public.roles where code = 'owner'), active = true
 where id = '30000000-0000-4000-8000-000000000001';
+update public.profiles set active = true where id = '30000000-0000-4000-8000-000000000002';
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000001', true);

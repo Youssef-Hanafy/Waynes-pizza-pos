@@ -9,8 +9,9 @@ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_co
  ('4a000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','phase5-owner@test.local','',now(),'{}','{"display_name":"Phase 5 Owner"}'),
  ('4a000000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','phase5-kitchen@test.local','',now(),'{}','{"display_name":"Phase 5 Kitchen"}'),
  ('4a000000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000000','authenticated','authenticated','phase5-cashier@test.local','',now(),'{}','{"display_name":"Phase 5 Cashier"}');
-update public.profiles set role_id=(select id from public.roles where code='owner') where id='4a000000-0000-4000-8000-000000000001';
-update public.profiles set role_id=(select id from public.roles where code='kitchen') where id='4a000000-0000-4000-8000-000000000002';
+update public.profiles set role_id=(select id from public.roles where code='owner'),active=true where id='4a000000-0000-4000-8000-000000000001';
+update public.profiles set role_id=(select id from public.roles where code='kitchen'),active=true where id='4a000000-0000-4000-8000-000000000002';
+update public.profiles set role_id=(select id from public.roles where code='cashier'),active=true where id='4a000000-0000-4000-8000-000000000003';
 update public.store_settings set ordering_open=true,test_ordering_enabled=true,pickup_enabled=true,delivery_enabled=true,
  pickup_minimum_cents=0,delivery_minimum_cents=0,delivery_postal_codes=array['01606'],
  business_hours='{"sunday":{"closed":false,"open":"00:00","close":"24:00"},"monday":{"closed":false,"open":"00:00","close":"24:00"},"tuesday":{"closed":false,"open":"00:00","close":"24:00"},"wednesday":{"closed":false,"open":"00:00","close":"24:00"},"thursday":{"closed":false,"open":"00:00","close":"24:00"},"friday":{"closed":false,"open":"00:00","close":"24:00"},"saturday":{"closed":false,"open":"00:00","close":"24:00"}}';
@@ -32,6 +33,9 @@ select set_config('phase5.payload',jsonb_build_object(
 )::text,true);
 set local role anon;
 select throws_ok($$select * from public.kitchen_tickets$$,'42501','permission denied for table kitchen_tickets','anonymous cannot read kitchen tickets');
+reset role;
+-- Checkout is server-only since the Phase 0-8 remediation; the app calls it as the service role.
+set local role service_role;
 select lives_ok($$select set_config('phase5.online',public.wayne_create_test_order(current_setting('phase5.payload')::jsonb)::text,true)$$,'online checkout creates a fixture order');
 reset role;
 select is((select count(*) from public.kitchen_tickets where order_id=(current_setting('phase5.online')::jsonb->>'id')::uuid),0::bigint,'ticket is deferred until the complete order transaction');

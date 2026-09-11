@@ -20,6 +20,7 @@ export const permissionSchema = z.enum([
   "printing.process",
   "kitchen.access",
   "driver.access",
+  "delivery.dispatch",
   "integrations.manage",
   "orders.manage",
   "orders.cancel",

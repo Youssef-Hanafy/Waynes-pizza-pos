@@ -1,6 +1,6 @@
 begin;
 set local search_path = public, extensions;
-select plan(29);
+select plan(30);
 
 select ok((select relrowsecurity from pg_class where oid = 'public.customers'::regclass), 'customers has RLS');
 select ok((select relrowsecurity from pg_class where oid = 'public.customer_addresses'::regclass), 'customer_addresses has RLS');
@@ -30,17 +30,22 @@ insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id) v
 set local role anon;
 select throws_ok($$select * from public.customers$$, '42501', 'permission denied for table customers', 'anonymous cannot read customers');
 select throws_ok($$select * from public.orders$$, '42501', 'permission denied for table orders', 'anonymous cannot read orders');
+-- Since the Phase 0-8 remediation checkout is server-only: the browser posts to the
+-- app, and the app calls this RPC with the service role.
+select throws_ok($$select public.wayne_create_test_order('{}'::jsonb)$$, '42501', 'permission denied for function wayne_create_test_order', 'the browser cannot call checkout directly');
+reset role;
+set local role service_role;
 select lives_ok($$select public.wayne_create_test_order('{
   "idempotency_key":"hosted-pickup-key-0001","fulfillment_type":"pickup",
   "first_name":"Phase","last_name":"Customer","phone":"508-555-0111","email":"phase2@example.com",
   "sms_opt_in":true,"email_opt_in":false,"tip_cents":0,"promo_code":"","special_instructions":"Ring bell",
   "address":{"address1":"","address2":"","city":"","state":"","postal_code":"","delivery_instructions":""},
   "items":[{"menu_item_id":"44000000-0000-4000-8000-000000000002","variant_id":"44000000-0000-4000-8000-000000000003","quantity":2,"special_instructions":"Well done","modifiers":[{"choice_id":"44000000-0000-4000-8000-000000000005","quantity":1}]}]
-}'::jsonb)$$, 'anonymous checkout can create pickup order through RPC');
+}'::jsonb)$$, 'server-side checkout creates a pickup order through the RPC');
 reset role;
 select is((select count(*) from public.orders where idempotency_key = 'hosted-pickup-key-0001'), 1::bigint, 'pickup order persisted once');
 
-set local role anon;
+set local role service_role;
 select lives_ok($$select public.wayne_create_test_order('{
   "idempotency_key":"hosted-pickup-key-0001","fulfillment_type":"pickup",
   "first_name":"Different","last_name":"Payload","phone":"508-555-0999","email":"",
@@ -62,14 +67,14 @@ select is((select public.wayne_public_order_status(order_row.id, '44000000-0000-
 update public.menu_items set name = 'Changed Current Name' where id = '44000000-0000-4000-8000-000000000002';
 select is((select item_name_snapshot from public.order_items item join public.orders order_row on order_row.id = item.order_id where order_row.idempotency_key = 'hosted-pickup-key-0001'), 'Snapshot Pizza', 'old order keeps original item name snapshot');
 
-set local role anon;
+set local role service_role;
 select lives_ok($$select public.wayne_create_test_order('{
   "idempotency_key":"hosted-delivery-key-01","fulfillment_type":"delivery",
   "first_name":"Delivery","last_name":"Customer","phone":"508-555-0112","email":"",
   "sms_opt_in":false,"email_opt_in":false,"tip_cents":0,"promo_code":"","special_instructions":"",
   "address":{"address1":"10 Main St","address2":"2A","city":"Worcester","state":"MA","postal_code":"01606","delivery_instructions":"Side door"},
   "items":[{"menu_item_id":"44000000-0000-4000-8000-000000000002","variant_id":"44000000-0000-4000-8000-000000000003","quantity":1,"special_instructions":"","modifiers":[]}]
-}'::jsonb)$$, 'anonymous checkout can create delivery order through RPC');
+}'::jsonb)$$, 'server-side checkout creates a delivery order through the RPC');
 reset role;
 select is((select delivery_address_snapshot ->> 'postal_code' from public.orders where idempotency_key = 'hosted-delivery-key-01'), '01606', 'delivery address snapshot persisted');
 select is((select delivery_fee_cents from public.orders where idempotency_key = 'hosted-delivery-key-01'), 300, 'configured delivery fee applied');

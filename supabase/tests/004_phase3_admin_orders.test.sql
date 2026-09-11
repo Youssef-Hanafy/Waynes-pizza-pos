@@ -11,13 +11,14 @@ insert into auth.users (id, instance_id, aud, role, email, encrypted_password, e
 values
   ('46000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'phase3-owner@test.local', '', now(), '{}', '{"display_name":"Phase 3 Owner"}'),
   ('46000000-0000-4000-8000-000000000002', '00000000-0000-0000-8000-000000000000', 'authenticated', 'authenticated', 'phase3-cashier@test.local', '', now(), '{}', '{"display_name":"Phase 3 Cashier"}');
-update public.profiles set role_id = (select id from public.roles where code = 'owner') where id = '46000000-0000-4000-8000-000000000001';
+update public.profiles set role_id = (select id from public.roles where code = 'owner'), active = true where id = '46000000-0000-4000-8000-000000000001';
 
 insert into public.orders (id, order_number, source, fulfillment_type, status, payment_status, payment_method, subtotal_cents, total_cents, customer_name_snapshot, customer_phone_snapshot, pricing_snapshot, placed_at, idempotency_key)
 values
   ('46000000-0000-4000-8000-000000000010', 'W903001', 'online', 'pickup', 'placed', 'unpaid', 'test_manual', 1500, 1500, 'Alice Adams', '+15085550101', '{}', '2026-03-15 16:00:00+00', 'phase3-hosted-order-001'),
   ('46000000-0000-4000-8000-000000000011', 'W903002', 'phone', 'delivery', 'placed', 'unpaid', 'cash', 1700, 2000, 'Bob Baker', '+15085550102', '{}', '2026-03-16 17:00:00+00', 'phase3-hosted-order-002');
-insert into public.order_items (id, order_id, item_name_snapshot, unit_price_cents, quantity, line_total_cents) values ('46000000-0000-4000-8000-000000000020', '46000000-0000-4000-8000-000000000010', 'Cheese Pizza', 1500, 1, 1500);
+-- category_name_snapshot is required since Phase 6; fixtures that bypass checkout must supply it.
+insert into public.order_items (id, order_id, item_name_snapshot, category_name_snapshot, unit_price_cents, quantity, line_total_cents) values ('46000000-0000-4000-8000-000000000020', '46000000-0000-4000-8000-000000000010', 'Cheese Pizza', 'Phase 3 Pizza', 1500, 1, 1500);
 insert into public.order_events (id, order_id, event_type, to_status) values ('46000000-0000-4000-8000-000000000030', '46000000-0000-4000-8000-000000000010', 'order.placed', 'placed');
 
 set local role authenticated;

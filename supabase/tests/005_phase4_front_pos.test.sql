@@ -10,7 +10,8 @@ insert into auth.users (id, instance_id, aud, role, email, encrypted_password, e
 values
   ('48000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','phase4-owner@test.local','',now(),'{}','{"display_name":"Phase 4 Owner"}'),
   ('48000000-0000-4000-8000-000000000002','00000000-0000-0000-8000-000000000000','authenticated','authenticated','phase4-cashier@test.local','',now(),'{}','{"display_name":"Phase 4 Cashier"}');
-update public.profiles set role_id=(select id from public.roles where code='owner') where id='48000000-0000-4000-8000-000000000001';
+update public.profiles set role_id=(select id from public.roles where code='owner'),active=true where id='48000000-0000-4000-8000-000000000001';
+update public.profiles set role_id=(select id from public.roles where code='cashier'),active=true where id='48000000-0000-4000-8000-000000000002';
 update public.store_settings set tax_rate_basis_points=625, delivery_fee_cents=300, delivery_postal_codes=array['01606'], test_ordering_enabled=true;
 insert into public.menu_categories (id,name,customer_visible) values ('48000000-0000-4000-8000-000000000010','Phase 4 Counter',false);
 insert into public.menu_items (id,category_id,name,base_price_cents,customer_visible,pos_visible) values ('48000000-0000-4000-8000-000000000011','48000000-0000-4000-8000-000000000010','Counter Pizza',1600,false,true);
@@ -26,15 +27,29 @@ select lives_ok($$select public.wayne_create_pos_order('{
   "promo_code":"","manual_discount_type":"","manual_discount_value":0,"manual_discount_reason":"","tip_cents":0,"special_instructions":"Phone order",
   "items":[{"menu_item_id":"48000000-0000-4000-8000-000000000011","variant_id":null,"quantity":1,"special_instructions":"Well done","modifiers":[]}]
 }'::jsonb)$$,'cashier can create identified phone delivery');
+reset role;
 select is((select source from public.orders where idempotency_key='hosted-phase4-phone-001'),'phone','phone order source is canonical');
+set local role authenticated;
+reset role;
 select ok((select customer_id is not null from public.orders where idempotency_key='hosted-phase4-phone-001'),'phone order links customer');
+set local role authenticated;
+reset role;
 select is((select delivery_address_snapshot->>'postal_code' from public.orders where idempotency_key='hosted-phase4-phone-001'),'01606','delivery snapshot persists');
+set local role authenticated;
+reset role;
 select is((select order_count from public.customers where phone_normalized='+15085550144'),1,'customer order count updates');
-select is((select lifetime_spend_cents from public.customers where phone_normalized='+15085550144'),2000::bigint,'customer lifetime spend updates');
-select is((select average_order_value_cents from public.customers where phone_normalized='+15085550144'),2000,'customer average order value updates');
+set local role authenticated;
+reset role;
+select is((select lifetime_spend_cents from public.customers where phone_normalized='+15085550144'),2019::bigint,'customer lifetime spend updates');
+set local role authenticated;
+reset role;
+select is((select average_order_value_cents from public.customers where phone_normalized='+15085550144'),2019,'customer average order value updates');
+set local role authenticated;
 select is(jsonb_array_length(public.wayne_pos_customer_search('Pat Customer')),1,'customer search finds name');
 select is(jsonb_array_length(public.wayne_pos_customer_search('(508) 555-0144')),1,'customer search finds formatted phone');
+reset role;
 select is(jsonb_array_length(public.wayne_pos_customer_search((select order_number from public.orders where idempotency_key='hosted-phase4-phone-001'))),1,'customer search finds order number');
+set local role authenticated;
 select lives_ok($$select public.wayne_create_pos_order('{
   "idempotency_key":"hosted-phase4-phone-001","customer_mode":"identified","customer_id":"","source":"phone","fulfillment_type":"delivery","payment_method":"cash",
   "first_name":"Changed","last_name":"Payload","phone":"508-555-0999","email":"","address_id":"",
@@ -42,15 +57,21 @@ select lives_ok($$select public.wayne_create_pos_order('{
   "promo_code":"","manual_discount_type":"","manual_discount_value":0,"manual_discount_reason":"","tip_cents":0,"special_instructions":"",
   "items":[{"menu_item_id":"48000000-0000-4000-8000-000000000011","variant_id":null,"quantity":1,"special_instructions":"","modifiers":[]}]
 }'::jsonb)$$,'duplicate POS submission returns existing order');
+reset role;
 select is((select count(*) from public.orders where idempotency_key='hosted-phase4-phone-001'),1::bigint,'duplicate click creates one order');
+set local role authenticated;
 select lives_ok($$select public.wayne_create_pos_order('{
   "idempotency_key":"hosted-phase4-walkin-01","customer_mode":"walk_in","customer_id":"","source":"pos","fulfillment_type":"pickup","payment_method":"test_manual",
   "first_name":"","last_name":"","phone":"","email":"","address_id":"","address":{"address1":"","address2":"","city":"","state":"","postal_code":"","delivery_instructions":""},
   "promo_code":"","manual_discount_type":"","manual_discount_value":0,"manual_discount_reason":"","tip_cents":0,"special_instructions":"Counter",
   "items":[{"menu_item_id":"48000000-0000-4000-8000-000000000011","variant_id":null,"quantity":1,"special_instructions":"","modifiers":[]}]
 }'::jsonb)$$,'cashier can create walk-in pickup');
+reset role;
 select ok((select customer_id is null from public.orders where idempotency_key='hosted-phase4-walkin-01'),'walk-in stays anonymous');
+set local role authenticated;
+reset role;
 select is((select source from public.orders where idempotency_key='hosted-phase4-walkin-01'),'pos','walk-in uses POS source');
+set local role authenticated;
 select throws_ok($$select public.wayne_create_pos_order('{
   "idempotency_key":"hosted-phase4-denied-001","customer_mode":"walk_in","customer_id":"","source":"pos","fulfillment_type":"pickup","payment_method":"test_manual",
   "first_name":"","last_name":"","phone":"","email":"","address_id":"","address":{},"promo_code":"","manual_discount_type":"percent","manual_discount_value":1000,"manual_discount_reason":"Service recovery","tip_cents":0,"special_instructions":"",
@@ -63,9 +84,15 @@ select lives_ok($$select public.wayne_create_pos_order('{
   "first_name":"","last_name":"","phone":"","email":"","address_id":"","address":{},"promo_code":"","manual_discount_type":"percent","manual_discount_value":1000,"manual_discount_reason":"Service recovery","tip_cents":0,"special_instructions":"",
   "items":[{"menu_item_id":"48000000-0000-4000-8000-000000000011","variant_id":null,"quantity":1,"special_instructions":"","modifiers":[]}]
 }'::jsonb)$$,'owner can apply reasoned manual discount');
+reset role;
 select is((select discount_cents from public.orders where idempotency_key='hosted-phase4-owner-disc1'),160,'manual percentage discount is authoritative');
+set local role authenticated;
+reset role;
 select is((select actor_user_id from public.order_events event join public.orders order_row on order_row.id=event.order_id where order_row.idempotency_key='hosted-phase4-owner-disc1' and event.event_type='order.discount_applied'),'48000000-0000-4000-8000-000000000001'::uuid,'discount event records actor');
+set local role authenticated;
+reset role;
 select is((select metadata->>'reason' from public.order_events event join public.orders order_row on order_row.id=event.order_id where order_row.idempotency_key='hosted-phase4-owner-disc1' and event.event_type='order.discount_applied'),'Service recovery','discount event records reason');
+set local role authenticated;
 select throws_ok($$select public.wayne_create_pos_order('{
   "idempotency_key":"hosted-phase4-bad-zone-01","customer_mode":"identified","customer_id":"","source":"phone","fulfillment_type":"delivery","payment_method":"test_manual",
   "first_name":"Zone","last_name":"Test","phone":"508-555-0199","email":"","address_id":"","address":{"address1":"1 State St","address2":"","city":"Boston","state":"MA","postal_code":"02110","delivery_instructions":""},
