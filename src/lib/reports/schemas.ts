@@ -7,6 +7,8 @@ export const reportSummarySchema = z.object({
 });
 export const dailySalesSchema = z.object({ service_date: z.string(), order_count: z.number().int().nonnegative(), sales_cents: z.number().int(), refund_cents: z.number().int(), net_sales_cents: z.number().int() });
 export const itemReportSchema = z.object({ category_name: z.string(), item_name: z.string(), quantity: z.number().int().nonnegative(), sales_cents: z.number().int() });
+export const reportOrderSchema = z.object({ order_number: z.string(), placed_at: z.string(), source: z.string(), fulfillment_type: z.string(), status: z.string(), payment_method: z.string(), discount_cents: z.number().int(), total_cents: z.number().int() });
 export type ReportSummary = z.infer<typeof reportSummarySchema>;
 export type DailySales = z.infer<typeof dailySalesSchema>;
 export type ItemReport = z.infer<typeof itemReportSchema>;
+export type ReportOrder = z.infer<typeof reportOrderSchema>;

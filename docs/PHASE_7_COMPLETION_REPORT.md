@@ -9,7 +9,7 @@ Date: 2026-09-10
 - An editable server-authorized segment engine with validated JSON rules for spend, order count, AOV, 30-day order frequency, recency, and SMS/email consent.
 - Editable default VIP, High spender, Frequent customer, 30/60/90-day inactive, Text Club, and Email-consented segments, with live population counts.
 - Immutable membership history and customer-domain events. Enter/exit events are emitted only when membership actually changes.
-- A server-side nightly inactivity evaluator interface plus a manager-triggered operational run button. It deliberately does not create an in-process timer per customer.
+- A database-scheduled nightly inactivity evaluator, run log, and manager-triggered operational run button. It deliberately does not create an in-process timer per customer.
 
 ## Files changed
 
@@ -31,7 +31,7 @@ Date: 2026-09-10
 
 ## Environment and owner setup
 
-No new environment variables are required. Apply the migration to Wayne's Supabase project before deployment. Configure the platform scheduler to invoke `wayne_run_nightly_inactivity_evaluator()` once nightly through an authenticated owner/manager context; the same evaluator is available from `/admin/segments` for a controlled manual run.
+No new environment variables are required. Apply both Phase 7 and the forward-only audit remediation migration to Wayne's Supabase project before deployment. Where `pg_cron` is enabled, the remediation migration creates the nightly job and records executions in `customer_segment_evaluation_runs`; the same evaluator is available from `/admin/segments` for a controlled manual run.
 
 ## Exact manual verification
 
@@ -57,7 +57,7 @@ Phase 7 tests cover authoritative metric rebuilding, editable VIP/high-spender r
 
 - Customer merge/deduplication remains deferred as required by the specification.
 - Recent Hanafy marketing activity is not shown until the Phase 8/9 integration is built.
-- The scheduler is an operational deployment configuration; no unsafe browser timer or per-customer delayed job was introduced.
+- No unsafe browser timer or per-customer delayed job was introduced. See `PHASE_6_7_AUDIT_REMEDIATION.md` for scheduler verification and the live-acceptance record.
 
 ## Acceptance checklist
 

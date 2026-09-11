@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const migrationFiles = ["20260908000000_phase0_foundation.sql", "20260908010000_phase1_public_menu.sql", "20260908020000_phase2_orders.sql", "20260908030000_phase3_admin_orders.sql", "20260908040000_phase4_front_pos.sql", "20260909050000_phase5_kitchen_printing.sql", "20260909060000_phase0_5_reliability_fixes.sql", "20260909070000_phase0_5_special_hours_carryover.sql", "20260910060000_phase6_reports.sql"];
+const migrationFiles = ["20260908000000_phase0_foundation.sql", "20260908010000_phase1_public_menu.sql", "20260908020000_phase2_orders.sql", "20260908030000_phase3_admin_orders.sql", "20260908040000_phase4_front_pos.sql", "20260909050000_phase5_kitchen_printing.sql", "20260909060000_phase0_5_reliability_fixes.sql", "20260909070000_phase0_5_special_hours_carryover.sql", "20260910060000_phase6_reports.sql", "20260910070000_phase7_customer_intelligence.sql", "20260911080000_phase6_7_audit_remediation.sql"];
 const migrations = migrationFiles.map((file) => readFileSync(resolve(process.cwd(), "supabase/migrations", file), "utf8"));
 const ownerId = "46000000-0000-4000-8000-000000000001";
 const cashierId = "46000000-0000-4000-8000-000000000002";
@@ -52,10 +52,45 @@ describe("Phase 6 authoritative reporting", () => {
     await expect(asOwner(database, "public.wayne_report_summary('2026-03-08','2026-03-09')", cashierId)).rejects.toThrow(/Report viewing permission required/);
   });
 
-  it("uses the configured store timezone in every reporting boundary", () => {
-    const migration = migrations.at(-1)!;
-    expect(migration).toContain("settings.timezone into store_timezone");
-    expect(migration.match(/at time zone store_timezone/g)).toHaveLength(12);
+  it("excludes a refund when its order is subsequently cancelled", async () => {
+    await database.exec(`update public.orders set status='cancelled' where id='${firstOrderId}';`);
+    const summary = await asOwner<{ order_count: number; refund_cents: number; net_sales_cents: number }>(database, "public.wayne_report_summary('2026-03-08','2026-03-09')");
+    expect(summary).toMatchObject({ order_count: 0, refund_cents: 0, net_sales_cents: 0 });
+    await database.exec(`update public.orders set status='completed' where id='${firstOrderId}';`);
+  });
+
+  it("uses exact New York midnight boundaries in standard time and daylight time", async () => {
+    const dates = await database.query<{ standard_before: string; standard_after: string; daylight_before: string; daylight_after: string }>(`select
+      ('2026-01-15 04:59:59+00'::timestamptz at time zone 'America/New_York')::date::text standard_before,
+      ('2026-01-15 05:00:00+00'::timestamptz at time zone 'America/New_York')::date::text standard_after,
+      ('2026-07-15 03:59:59+00'::timestamptz at time zone 'America/New_York')::date::text daylight_before,
+      ('2026-07-15 04:00:00+00'::timestamptz at time zone 'America/New_York')::date::text daylight_after`);
+    expect(dates.rows[0]).toEqual({ standard_before: "2026-01-14", standard_after: "2026-01-15", daylight_before: "2026-07-14", daylight_after: "2026-07-15" });
+  });
+
+  it("assigns orders and refunds around New York midnight through the report functions", async () => {
+    await database.exec(`
+      insert into public.orders(id,order_number,source,fulfillment_type,status,payment_status,payment_method,subtotal_cents,discount_cents,delivery_fee_cents,tax_cents,tip_cents,total_cents,customer_name_snapshot,customer_phone_snapshot,pricing_snapshot,placed_at,idempotency_key) values
+        ('46000000-0000-4000-8000-000000000041','W900041','pos','pickup','completed','paid','cash',100,0,0,0,0,100,'Boundary','+15085550141','{}','2026-01-15 04:59:59+00','phase6-standard-before'),
+        ('46000000-0000-4000-8000-000000000042','W900042','pos','pickup','completed','paid','cash',200,0,0,0,0,200,'Boundary','+15085550142','{}','2026-01-15 05:00:00+00','phase6-standard-after'),
+        ('46000000-0000-4000-8000-000000000043','W900043','pos','pickup','completed','paid','cash',300,0,0,0,0,300,'Boundary','+15085550143','{}','2026-07-15 03:59:59+00','phase6-daylight-before'),
+        ('46000000-0000-4000-8000-000000000044','W900044','pos','pickup','completed','paid','cash',400,0,0,0,0,400,'Boundary','+15085550144','{}','2026-07-15 04:00:00+00','phase6-daylight-after');
+      insert into public.payments(id,order_id,provider,provider_payment_id,method,amount_cents,status) values
+        ('46000000-0000-4000-8000-000000000051','46000000-0000-4000-8000-000000000041','manual','boundary-standard-before','cash',100,'captured'),
+        ('46000000-0000-4000-8000-000000000052','46000000-0000-4000-8000-000000000042','manual','boundary-standard-after','cash',200,'captured');
+      insert into public.refunds(payment_id,order_id,amount_cents,reason,created_by_user_id,created_at) values
+        ('46000000-0000-4000-8000-000000000051','46000000-0000-4000-8000-000000000041',25,'Boundary refund','${ownerId}','2026-01-15 04:59:59+00'),
+        ('46000000-0000-4000-8000-000000000052','46000000-0000-4000-8000-000000000042',50,'Boundary refund','${ownerId}','2026-01-15 05:00:00+00');
+    `);
+    const standard = await asOwner<Array<{ service_date: string; order_count: number; sales_cents: number; refund_cents: number; net_sales_cents: number }>>(database, "public.wayne_report_daily_sales('2026-01-14','2026-01-15')");
+    const daylight = await asOwner<Array<{ service_date: string; order_count: number; sales_cents: number; refund_cents: number; net_sales_cents: number }>>(database, "public.wayne_report_daily_sales('2026-07-14','2026-07-15')");
+    expect(standard).toEqual([{ service_date: "2026-01-14", order_count: 1, sales_cents: 100, refund_cents: 25, net_sales_cents: 75 }, { service_date: "2026-01-15", order_count: 1, sales_cents: 200, refund_cents: 50, net_sales_cents: 150 }]);
+    expect(daylight).toEqual([{ service_date: "2026-07-14", order_count: 1, sales_cents: 300, refund_cents: 0, net_sales_cents: 300 }, { service_date: "2026-07-15", order_count: 1, sales_cents: 400, refund_cents: 0, net_sales_cents: 400 }]);
+  });
+
+  it("keeps the order export eligibility identical to report totals", async () => {
+    const orders = await asOwner<Array<{ order_number: string }>>(database, "public.wayne_report_orders('2026-03-08','2026-03-09')");
+    expect(orders).toEqual([{ order_number: "W900001", placed_at: "2026-03-08T23:30:00-05:00", source: "online", fulfillment_type: "pickup", status: "completed", payment_method: "card", discount_cents: 100, total_cents: 950 }]);
   });
 });
 

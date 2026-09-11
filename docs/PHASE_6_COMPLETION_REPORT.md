@@ -4,7 +4,7 @@ Date: 2026-09-10
 
 ## What was built
 
-- Permission-protected `/admin/reports` with New York business-date filters, dashboard cards, reconciliation figures, source/fulfillment/payment splits, daily sales, item sales, and CSV exports for orders, daily summaries, and items.
+- Permission-protected `/admin/reports` with New York business-date filters, dashboard cards, sales/order trend charts, reconciliation figures, source/fulfillment/payment splits, daily sales, item sales, and CSV exports for orders, daily summaries, and items.
 - Authoritative reporting RPCs. They calculate from immutable order totals, order status, persisted refund ledger rows, and historical item/category snapshots—never from client state.
 - Durable `payments` and `refunds` ledger interfaces for the later processor/refund workflow, plus an order-item category snapshot trigger so later menu edits cannot rewrite historical reports.
 
@@ -39,7 +39,7 @@ No environment variables are added. Apply the migration to the Wayne's Supabase 
 ## Known limitations / deferred work
 
 - Live payment capture and the operator refund action intentionally remain Phase 11 work. The ledger and reporting treatment are in place now; no fake payment/refund UI was added.
-- Charts are represented by accessible date/value tables in this phase; the underlying daily series is ready for a chart component if it becomes useful.
+- Daily sales and daily order charts are provided, with the detailed date/value table retained as the accessible representation.
 
 ## Acceptance checklist
 
@@ -51,4 +51,4 @@ No environment variables are added. Apply the migration to the Wayne's Supabase 
 | Refunds/discounts affect net reporting | Implemented and tested. |
 | New York business-day boundaries | Implemented and tested. |
 
-The next phase is Phase 7 — Customer Intelligence + Segments. It has not been started.
+Phase 7 — Customer Intelligence + Segments is implemented. See `PHASE_7_COMPLETION_REPORT.md` and `PHASE_6_7_AUDIT_REMEDIATION.md` for its operational status.

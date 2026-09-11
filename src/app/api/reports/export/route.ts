@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getAdminOrders } from "@/lib/orders/admin-queries";
-import { getReportData } from "@/lib/reports/queries";
+import { getReportData, getReportOrders } from "@/lib/reports/queries";
 
 const querySchema = z.object({ dataset: z.enum(["orders", "daily", "items"]), from: z.iso.date(), to: z.iso.date() }).refine((value) => value.to >= value.from, { message: "Invalid date range" });
 export async function GET(request: Request) {
@@ -17,9 +16,7 @@ export async function GET(request: Request) {
 }
 
 async function orderRows(from: string, to: string): Promise<Array<Array<string | number | null>>> {
-  const first = await getAdminOrders({ from, through: to, page: 1 });
-  const orders = [...first.orders];
-  for (let page = 2; orders.length < first.total_count; page += 1) orders.push(...(await getAdminOrders({ from, through: to, page })).orders);
+  const orders = await getReportOrders(from, to);
   return [["order_number", "placed_at", "source", "fulfillment", "status", "payment_method", "discount_cents", "total_cents"], ...orders.map((order) => [order.order_number, order.placed_at, order.source, order.fulfillment_type, order.status, order.payment_method, order.discount_cents, order.total_cents])];
 }
 function toCsv(rows: Array<Array<string | number | null>>) { return `\uFEFF${rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n")}\r\n`; }
