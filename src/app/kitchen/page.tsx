@@ -14,5 +14,5 @@ export default async function KitchenPage() {
   let initialError = "";
   try { tickets = await getKitchenBoard(); } catch { initialError = "Kitchen is unavailable. Checking connection…"; }
   return <KitchenBoard initialTickets={tickets} initialError={initialError} staffName={access.display_name}
-    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} />;
+    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} canManageOrders={hasPermission(access, "orders.manage")} />;
 }

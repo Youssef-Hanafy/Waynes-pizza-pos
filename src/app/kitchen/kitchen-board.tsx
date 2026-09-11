@@ -5,10 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { elapsedLabel, kitchenBoardSchema, nextKitchenAction, type KitchenTicket } from "@/lib/kitchen/schemas";
+import { nextHandOff } from "@/lib/orders/status";
 
-type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; canOpenAdmin: boolean; canOpenPos: boolean };
+type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; canOpenAdmin: boolean; canOpenPos: boolean; canManageOrders: boolean };
 
-export function KitchenBoard({ initialTickets, initialError, staffName, canOpenAdmin, canOpenPos }: Props) {
+export function KitchenBoard({ initialTickets, initialError, staffName, canOpenAdmin, canOpenPos, canManageOrders }: Props) {
   const [tickets, setTickets] = useState(initialTickets);
   const [error, setError] = useState(initialError);
   const [connection, setConnection] = useState("Connecting");
@@ -78,6 +79,20 @@ export function KitchenBoard({ initialTickets, initialError, staffName, canOpenA
     finally { busy.current = false; setPending(null); }
   }
 
+  // Ready tickets leave the board once the customer or driver has the food.
+  async function handOff(ticket: KitchenTicket) {
+    const action = nextHandOff(ticket.status, ticket.payload.fulfillment_type);
+    if (busy.current || !action) return;
+    busy.current = true; setPending(ticket.order_id);
+    try {
+      const response = await fetch("/api/orders/status", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: ticket.order_id, expected_status: ticket.status, next_status: action.status }), signal: AbortSignal.timeout(10000) });
+      if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || "Hand-off could not be saved."); }
+      await refresh();
+    } catch (cause) { await refresh(); setError(cause instanceof Error ? cause.message : "Check the saved state before retrying."); }
+    finally { busy.current = false; setPending(null); }
+  }
+
   const stations = [...new Set(tickets.flatMap((ticket) => ticket.payload.items.map((item) => item.station)))].sort();
   const shown = tickets.filter((ticket) => (filter === "all" || (filter === "ready" ? ticket.status === "ready" : ticket.status !== "ready"))
     && (!station || ticket.payload.items.some((item) => item.station === station)));
@@ -104,7 +119,7 @@ export function KitchenBoard({ initialTickets, initialError, staffName, canOpenA
           </div>
           <div className="p-5">{ticket.payload.instructions ? <p className="mb-4 whitespace-pre-wrap rounded-lg border border-red-200 bg-red-50 p-3 font-bold">Order note: {ticket.payload.instructions}</p> : null}
             <ul className="divide-y divide-wayne-border">{ticket.payload.items.map((item) => <li className="py-3" key={item.id}><strong className="text-xl">{item.quantity}× {item.name}</strong>{item.variant ? <p className="font-bold">{item.variant}</p> : null}<p className="text-xs text-wayne-muted">Station: {item.station}</p>{item.modifiers.length ? <ul className="mt-2 space-y-1">{item.modifiers.map((modifier, index) => <li key={index}>{modifier.group}: {modifier.quantity}× {modifier.name}</li>)}</ul> : null}{item.instructions ? <p className="mt-2 whitespace-pre-wrap font-bold text-wayne-red">{item.instructions}</p> : null}</li>)}</ul>
-            {action ? <Button className="mt-5 min-h-14 w-full text-lg" disabled={pending !== null || stale || Boolean(error)} onClick={() => { void transition(ticket); }}>{pending === ticket.order_id ? "Saving…" : action.label}</Button> : <p className="mt-5 rounded-xl bg-green-50 p-4 font-bold text-green-800">{ticket.payload.fulfillment_type === "delivery" ? "Ready for driver pickup" : "Ready at the counter"}</p>}
+            {action ? <Button className="mt-5 min-h-14 w-full text-lg" disabled={pending !== null || stale || Boolean(error)} onClick={() => { void transition(ticket); }}>{pending === ticket.order_id ? "Saving…" : action.label}</Button> : <><p className="mt-5 rounded-xl bg-green-50 p-4 font-bold text-green-800">{ticket.payload.fulfillment_type === "delivery" ? "Ready for driver pickup" : "Ready at the counter"}</p>{canManageOrders && nextHandOff(ticket.status, ticket.payload.fulfillment_type) ? <Button className="mt-3 min-h-14 w-full text-lg" disabled={pending !== null || stale || Boolean(error)} onClick={() => { void handOff(ticket); }} variant="secondary">{pending === ticket.order_id ? "Saving…" : nextHandOff(ticket.status, ticket.payload.fulfillment_type)!.label}</Button> : null}</>}
           </div>
         </article>;
       })}</div>

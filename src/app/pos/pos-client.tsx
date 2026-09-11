@@ -9,13 +9,14 @@ import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, findMenuItem } from "@/lib/orders/cart";
 import type { CartLine } from "@/lib/orders/schemas";
 import { posCustomerSchema, posOrderCreatedSchema, type PosCustomer } from "@/lib/pos/schemas";
+import { OpenOrdersPanel } from "./open-orders-panel";
 
 type MenuItem = PublicMenu[number]["items"][number];
-type Props = { canManageDiscount: boolean; canOpenAdmin: boolean; menu: PublicMenu; settings: StoreSettings; staffName: string };
+type Props = { canManageDiscount: boolean; canManageOrders: boolean; canOpenAdmin: boolean; menu: PublicMenu; settings: StoreSettings; staffName: string };
 
 const blankAddress = { address1: "", address2: "", city: "Worcester", state: "MA", postal_code: "", delivery_instructions: "" };
 
-export function PosClient({ canManageDiscount, canOpenAdmin, menu, settings, staffName }: Props) {
+export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, menu, settings, staffName }: Props) {
   const [customerMode, setCustomerMode] = useState<"walk_in" | "identified">("walk_in");
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -106,7 +107,7 @@ export function PosClient({ canManageDiscount, canOpenAdmin, menu, settings, sta
   if (created) return <main className="grid min-h-screen place-items-center bg-stone-100 p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl"><p className="text-sm font-black uppercase tracking-[0.2em] text-green-700">Order submitted</p><h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p><p className="mt-4 rounded-xl bg-amber-50 p-4 font-bold">TEST / MANUAL boundary — no card was processed.</p><Button className="mt-6 w-full text-lg" onClick={newTicket}>Start new ticket</Button></section></main>;
 
   return <div className="min-h-screen bg-stone-100">
-    <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 bg-wayne-ink px-4 py-3 text-white"><div><strong className="text-xl">Wayne&apos;s Front POS</strong><span className="ml-3 text-sm text-stone-300">{staffName}</span></div><div className="flex gap-2">{canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin">Admin</Link></Button> : null}<Button asChild variant="secondary"><Link href="/">Public site</Link></Button></div></header>
+    <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 bg-wayne-ink px-4 py-3 text-white"><div><strong className="text-xl">Wayne&apos;s Front POS</strong><span className="ml-3 text-sm text-stone-300">{staffName}</span></div><div className="flex flex-wrap gap-2">{canManageOrders ? <OpenOrdersPanel timeZone={settings.timezone} /> : null}{canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin">Admin</Link></Button> : null}<Button asChild variant="secondary"><Link href="/">Public site</Link></Button></div></header>
     <main className="grid min-h-[calc(100vh-4rem)] xl:grid-cols-[19rem_1fr_24rem]">
       <aside className="border-b border-wayne-border bg-white p-4 xl:border-b-0 xl:border-r">
         <h2 className="text-xl font-black">Order type</h2><div className="mt-3 grid grid-cols-2 gap-2"><Button className="px-3" onClick={chooseWalkIn} variant={customerMode === "walk_in" ? "primary" : "secondary"}>Walk-in</Button><Button className="px-3" onClick={choosePhone} variant={customerMode === "identified" ? "primary" : "secondary"}>Phone</Button></div>

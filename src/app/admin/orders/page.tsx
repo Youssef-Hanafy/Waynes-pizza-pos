@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { requirePermission } from "@/lib/auth/access";
 import { getStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
@@ -44,6 +45,7 @@ export default async function AdminOrdersPage({
         <div>
           <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Orders</p>
           <h1 className="mt-3 text-4xl font-black">Order history</h1>
+          <div className="mt-2"><AutoRefresh intervalMs={30_000} live /></div>
           <p className="mt-3 text-wayne-muted">Find an order by date, order number, customer name, or phone number.</p>
         </div>
         <Button asChild variant="secondary"><Link href="/admin/calendar">Monthly calendar</Link></Button>

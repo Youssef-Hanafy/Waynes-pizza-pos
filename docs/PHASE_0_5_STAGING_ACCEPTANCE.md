@@ -4,8 +4,8 @@ This is the required evidence path for the first vertical-slice milestone. It is
 
 ## One-time staging preparation
 
-1. Apply every committed migration, including `20260909070000_phase0_5_special_hours_carryover.sql`.
-2. Create owner and cashier test accounts, with `admin.access`/`kitchen.access`/`printing.manage` for the owner and `pos.access` for the cashier.
+1. Apply every committed migration, including `20260909070000_phase0_5_special_hours_carryover.sql` and `20260914080000_phase0_8_audit_remediation.sql`. Set `SUPABASE_SERVICE_ROLE_KEY` for the staging app — online checkout is server-only and returns 503 without it.
+2. Create owner and cashier test accounts, with `admin.access`/`kitchen.access`/`printing.manage` for the owner and `pos.access` for the cashier. Since the Phase 0–8 remediation, new Auth users start **inactive**: bootstrap the owner with `npm run seed:owner`, then create the cashier from `/admin/staff` (or activate it there).
 3. Run `supabase/fixtures/phase0-5-staging-vertical-slice.sql` in the staging SQL editor or a staging-only database pipeline. It creates the explicitly labelled `Staging Supreme Pizza` fixture and 24-hour TEST / MANUAL staging settings.
 4. Create Playwright storage-state files for the staging owner and cashier. These files contain authenticated sessions and must stay outside Git.
 5. Set `E2E_BASE_URL`, `E2E_RUN_STAGING=1`, `E2E_MENU_ITEM=Staging Supreme Pizza`, `E2E_OWNER_STORAGE_STATE`, and `E2E_POS_STORAGE_STATE` in the staging test environment.

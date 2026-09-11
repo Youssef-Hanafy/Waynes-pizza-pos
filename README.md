@@ -4,9 +4,9 @@ Standalone Wayne's Pizza operating-system repository. The product source of trut
 
 ## Current scope
 
-Phases 0–5 are implemented: a secure foundation; public site and editable menu; idempotent test/manual online ordering; permanent order history and calendar; front-counter/phone POS; and KDS plus a durable print queue abstraction. Live card processing, drivers, reports, CRM automation, physical printers, and production cutover remain intentionally deferred.
+Phases 0–9 are implemented: a secure foundation; public site and editable menu; idempotent test/manual online ordering; permanent order history and calendar; front-counter/phone POS; KDS plus a durable print queue abstraction; the owner dashboard and reports; customer intelligence and segments; and the Hanafy CRM event integration. The Phase 0–8 audit remediation ([`docs/PHASE_0_8_REMEDIATION.md`](docs/PHASE_0_8_REMEDIATION.md)) added order completion/cancellation, an immutable audit log, staff management, promotion admin, least-privilege database grants, and server error capture. Live card processing, drivers, physical printers, and production cutover remain intentionally deferred.
 
-Read the phase completion reports in `docs/`, [`docs/PHASE_0_5_REMEDIATION.md`](docs/PHASE_0_5_REMEDIATION.md), and the required [`staging acceptance runbook`](docs/PHASE_0_5_STAGING_ACCEPTANCE.md) before deploying. The app is **not** ready to replace the existing POS until the production checklist is completed.
+Read the phase completion reports in `docs/`, [`docs/PHASE_0_5_REMEDIATION.md`](docs/PHASE_0_5_REMEDIATION.md), [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), and the required [`staging acceptance runbook`](docs/PHASE_0_5_STAGING_ACCEPTANCE.md) before deploying. The app is **not** ready to replace the existing POS until the production checklist is completed.
 
 ## Local setup
 
@@ -22,6 +22,8 @@ Requirements: Node.js 22+, npm, and Docker Desktop (for the local Supabase stack
 8. Start the app: `npm run dev`
 
 Remove the initial owner password from the environment after bootstrapping. Never expose `SUPABASE_SERVICE_ROLE_KEY` or owner credentials through a `NEXT_PUBLIC_` variable.
+
+`SUPABASE_SERVICE_ROLE_KEY` is **required** on the server: online checkout (`/api/orders`), staff account creation, and error capture use it, and the database no longer lets the public anon key place orders. New sign-ups start with no access until the owner activates them in `/admin/staff`.
 
 The Phase 1 migration creates the public `wayne-menu` Storage bucket. Menu and website images are validated, resized, autorotated, and converted to WebP before upload.
 

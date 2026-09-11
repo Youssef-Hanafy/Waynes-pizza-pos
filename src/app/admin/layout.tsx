@@ -21,6 +21,9 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     hasPermission(access, "printing.manage") && ["/admin/printing", "Printing"],
     hasPermission(access, "integrations.manage") && ["/admin/integrations", "Integration"],
     hasPermission(access, "content.manage") && ["/admin/settings", "Website"],
+    hasPermission(access, "promotions.manage") && ["/admin/promotions", "Promotions"],
+    hasPermission(access, "staff.view") && ["/admin/staff", "Staff"],
+    hasPermission(access, "audit.view") && ["/admin/audit", "Audit"],
   ].filter((link): link is [string, string] => Boolean(link));
 
   return (
@@ -29,7 +32,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
           <div className="flex items-center gap-6">
             <Link className="font-black" href="/admin">Wayne&apos;s Pizza</Link>
-            <nav aria-label="Admin navigation" className="hidden items-center gap-4 text-sm font-bold md:flex">
+            <nav aria-label="Admin navigation" className="hidden flex-wrap items-center gap-x-4 gap-y-1 py-2 text-sm font-bold md:flex">
               {links.map(([href, label]) => <Link href={href} key={href}>{label}</Link>)}
               <Link href="/" target="_blank">View site ↗</Link>
             </nav>

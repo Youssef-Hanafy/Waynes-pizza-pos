@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { getPublicSupabaseEnvironment } from "@/lib/supabase/env";
+import { logger } from "@/lib/logging/logger";
+import { tryGetServerSupabaseEnvironment } from "@/lib/supabase/env";
 import { checkoutInputSchema, orderCreatedSchema } from "@/lib/orders/schemas";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
 
@@ -17,10 +18,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
 
-  const environment = getPublicSupabaseEnvironment();
+  // Checkout and its rate limiter are not callable with the public anon key, so a
+  // browser cannot skip the limiter by calling the database directly. Only this
+  // server route, holding the service-role key, can place online orders.
+  const environment = tryGetServerSupabaseEnvironment();
+  if (!environment)
+    return Response.json(
+      { error: "Online ordering is temporarily unavailable. Please call Wayne's Pizza." },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
   const supabase = createClient(
     environment.NEXT_PUBLIC_SUPABASE_URL,
-    environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    environment.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
   const { data: allowed, error: rateLimitError } = await supabase.rpc(
@@ -29,6 +38,7 @@ export async function POST(request: Request) {
   );
   // Fail closed: checkout writes must not become an unbounded anonymous API if
   // its abuse protection cannot be reached.
+  if (rateLimitError) logger.error("checkout.rate_limit_unavailable", new Error(rateLimitError.message), { code: rateLimitError.code });
   if (rateLimitError || allowed !== true)
     return Response.json(
       { error: "Too many order attempts. Please wait a few minutes and try again." },

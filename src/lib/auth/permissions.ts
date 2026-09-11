@@ -20,7 +20,11 @@ export const permissionSchema = z.enum([
   "printing.process",
   "kitchen.access",
   "driver.access",
-  "integrations.manage"
+  "integrations.manage",
+  "orders.manage",
+  "orders.cancel",
+  "audit.view",
+  "promotions.manage"
 ]);
 export type Permission = z.infer<typeof permissionSchema>;
 
@@ -28,7 +32,11 @@ export const accessSchema = z.object({
   profile_id: z.uuid(),
   display_name: z.string().min(1),
   role: roleSchema,
-  permissions: z.array(permissionSchema)
+  // Unknown codes (e.g. a permission added by a newer migration) are ignored instead
+  // of failing the whole parse, which would sign every staff member out.
+  permissions: z.array(z.string()).transform((codes) =>
+    codes.filter((code): code is Permission => permissionSchema.safeParse(code).success)
+  )
 });
 
 export type CurrentAccess = z.infer<typeof accessSchema>;

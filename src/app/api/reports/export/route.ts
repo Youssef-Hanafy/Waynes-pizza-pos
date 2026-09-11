@@ -17,6 +17,8 @@ export async function GET(request: Request) {
 
 async function orderRows(from: string, to: string): Promise<Array<Array<string | number | null>>> {
   const orders = await getReportOrders(from, to);
-  return [["order_number", "placed_at", "source", "fulfillment", "status", "payment_method", "discount_cents", "total_cents"], ...orders.map((order) => [order.order_number, order.placed_at, order.source, order.fulfillment_type, order.status, order.payment_method, order.discount_cents, order.total_cents])];
+  // Business date and local time are Wayne's America/New_York clock; the UTC column
+  // keeps the exact instant for reconciliation with payment providers.
+  return [["order_number", "business_date", "placed_at_local", "placed_at_utc", "source", "fulfillment", "status", "payment_method", "discount_cents", "total_cents"], ...orders.map((order) => [order.order_number, order.business_date, order.placed_at_local, new Date(order.placed_at).toISOString(), order.source, order.fulfillment_type, order.status, order.payment_method, order.discount_cents, order.total_cents])];
 }
 function toCsv(rows: Array<Array<string | number | null>>) { return `\uFEFF${rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n")}\r\n`; }

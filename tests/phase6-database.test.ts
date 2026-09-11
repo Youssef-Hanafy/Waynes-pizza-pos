@@ -89,8 +89,9 @@ describe("Phase 6 authoritative reporting", () => {
   });
 
   it("keeps the order export eligibility identical to report totals", async () => {
-    const orders = await asOwner<Array<{ order_number: string }>>(database, "public.wayne_report_orders('2026-03-08','2026-03-09')");
-    expect(orders).toEqual([{ order_number: "W900001", placed_at: "2026-03-08T23:30:00-05:00", source: "online", fulfillment_type: "pickup", status: "completed", payment_method: "card", discount_cents: 100, total_cents: 950 }]);
+    const orders = await asOwner<Array<{ order_number: string; placed_at: string }>>(database, "public.wayne_report_orders('2026-03-08','2026-03-09')");
+    // Compare the instant, not the session's display offset, so the test passes in any machine timezone.
+    expect(orders.map((order) => ({ ...order, placed_at: new Date(order.placed_at).toISOString() }))).toEqual([{ order_number: "W900001", placed_at: "2026-03-09T04:30:00.000Z", source: "online", fulfillment_type: "pickup", status: "completed", payment_method: "card", discount_cents: 100, total_cents: 950 }]);
   });
 });
 
