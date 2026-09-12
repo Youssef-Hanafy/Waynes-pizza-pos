@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,15 @@ import {
   readCart,
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
+import { cardCheckoutResultSchema, type CheckoutPaymentConfig } from "@/lib/payments/schemas";
+import { SquareCardField, type Tokenizer } from "@/components/payments/square-card-field";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
   fulfillment: Fulfillment;
   menu: PublicMenu;
+  /** Present only when the owner has switched real card payment on. */
+  paymentConfig: CheckoutPaymentConfig | null;
   settings: {
     delivery_enabled: boolean;
     delivery_fee_cents: number;
@@ -32,13 +36,15 @@ type Props = {
   };
 };
 
-export function CheckoutClient({ fulfillment, menu, settings }: Props) {
+export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: Props) {
   const router = useRouter();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
   const [tipCents, setTipCents] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const tokenizer = useRef<Tokenizer | null>(null);
+  const [cardReady, setCardReady] = useState(false);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
@@ -62,6 +68,11 @@ export function CheckoutClient({ fulfillment, menu, settings }: Props) {
     (fulfillment === "delivery"
       ? settings.delivery_enabled
       : settings.pickup_enabled);
+
+  const handleTokenizer = useCallback((next: Tokenizer | null) => {
+    tokenizer.current = next;
+    setCardReady(Boolean(next));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,6 +112,50 @@ export function CheckoutClient({ fulfillment, menu, settings }: Props) {
       })),
     };
     try {
+      if (paymentConfig) {
+        if (!tokenizer.current) {
+          setError("Card entry is still loading. Wait a moment and try again.");
+          return;
+        }
+        // The card is tokenized in the processor's own frame; only a one-time token
+        // reaches this code, and the order and the charge happen in one request so a
+        // closed tab cannot leave a paid order unplaced.
+        const card = await tokenizer.current({
+          amountCents: total,
+          billingPostalCode: String(form.get("postal_code") ?? "") || undefined,
+        });
+        const response = await fetch("/api/payments/card", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order: payload,
+            payment: {
+              source_id: card.token,
+              verification_token: card.verificationToken,
+              idempotency_key: idempotencyKey,
+            },
+          }),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok) {
+          setError(
+            typeof body === "object" && body !== null && "error" in body
+              ? String(body.error)
+              : "The payment could not be completed.",
+          );
+          return;
+        }
+        const paid = cardCheckoutResultSchema.safeParse(body);
+        if (!paid.success) {
+          setError("The payment confirmation was invalid. Please call Wayne's Pizza before paying again.");
+          return;
+        }
+        window.localStorage.removeItem(CART_STORAGE_KEY);
+        window.sessionStorage.removeItem("wayne-order-idempotency-v1");
+        router.push(`/order/${paid.data.id}?token=${paid.data.public_access_token}`);
+        return;
+      }
+
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,8 +180,8 @@ export function CheckoutClient({ fulfillment, menu, settings }: Props) {
       router.push(
         `/order/${result.data.id}?token=${result.data.public_access_token}`,
       );
-    } catch {
-      setError("Connection problem. Your cart is safe; please try again.");
+    } catch (cause) {
+      setError(cause instanceof Error && paymentConfig ? cause.message : "Connection problem. Your cart is safe; please try again.");
     } finally {
       setPending(false);
     }
@@ -200,13 +255,29 @@ export function CheckoutClient({ fulfillment, menu, settings }: Props) {
             />
           </div>
         </section>
-        <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6">
-          <h2 className="text-2xl font-black">TEST / MANUAL payment</h2>
-          <p className="mt-2">
-            No card information is requested and no payment is collected. This
-            order is saved as unpaid test data.
-          </p>
-        </section>
+        {paymentConfig ? (
+          <section className="rounded-2xl border border-wayne-border bg-white p-6">
+            <h2 className="text-2xl font-black">Card payment</h2>
+            <p className="mt-2 text-sm text-wayne-muted">
+              Your card is charged for {formatCents(total)} when you place the order.
+            </p>
+            <div className="mt-4">
+              <SquareCardField
+                config={paymentConfig}
+                onReady={handleTokenizer}
+                onStatus={setError}
+              />
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6">
+            <h2 className="text-2xl font-black">TEST / MANUAL payment</h2>
+            <p className="mt-2">
+              No card information is requested and no payment is collected. This
+              order is saved as unpaid test data.
+            </p>
+          </section>
+        )}
       </div>
       <aside className="self-start rounded-2xl border border-wayne-border bg-white p-5 shadow-sm lg:sticky lg:top-5">
         <h2 className="text-2xl font-black capitalize">{fulfillment} order</h2>
@@ -299,10 +370,12 @@ export function CheckoutClient({ fulfillment, menu, settings }: Props) {
         ) : null}
         <Button
           className="mt-5 w-full"
-          disabled={pending || !enabled || subtotal < minimum}
+          disabled={pending || !enabled || subtotal < minimum || (Boolean(paymentConfig) && !cardReady)}
           type="submit"
         >
-          {pending ? "Placing once…" : "Place test order"}
+          {pending
+            ? paymentConfig ? "Charging once…" : "Placing once…"
+            : paymentConfig ? `Pay ${formatCents(total)} and place order` : "Place test order"}
         </Button>
         <Button asChild className="mt-3 w-full" variant="secondary">
           <Link href={`/menu?fulfillment=${fulfillment}`}>Edit cart</Link>

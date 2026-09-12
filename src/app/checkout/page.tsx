@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/site/site-header";
 import { getStoreSettings } from "@/lib/content/queries";
 import { isStoreOpenNow } from "@/lib/content/store-status";
 import { getPublicMenu } from "@/lib/menu/queries";
+import { getCheckoutPaymentConfig } from "@/lib/payments/queries";
 import { CheckoutClient } from "./checkout-client";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,10 @@ export default async function CheckoutPage({
 }: {
   searchParams: Promise<{ fulfillment?: string }>;
 }) {
-  const [settings, menu, params] = await Promise.all([
+  const [settings, menu, paymentConfig, params] = await Promise.all([
     getStoreSettings(),
     getPublicMenu(),
+    getCheckoutPaymentConfig(),
     searchParams,
   ]);
   const fulfillment = params.fulfillment === "delivery" ? "delivery" : "pickup";
@@ -33,15 +35,17 @@ export default async function CheckoutPage({
           Checkout
         </p>
         <h1 className="mt-3 text-4xl font-black">
-          Review and place your test order
+          {paymentConfig ? "Review and pay for your order" : "Review and place your test order"}
         </h1>
         <p className="mt-3 max-w-2xl text-wayne-muted">
-          This Phase 2 checkout is clearly labeled TEST / MANUAL. It saves a
-          real test order but does not collect card payment.
+          {paymentConfig
+            ? "Your card is charged when you place the order. Wayne's starts cooking once the payment clears."
+            : "This checkout is clearly labeled TEST / MANUAL. It saves a real test order but does not collect card payment."}
         </p>
         <CheckoutClient
           fulfillment={fulfillment}
           menu={menu}
+          paymentConfig={paymentConfig}
           settings={{
             delivery_enabled: settings.delivery_enabled,
             delivery_fee_cents: settings.delivery_fee_cents,
