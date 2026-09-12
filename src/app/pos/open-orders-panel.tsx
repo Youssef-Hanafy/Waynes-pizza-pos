@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { nextHandOff, openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import { z } from "zod";
+import { parseCashCountInput, posDrawerSchema } from "@/lib/cash/schemas";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -21,6 +22,9 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
   const [terminalId, setTerminalId] = useState("");
   const [charging, setCharging] = useState<string | null>(null);
   const [chargeNote, setChargeNote] = useState("");
+  const [shiftId, setShiftId] = useState("");
+  const [cashFor, setCashFor] = useState<string | null>(null);
+  const [tendered, setTendered] = useState("");
   const mounted = useRef(true);
 
   const load = useCallback(async () => {
@@ -43,6 +47,15 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
           setTerminals(parsed.data);
           setTerminalId((current) => current || (parsed.data[0]?.id ?? ""));
         }
+      })
+      .catch(() => undefined);
+
+    // Cash can only be taken into an open drawer, so the button appears only then.
+    fetch("/api/pos/drawer", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: unknown) => {
+        const parsed = posDrawerSchema.safeParse(body);
+        if (mounted.current && parsed.success) setShiftId(parsed.data.shift?.id ?? "");
       })
       .catch(() => undefined);
   }, []);
@@ -114,6 +127,33 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
     } catch { /* the poll loop reports whatever the reader ends up saying */ }
   }
 
+  /** Take cash at the counter: the drawer records it and works out the change. */
+  async function takeCash(order: OpenOrder) {
+    const amount = parseCashCountInput(tendered);
+    if (!amount.ok) { setError(amount.error); return; }
+    if (amount.cents < order.total_cents) { setError("The cash handed over is less than the amount due."); return; }
+    setPending(order.id); setError("");
+    try {
+      const response = await fetch("/api/pos/drawer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cash_payment", shift_id: shiftId, order_id: order.id,
+          tendered_cents: amount.cents, idempotency_key: `pos-cash-${order.id}-${amount.cents}`,
+        }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "The cash could not be recorded.");
+      const change = Number(body.result?.change_cents ?? 0);
+      setChargeNote(change > 0 ? `Change due ${formatCents(change)}` : "Paid exactly, no change.");
+      setCashFor(null); setTendered("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The cash could not be recorded.");
+    } finally {
+      setPending(null); await load();
+    }
+  }
+
   const readyCount = orders.filter((order) => order.status === "ready").length;
   const time = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
@@ -136,7 +176,20 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
               {terminals.length && order.payment_status === "unpaid" ? (charging === order.id
                 ? <><span className="text-sm font-bold">{chargeNote || "Charging…"}</span><Button onClick={() => { void cancelCharge(order); }} variant="secondary">Cancel on reader</Button></>
                 : <Button disabled={charging !== null} onClick={() => { void chargeCard(order); }} variant="secondary">Take card payment</Button>) : null}
+              {shiftId && order.payment_status === "unpaid" && cashFor !== order.id
+                ? <Button disabled={pending !== null} onClick={() => { setCashFor(order.id); setTendered((order.total_cents / 100).toFixed(2)); setError(""); }} variant="secondary">Take cash</Button>
+                : null}
             </div>
+            {cashFor === order.id ? <div className="mt-3 rounded-xl border border-wayne-border bg-stone-50 p-3">
+              <p className="text-sm font-bold">Amount due {formatCents(order.total_cents)}</p>
+              <label className="mt-2 grid gap-2 text-sm font-bold">Cash handed over
+                <input className="min-h-12 rounded-lg border border-wayne-border px-3 text-lg font-black" inputMode="decimal" onChange={(event) => setTendered(event.target.value)} value={tendered} />
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button disabled={pending !== null} onClick={() => { void takeCash(order); }}>{pending === order.id ? "Saving…" : "Record cash"}</Button>
+                <Button onClick={() => { setCashFor(null); setError(""); }} variant="secondary">Cancel</Button>
+              </div>
+            </div> : null}
           </li>;
         })}</ul>
         {!orders.length && !error ? <p className="mt-6 rounded-xl border border-dashed border-wayne-border p-8 text-center text-wayne-muted">No open orders right now.</p> : null}
