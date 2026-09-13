@@ -89,11 +89,20 @@ with the actor.
 variance sign and wording, the note threshold, and the count parser (which accepts `0`, since
 an empty drawer is a real count).
 
-### Not yet verified
+### Verified on the Mac, 2026-09-13
 
-Your Mac went offline before this change could be copied across, so `tsc` against the project's
-real type graph, ESLint, the vitest suites and the Next build have **not** run against Phase 12.
-Every file was parse-checked and the SQL is proved, but the type graph is not.
+`npm run verify` — ESLint clean at `--max-warnings=0`, `tsc --noEmit` clean, 41 vitest files,
+and `next build` compiling all 45 routes.
+
+The vitest run caught one real defect on the first pass: `cashErrorMessage` decided whether a
+database error was safe to show by looking for words in the message, and
+`relation "public.register_shifts" does not exist` contains "register" — so an internal Postgres
+error would have been printed on the cashier's screen. The same latent leak was in the payments,
+delivery and order-transition mappers ("refund", "cash" and "reason" all appear in table and
+column names). Fixed by deciding on the SQLSTATE instead: our functions raise deliberate,
+human-written messages under exactly five codes (`22023`, `40001`, `42501`, `P0001`, `P0002`),
+and everything else gets a fallback sentence. All four mappers now share
+`src/lib/errors/database.ts`.
 
 ## Known limitations / deferred items
 
