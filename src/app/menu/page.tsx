@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function MenuPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fulfillment?: string }>;
+  searchParams: Promise<{ fulfillment?: string; item?: string }>;
 }) {
   const [settings, menu, params] = await Promise.all([
     getStoreSettings(),
@@ -35,30 +35,30 @@ export default async function MenuPage({
   const orderingOpen =
     isStoreOpenNow(settings) && settings.test_ordering_enabled;
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="storefront flex min-h-screen flex-col">
       <SiteHeader settings={settings} />
-      <main>
-        <section className="relative overflow-hidden bg-wayne-green px-5 py-14 text-center text-wayne-cream">
-          <div className="absolute inset-0 opacity-70 [background-image:radial-gradient(circle_at_15%_-20%,rgba(217,154,33,0.25),transparent_45%),radial-gradient(circle_at_85%_130%,rgba(176,34,34,0.3),transparent_45%)]" />
-          <div className="relative">
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-wayne-gold sm:text-sm">
-              {fulfillment} order
-            </p>
-            <h1 className="mt-4 font-display text-4xl font-black tracking-tight sm:text-5xl">
-              Build your Wayne&apos;s order
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl leading-7 text-wayne-cream/75">
-              {settings.ordering_instructions}
-            </p>
-            <p className="mx-auto mt-6 inline-flex max-w-xl items-center gap-2 rounded-full bg-wayne-gold px-5 py-2 text-sm font-black text-wayne-ink">
-              <span aria-hidden className="h-2 w-2 rounded-full bg-wayne-ink/60" />
-              TEST / MANUAL MODE — no card payment is collected
-            </p>
+      <main id="main-content">
+        <section className="menu-intro">
+          <div className="site-container">
+            <div>
+              <p className="eyebrow">FRESH FROM WAYNE’S</p>
+              <h1>Good food. Great choices.</h1>
+              <p>
+                Pick your favorites. Make them yours. We’ll take it from here.
+              </p>
+            </div>
+            <div className="menu-intro-note">
+              <span>YOUR NEXT GREAT MEAL</span>
+              <strong>starts right here.</strong>
+            </div>
           </div>
         </section>
         {menu.length ? (
           <OrderMenuClient
             initialFulfillment={fulfillment}
+            initialItemId={params.item}
+            pickupMinutes={settings.pickup_prep_minutes}
+            deliveryMinutes={settings.delivery_estimate_minutes}
             menu={menu}
             orderingOpen={orderingOpen}
             pickupEnabled={settings.pickup_enabled}

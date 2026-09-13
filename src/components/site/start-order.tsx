@@ -1,73 +1,134 @@
 import Link from "next/link";
+import { SiteIcon } from "./site-icon";
 
-/**
- * The whole point of the page. A visitor who came to buy pizza meets exactly one
- * question — picking up or delivered — and each answer is a single large target
- * that lands them in the ordering flow already set to that choice.
- *
- * When ordering is off it says so and gives the phone number, because a closed
- * shop that still takes phone orders should not look like a dead website.
- */
 export function StartOrder({
   deliveryEnabled,
   orderingAvailable,
   phone,
   pickupEnabled,
+  pickupMinutes = 25,
+  deliveryMinutes = 45,
 }: {
   deliveryEnabled: boolean;
   orderingAvailable: boolean;
   phone: string;
   pickupEnabled: boolean;
+  pickupMinutes?: number;
+  deliveryMinutes?: number;
 }) {
   const choices = [
-    { enabled: pickupEnabled, fulfillment: "pickup", label: "Pickup", note: "Ready at the counter" },
-    { enabled: deliveryEnabled, fulfillment: "delivery", label: "Delivery", note: "Brought to your door" },
+    {
+      enabled: pickupEnabled,
+      fulfillment: "pickup",
+      label: "Pickup",
+      note: `Approx. ${pickupMinutes} min`,
+      icon: "bag" as const,
+    },
+    {
+      enabled: deliveryEnabled,
+      fulfillment: "delivery",
+      label: "Delivery",
+      note: `Approx. ${deliveryMinutes} min`,
+      icon: "truck" as const,
+    },
   ].filter((choice) => choice.enabled);
-
   return (
-    <section className="relative overflow-hidden bg-wayne-green text-wayne-cream">
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-80 [background-image:radial-gradient(circle_at_12%_-15%,rgba(217,154,33,0.3),transparent_42%),radial-gradient(circle_at_88%_115%,rgba(176,34,34,0.38),transparent_45%)]"
-      />
-      <div className="relative mx-auto max-w-5xl px-5 py-12 text-center sm:py-16">
-        <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight sm:text-6xl">
-          Start your order
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl text-wayne-cream/75">
-          Greek &amp; Italian style pizza, made in Worcester for over fifty years.
-        </p>
-
-        {orderingAvailable && choices.length ? (
-          <div className="mt-9 grid gap-4 sm:grid-cols-2">
-            {choices.map((choice) => (
-              <Link
-                className="group flex min-h-28 flex-col items-center justify-center rounded-2xl bg-wayne-red px-6 py-6 shadow-raised transition hover:bg-wayne-red-dark focus-visible:bg-wayne-red-dark"
-                href={`/menu?fulfillment=${choice.fulfillment}`}
-                key={choice.fulfillment}
-              >
-                <span className="font-display text-3xl font-black uppercase tracking-tight sm:text-4xl">{choice.label}</span>
-                <span className="mt-1 text-sm text-white/80">{choice.note}</span>
+    <>
+      <section className="pizza-hero">
+        <div className="site-container hero-content">
+          <div className="hero-copy">
+            <p className="eyebrow light">
+              <span /> YOUR NEIGHBORHOOD. YOUR PIZZA.
+            </p>
+            <h1>
+              Make tonight
+              <br />
+              a <span>Wayne’s night.</span>
+            </h1>
+            <p className="hero-description">
+              The crispy crust. The melty cheese. The first bite.
+              <br className="desktop-break" /> Your Wayne&apos;s favorites,
+              fresh from our oven.
+            </p>
+            <div className="hero-actions">
+              <Link className="order-button" href="/menu?fulfillment=pickup">
+                Order carryout <SiteIcon name="arrow" />
               </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="mx-auto mt-9 max-w-xl rounded-2xl bg-wayne-cream/10 px-6 py-7 ring-1 ring-wayne-cream/20">
-            <p className="font-display text-xl font-black">Online ordering is closed right now.</p>
-            <p className="mt-2 text-wayne-cream/75">Browse the menu, or call and we&apos;ll take care of you.</p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-              {phone ? (
-                <a className="inline-flex min-h-12 items-center rounded-xl bg-wayne-red px-6 font-display text-lg font-black text-white transition hover:bg-wayne-red-dark" href={`tel:${phone}`}>
-                  Call {phone}
-                </a>
-              ) : null}
-              <Link className="inline-flex min-h-12 items-center rounded-xl bg-wayne-cream/15 px-6 font-bold transition hover:bg-wayne-cream/25" href="/menu">
-                See the menu
+              <Link className="hero-secondary" href="/menu?fulfillment=delivery">
+                Get delivery <SiteIcon name="arrow" />
               </Link>
             </div>
+            <div className="hero-proof">
+              <span className="hero-stars" aria-hidden>
+                ✦ ✦ ✦
+              </span>{" "}
+              Over 50 years of bringing people to the table.
+            </div>
           </div>
-        )}
+          <div className="hero-stamp" aria-hidden>
+            <span>WORCESTER, MA</span>
+            <strong>
+              Wayne’s<br />PIZZA
+            </strong>
+            <span>★ THE GOOD STUFF ★</span>
+          </div>
+          <div className="hero-caption">
+            <span className="status-dot is-open" /> GOOD NIGHTS START WITH
+            PIZZA.
+          </div>
+        </div>
+      </section>
+      <div className="site-container order-start-wrap">
+        <section className="order-start" aria-label="Start your order">
+          <div className="order-start-title">
+            <span className="order-start-icon">
+              <SiteIcon name="pizza" size={30} />
+            </span>
+            <div>
+              <p className="eyebrow">LET’S EAT</p>
+              <h2>
+                {orderingAvailable
+                  ? "How do you want your Wayne’s?"
+                  : "A little menu inspiration?"}
+              </h2>
+              <p>
+                {orderingAvailable
+                  ? "Your favorites are just a few clicks away."
+                  : "Online ordering is closed. Explore the menu for your next visit."}
+              </p>
+            </div>
+          </div>
+          <div className="order-choices">
+            {orderingAvailable && choices.length ? (
+              choices.map((choice) => (
+                <Link
+                  className={`fulfillment-card ${choice.fulfillment}`}
+                  href={`/menu?fulfillment=${choice.fulfillment}`}
+                  key={choice.fulfillment}
+                >
+                  <SiteIcon name={choice.icon} size={26} />
+                  <span>
+                    <strong>{choice.label}</strong>
+                    <small>{choice.note}</small>
+                  </span>
+                  <SiteIcon name="arrow" size={21} />
+                </Link>
+              ))
+            ) : (
+              <>
+                <Link className="order-button" href="/menu">
+                  Browse the menu <SiteIcon name="arrow" />
+                </Link>
+                {phone && (
+                  <a className="text-link" href={`tel:${phone}`}>
+                    Call {phone}
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        </section>
       </div>
-    </section>
+    </>
   );
 }

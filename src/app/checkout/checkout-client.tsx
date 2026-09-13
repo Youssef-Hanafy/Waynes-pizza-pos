@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +20,14 @@ import {
   readCart,
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
-import { cardCheckoutResultSchema, type CheckoutPaymentConfig } from "@/lib/payments/schemas";
-import { SquareCardField, type Tokenizer } from "@/components/payments/square-card-field";
+import {
+  cardCheckoutResultSchema,
+  type CheckoutPaymentConfig,
+} from "@/lib/payments/schemas";
+import {
+  SquareCardField,
+  type Tokenizer,
+} from "@/components/payments/square-card-field";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
@@ -36,7 +48,12 @@ type Props = {
   };
 };
 
-export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: Props) {
+export function CheckoutClient({
+  fulfillment,
+  menu,
+  paymentConfig,
+  settings,
+}: Props) {
   const router = useRouter();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
@@ -147,12 +164,16 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
         }
         const paid = cardCheckoutResultSchema.safeParse(body);
         if (!paid.success) {
-          setError("The payment confirmation was invalid. Please call Wayne's Pizza before paying again.");
+          setError(
+            "The payment confirmation was invalid. Please call Wayne's Pizza before paying again.",
+          );
           return;
         }
         window.localStorage.removeItem(CART_STORAGE_KEY);
         window.sessionStorage.removeItem("wayne-order-idempotency-v1");
-        router.push(`/order/${paid.data.id}?token=${paid.data.public_access_token}`);
+        router.push(
+          `/order/${paid.data.id}?token=${paid.data.public_access_token}`,
+        );
         return;
       }
 
@@ -181,7 +202,11 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
         `/order/${result.data.id}?token=${result.data.public_access_token}`,
       );
     } catch (cause) {
-      setError(cause instanceof Error && paymentConfig ? cause.message : "Connection problem. Your cart is safe; please try again.");
+      setError(
+        cause instanceof Error && paymentConfig
+          ? cause.message
+          : "Connection problem. Your cart is safe; please try again.",
+      );
     } finally {
       setPending(false);
     }
@@ -236,10 +261,10 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
           </section>
         ) : null}
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
-          <h2 className="text-2xl font-black">Consent & order notes</h2>
+          <h2 className="text-2xl font-black">Deals & order notes</h2>
           <p className="mt-2 text-sm text-wayne-muted">
-            Order updates are transactional. Marketing permission is separate
-            and optional.
+            Keep up with Wayne’s deals if you’d like. These choices are optional
+            and do not affect your order updates.
           </p>
           <div className="mt-4 grid gap-3">
             <Check label="Send me Wayne's Pizza text deals" name="sms_opt_in" />
@@ -259,7 +284,8 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Card payment</h2>
             <p className="mt-2 text-sm text-wayne-muted">
-              Your card is charged for {formatCents(total)} when you place the order.
+              Your card is charged for {formatCents(total)} when you place the
+              order.
             </p>
             <div className="mt-4">
               <SquareCardField
@@ -370,12 +396,21 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
         ) : null}
         <Button
           className="mt-5 w-full"
-          disabled={pending || !enabled || subtotal < minimum || (Boolean(paymentConfig) && !cardReady)}
+          disabled={
+            pending ||
+            !enabled ||
+            subtotal < minimum ||
+            (Boolean(paymentConfig) && !cardReady)
+          }
           type="submit"
         >
           {pending
-            ? paymentConfig ? "Charging once…" : "Placing once…"
-            : paymentConfig ? `Pay ${formatCents(total)} and place order` : "Place test order"}
+            ? paymentConfig
+              ? "Charging once…"
+              : "Placing once…"
+            : paymentConfig
+              ? `Pay ${formatCents(total)} and place order`
+              : "Place test order"}
         </Button>
         <Button asChild className="mt-3 w-full" variant="secondary">
           <Link href={`/menu?fulfillment=${fulfillment}`}>Edit cart</Link>
@@ -385,10 +420,36 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
   );
 }
 
-function CartLineOptions({ item, line }: { item: PublicMenu[number]["items"][number] | undefined; line: CartLine }) {
+function CartLineOptions({
+  item,
+  line,
+}: {
+  item: PublicMenu[number]["items"][number] | undefined;
+  line: CartLine;
+}) {
   if (!item) return null;
-  const options = line.modifiers.flatMap((modifier) => item.modifier_groups.flatMap((group) => group.choices.filter((choice) => choice.id === modifier.choice_id).map((choice) => `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`)));
-  return <>{options.length ? <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p> : null}{line.special_instructions ? <p className="mt-1 text-sm text-wayne-muted">Note: {line.special_instructions}</p> : null}</>;
+  const options = line.modifiers.flatMap((modifier) =>
+    item.modifier_groups.flatMap((group) =>
+      group.choices
+        .filter((choice) => choice.id === modifier.choice_id)
+        .map(
+          (choice) =>
+            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
+        ),
+    ),
+  );
+  return (
+    <>
+      {options.length ? (
+        <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
+      ) : null}
+      {line.special_instructions ? (
+        <p className="mt-1 text-sm text-wayne-muted">
+          Note: {line.special_instructions}
+        </p>
+      ) : null}
+    </>
+  );
 }
 
 function Check({ label, name }: { label: string; name: string }) {

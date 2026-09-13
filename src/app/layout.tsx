@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
 import "./globals.css";
+import "./storefront.css";
 
 /** Inter carries the reading; Archivo — a variable face, so font-black is a real 900 — carries the headings. */
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });

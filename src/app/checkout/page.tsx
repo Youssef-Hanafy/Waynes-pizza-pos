@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { SiteIcon } from "@/components/site/site-icon";
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -28,14 +30,26 @@ export default async function CheckoutPage({
   const orderingOpen =
     isStoreOpenNow(settings) && settings.test_ordering_enabled;
   return (
-    <div className="min-h-screen">
+    <div className="storefront checkout-page min-h-screen">
       <SiteHeader settings={settings} />
-      <main className="mx-auto max-w-6xl px-5 py-10">
+      <main id="main-content" className="mx-auto max-w-6xl px-5 py-10">
+        <nav className="checkout-steps" aria-label="Order progress">
+          <Link href={`/menu?fulfillment=${fulfillment}`}>
+            <SiteIcon name="check" size={14} />
+            Your favorites
+          </Link>
+          <span>—</span>
+          <strong>2. Checkout</strong>
+          <span>—</span>
+          <span>3. Enjoy</span>
+        </nav>
         <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">
           Checkout
         </p>
         <h1 className="mt-3 text-4xl font-black">
-          {paymentConfig ? "Review and pay for your order" : "Review and place your test order"}
+          {paymentConfig
+            ? "Review and pay for your order"
+            : "Review and place your test order"}
         </h1>
         <p className="mt-3 max-w-2xl text-wayne-muted">
           {paymentConfig

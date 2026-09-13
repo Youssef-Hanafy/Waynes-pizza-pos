@@ -1,46 +1,65 @@
 import Link from "next/link";
 import { formatAddress, type StoreSettings } from "@/lib/content/schemas";
-
+import { BrandMark } from "./brand-mark";
+import { SiteIcon } from "./site-icon";
 export function SiteFooter({ settings }: { settings: StoreSettings }) {
-  const socialLinks = [
-    { href: settings.facebook_url, label: "Facebook" },
-    { href: settings.instagram_url, label: "Instagram" },
-  ].filter((link) => link.href);
-
   return (
-    <footer className="mt-auto border-t-4 border-wayne-red bg-wayne-green text-wayne-cream">
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_auto_auto]">
+    <footer className="site-footer">
+      <div className="checker-strip" aria-hidden />
+      <div className="site-container footer-grid">
         <div>
-          <p className="font-display text-2xl font-black tracking-tight">{settings.store_name}</p>
-          <p className="mt-3 max-w-md text-sm leading-6 text-wayne-cream/70">{settings.footer_text}</p>
+          <Link href="/" className="footer-brand">
+            <BrandMark />
+          </Link>
+          <p>
+            Big flavor. Local love.
+            <br />
+            Your neighborhood pizza place for over 50 years.
+          </p>
         </div>
-
-        <nav aria-label="Footer navigation" className="grid content-start gap-2 text-sm font-semibold">
-          <Link className="text-wayne-cream/80 transition hover:text-wayne-cream" href="/menu">Menu</Link>
-          <Link className="text-wayne-cream/80 transition hover:text-wayne-cream" href="/about">About</Link>
-          <Link className="text-wayne-cream/80 transition hover:text-wayne-cream" href="/contact">Contact</Link>
+        <nav aria-label="Footer navigation">
+          <h2>COME HUNGRY</h2>
+          <Link href="/menu">Explore the menu</Link>
+          <Link href="/rewards">Wayne’s Text Daily</Link>
+          <Link href="/about">The Wayne&apos;s story</Link>
+          <Link href="/contact">Hours & location</Link>
         </nav>
-
-        <address className="grid content-start gap-2 text-sm not-italic leading-6 text-wayne-cream/70">
-          <p>{formatAddress(settings)}</p>
-          {settings.public_phone ? (
-            <a className="font-display text-xl font-black tracking-tight text-wayne-cream" href={`tel:${settings.public_phone}`}>
-              {settings.public_phone}
+        <div>
+          <h2>FIND YOUR WAYNE’S</h2>
+          <address>{formatAddress(settings)}</address>
+          <a className="footer-phone" href={`tel:${settings.public_phone}`}>
+            <SiteIcon name="phone" size={17} />
+            {settings.public_phone}
+          </a>
+          {settings.facebook_url && (
+            <a href={settings.facebook_url} target="_blank" rel="noreferrer">
+              Facebook ↗
             </a>
-          ) : null}
-          {socialLinks.length ? (
-            <div className="flex gap-4 pt-1">
-              {socialLinks.map((link) => (
-                <a className="font-semibold text-wayne-cream/80 transition hover:text-wayne-cream" href={link.href} key={link.label} rel="noreferrer" target="_blank">
-                  {link.label}
-                </a>
-              ))}
-            </div>
-          ) : null}
-        </address>
+          )}
+          {settings.instagram_url && (
+            <a href={settings.instagram_url} target="_blank" rel="noreferrer">
+              Instagram ↗
+            </a>
+          )}
+        </div>
+        <div className="footer-cta">
+          <SiteIcon name="pizza" size={37} />
+          <h3>
+            See you at
+            <br />
+            pizza time.
+          </h3>
+          <Link href="/menu">
+            Let&apos;s order <SiteIcon name="arrow" size={18} />
+          </Link>
+        </div>
       </div>
-      <div className="border-t border-wayne-cream/15 px-5 py-4 text-center text-xs text-wayne-cream/50">
-        © {new Date().getFullYear()} {settings.store_name}
+      <div className="site-container footer-bottom">
+        <span>
+          © {new Date().getFullYear()} {settings.store_name}. All rights
+          reserved.
+        </span>
+        <span>Made for Worcester. Made for you.</span>
       </div>
     </footer>
   );

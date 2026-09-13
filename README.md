@@ -48,3 +48,18 @@ The browser suite is intentionally skipped unless `E2E_RUN_STAGING=1` and its is
 Before enabling live ordering, an owner must configure verified tax, delivery fee/minimum/service-area postal codes, menu prices/availability, and operating hours in `/admin/settings` and `/admin/menu`. Keep test/manual ordering disabled in production until the live payment phase is approved. Do not invent operational values or use the default settings for a real service period.
 
 The POS policy is deliberate: scheduled menu availability governs customer online ordering; active, POS-visible, non-sold-out items remain sellable in the front POS so staff can make an explicit operational exception. This is visible policy, not a hidden discrepancy.
+
+## Text Daily storefront signup
+
+The public `/rewards` page and welcome dialog submit to `/api/rewards`. Signup
+requires a name, US mobile number, explicit marketing consent, and the displayed
+terms version. The server applies the existing database rate limiter, preserves
+existing identities and opt-outs, saves a deduplicated consent record, and then
+sets SMS consent. Existing customer triggers update the Text Club segment and
+queue the Hanafy integration event. Configure the actual welcome offer and SMS
+workflow in the marketing system before promising a specific free item. No
+coupon or SMS delivery is simulated by the storefront.
+
+Menu photography uses owner-uploaded assets only; missing photos render compact
+text cards. The desktop cart stays within the page, and mobile visitors have a
+persistent cart link. The customer design is isolated from staff screens.

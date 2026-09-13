@@ -1,8 +1,10 @@
 "use client";
 
+import { RewardsButton } from "@/components/site/rewards-experience";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { SiteIcon } from "@/components/site/site-icon";
 import { MenuImage } from "@/components/site/menu-image";
 import { Button } from "@/components/ui/button";
 import { isMenuItemAvailableNow } from "@/lib/menu/availability";
@@ -25,6 +27,9 @@ type Props = {
   pickupEnabled: boolean;
   deliveryEnabled: boolean;
   timezone: string;
+  initialItemId?: string;
+  pickupMinutes: number;
+  deliveryMinutes: number;
 };
 
 export function OrderMenuClient({
@@ -34,13 +39,51 @@ export function OrderMenuClient({
   pickupEnabled,
   deliveryEnabled,
   timezone,
+  initialItemId,
+  pickupMinutes,
+  deliveryMinutes,
 }: Props) {
   const router = useRouter();
-  const [fulfillment, setFulfillment] =
-    useState<Fulfillment>(initialFulfillment);
+  const [fulfillment, setFulfillment] = useState<Fulfillment>(
+    initialFulfillment === "delivery" && deliveryEnabled
+      ? "delivery"
+      : pickupEnabled
+        ? "pickup"
+        : "delivery",
+  );
   const [cart, setCart] = useState<CartLine[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [selected, setSelected] = useState<MenuItem | null>(null);
+  const [selected, setSelected] = useState<MenuItem | null>(() =>
+    initialItemId ? (findMenuItem(menu, initialItemId) ?? null) : null,
+  );
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(menu[0]?.id ?? "");
+  const [announcement, setAnnouncement] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleMenu = normalizedQuery
+    ? menu
+        .map((category) => ({
+          ...category,
+          items: category.items.filter((item) =>
+            `${item.name} ${item.description}`
+              .toLowerCase()
+              .includes(normalizedQuery),
+          ),
+        }))
+        .filter((category) => category.items.length)
+    : menu.filter((category) => category.id === activeCategory);
+  useEffect(() => {
+    function followHash() {
+      const id = window.location.hash.replace("#category-", "");
+      if (menu.some((category) => category.id === id)) {
+        setActiveCategory(id);
+        setQuery("");
+      }
+    }
+    queueMicrotask(followHash);
+    window.addEventListener("hashchange", followHash);
+    return () => window.removeEventListener("hashchange", followHash);
+  }, [menu]);
   const [editingLine, setEditingLine] = useState<CartLine | null>(null);
 
   useEffect(() => {
@@ -55,6 +98,9 @@ export function OrderMenuClient({
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   }, [cart, hydrated]);
 
+  const fulfillmentAvailable =
+    fulfillment === "pickup" ? pickupEnabled : deliveryEnabled;
+  const canCheckout = orderingOpen && fulfillmentAvailable;
   const subtotal = cartSubtotalCents(menu, cart);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   function changeFulfillment(next: Fulfillment) {
@@ -63,105 +109,170 @@ export function OrderMenuClient({
   }
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 lg:grid-cols-[1fr_22rem]">
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-wayne-border bg-white p-4">
+    <div className="site-container ordering-layout">
+      <div className="menu-main">
+        <div className="fulfillment-toolbar">
           <div>
-            <p className="text-xs font-black uppercase tracking-wider text-wayne-muted">
-              Ordering for
+            <span className="eyebrow">YOUR ORDER, YOUR WAY</span>
+            <p>
+              <SiteIcon
+                name={fulfillment === "pickup" ? "bag" : "truck"}
+                size={16}
+              />
+              <strong>
+                {fulfillment === "pickup" ? "Pickup" : "Delivery"}
+              </strong>
+              <span>
+                · Approx.{" "}
+                {fulfillment === "pickup" ? pickupMinutes : deliveryMinutes} min
+              </span>
             </p>
-            <p className="text-xl font-black capitalize">{fulfillment}</p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              disabled={!orderingOpen || !pickupEnabled}
+          <div className="fulfillment-toggle">
+            <button
+              type="button"
+              aria-pressed={fulfillment === "pickup"}
+              disabled={!pickupEnabled}
               onClick={() => changeFulfillment("pickup")}
-              type="button"
-              variant={fulfillment === "pickup" ? "primary" : "secondary"}
             >
+              <SiteIcon name="bag" size={16} />
               Pickup
-            </Button>
-            <Button
-              disabled={!orderingOpen || !deliveryEnabled}
-              onClick={() => changeFulfillment("delivery")}
+            </button>
+            <button
               type="button"
-              variant={fulfillment === "delivery" ? "primary" : "secondary"}
+              aria-pressed={fulfillment === "delivery"}
+              disabled={!deliveryEnabled}
+              onClick={() => changeFulfillment("delivery")}
             >
+              <SiteIcon name="truck" size={16} />
               Delivery
-            </Button>
+            </button>
           </div>
         </div>
+        <label className="menu-search">
+          <SiteIcon name="search" size={19} />
+          <input
+            type="search"
+            aria-label="Search the menu"
+            placeholder="Search for your next favorite…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+            >
+              <SiteIcon name="close" size={17} />
+            </button>
+          )}
+        </label>
         {!orderingOpen ? (
           <p className="mt-4 rounded-xl border border-wayne-warn/30 bg-wayne-warn-soft p-4 font-semibold">
             Online ordering is currently closed. You can browse, but checkout is
             unavailable.
           </p>
         ) : null}
-        {cart.length ? (
-          <a className="mt-4 flex items-center justify-between rounded-xl bg-wayne-red px-5 py-4 font-black text-white lg:hidden" href="#cart">
-            <span>View cart · {itemCount} item{itemCount === 1 ? "" : "s"}</span><span>{formatCents(subtotal)}</span>
-          </a>
-        ) : null}
-        <nav
-          aria-label="Menu categories"
-          className="sticky top-0 z-10 -mx-5 mt-8 flex gap-2 overflow-x-auto border-y border-wayne-border bg-wayne-cream/95 px-5 py-3 backdrop-blur"
-        >
+        <nav aria-label="Menu categories" className="menu-category-nav">
           {menu.map((category) => (
-            <a
-              className="whitespace-nowrap rounded-full border border-wayne-border bg-white px-4 py-2 text-sm font-bold"
-              href={`#category-${category.id}`}
+            <button
+              type="button"
+              aria-pressed={!query && activeCategory === category.id}
               key={category.id}
+              onClick={() => {
+                setActiveCategory(category.id);
+                setQuery("");
+                window.history.replaceState(
+                  null,
+                  "",
+                  `${window.location.pathname}${window.location.search}#category-${category.id}`,
+                );
+              }}
             >
               {category.name}
-            </a>
+            </button>
           ))}
         </nav>
-        <div className="mt-10 space-y-14">
-          {menu.map((category) => (
-            <section id={`category-${category.id}`} key={category.id}>
-              <h2 className="text-4xl font-black">{category.name}</h2>
+        <div className="menu-results" aria-live="polite">
+          {query && (
+            <p>
+              {visibleMenu.reduce(
+                (sum, category) => sum + category.items.length,
+                0,
+              )}{" "}
+              results for “{query}”
+            </p>
+          )}
+          {!visibleMenu.length && (
+            <div className="menu-no-results">
+              <SiteIcon name="search" size={36} />
+              <h2>No bites just yet.</h2>
+              <p>Try “pizza,” “chicken,” or another favorite.</p>
+              <button className="text-link" onClick={() => setQuery("")}>
+                Browse the menu <SiteIcon name="arrow" size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="mt-6 space-y-14">
+          {visibleMenu.map((category) => (
+            <section
+              className="menu-category-section"
+              id={`category-${category.id}`}
+              key={category.id}
+            >
+              <div className="menu-category-heading">
+                <h2>{category.name}</h2>
+                <span>{category.items.length} delicious choices</span>
+              </div>
               {category.description ? (
                 <p className="mt-2 max-w-2xl text-wayne-muted">
                   {category.description}
                 </p>
               ) : null}
-              <div className="mt-6 grid gap-6 md:grid-cols-2">
+              <div className="menu-product-grid">
                 {category.items.map((item) => {
                   const available = isMenuItemAvailableNow(item, timezone);
                   return (
                     <article
-                      className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${item.sold_out || !available ? "opacity-65" : ""}`}
+                      className={`menu-product group ${item.sold_out || !available ? "opacity-65" : ""}`}
                       key={item.id}
                     >
                       <MenuImage
                         alt={item.image_alt || item.name}
+                        name={item.name}
+                        category={category.name}
                         path={item.image_path}
                       />
-                      <div className="p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <h3 className="text-xl font-black">{item.name}</h3>
-                          <span className="whitespace-nowrap font-black text-wayne-red">
+                      <div className="menu-product-content">
+                        <div className="menu-product-heading">
+                          <h3 className="menu-product-name">{item.name}</h3>
+                          <span className="menu-product-price">
                             {item.variants.length
                               ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}`
                               : formatCents(item.base_price_cents)}
                           </span>
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-wayne-muted">
+                        <p className="menu-product-description">
                           {item.description}
                         </p>
                         <Button
-                          className="mt-5 w-full"
-                          disabled={
-                            item.sold_out || !available || !orderingOpen
-                          }
+                          className="menu-customize-button"
+                          disabled={item.sold_out || !available || !canCheckout}
                           onClick={() => setSelected(item)}
                           type="button"
                         >
-                          {item.sold_out
-                            ? "Sold out"
-                            : !available
-                              ? "Unavailable now"
-                              : "Customize & add"}
+                          {item.sold_out ? (
+                            "Sold out"
+                          ) : !available ? (
+                            "Unavailable now"
+                          ) : (
+                            <>
+                              <span>Customize & add</span>
+                              <SiteIcon name="plus" size={17} />
+                            </>
+                          )}
                         </Button>
                       </div>
                     </article>
@@ -172,9 +283,12 @@ export function OrderMenuClient({
           ))}
         </div>
       </div>
-      <aside className="self-start rounded-2xl border border-wayne-border bg-white p-5 shadow-sm lg:sticky lg:top-5" id="cart">
+      <aside className="order-cart" id="cart">
+        <p className="eyebrow cart-eyebrow">
+          <SiteIcon name="bag" size={16} /> MADE FOR YOU
+        </p>
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-black">Your cart</h2>
+          <h2 className="text-2xl font-black">Your order</h2>
           <span className="rounded-full bg-wayne-cream px-3 py-1 text-sm font-bold">
             {itemCount} item{itemCount === 1 ? "" : "s"}
           </span>
@@ -211,7 +325,7 @@ export function OrderMenuClient({
                     <div className="flex items-center gap-2">
                       <button
                         aria-label={`Decrease ${item?.name ?? "item"}`}
-                        className="h-9 w-9 rounded-full border"
+                        className="cart-quantity-button"
                         onClick={() =>
                           setCart(
                             updateQuantity(
@@ -229,7 +343,7 @@ export function OrderMenuClient({
                       </span>
                       <button
                         aria-label={`Increase ${item?.name ?? "item"}`}
-                        className="h-9 w-9 rounded-full border"
+                        className="cart-quantity-button"
                         onClick={() =>
                           setCart(
                             updateQuantity(
@@ -278,29 +392,91 @@ export function OrderMenuClient({
               Delivery fee, discounts, tax, and optional tip are finalized
               securely at checkout.
             </p>
-            <Button asChild className="w-full">
-              <Link href={`/checkout?fulfillment=${fulfillment}`}>
-                Continue to checkout
+            {canCheckout ? (
+              <Link
+                className="order-button cart-checkout"
+                href={`/checkout?fulfillment=${fulfillment}`}
+              >
+                Continue to checkout <SiteIcon name="arrow" size={18} />
               </Link>
-            </Button>
+            ) : (
+              <p className="site-notice">Checkout is currently closed.</p>
+            )}
           </div>
         ) : (
-          <p className="mt-5 text-wayne-muted">
-            Choose an item to begin your {fulfillment} order.
-          </p>
+          <div className="cart-empty">
+            <div>
+              <SiteIcon name="pizza" size={48} />
+            </div>
+            <h3>Good things go in here.</h3>
+            <p>
+              Your next favorite is on the menu.
+              <br />
+              Add something delicious to get started.
+            </p>
+            <span>Made fresh. Made for you.</span>
+          </div>
         )}
+        <p className="cart-note">
+          <SiteIcon name="check" size={14} /> Customize every bite before
+          checkout.
+        </p>
+        <RewardsButton className="cart-rewards-link">Pizza person? Join Wayne’s Text Daily →</RewardsButton>
       </aside>
+
+      <div role="status" className={announcement ? "cart-toast" : "sr-only"}>
+        {announcement && (
+          <>
+            <SiteIcon name="check" size={17} />
+            <span>{announcement}</span>
+            <a href="#cart">View order</a>
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => setAnnouncement("")}
+            >
+              <SiteIcon name="close" size={15} />
+            </button>
+          </>
+        )}
+      </div>
+      {(
+        <a className="mobile-cart-bar" href="#cart">
+          <span>
+            <SiteIcon name="bag" size={20} />
+            View order · {itemCount}
+          </span>
+          <strong>
+            {formatCents(subtotal)} <SiteIcon name="arrow" size={18} />
+          </strong>
+        </a>
+      )}
       {selected ? (
         <ItemDialog
           item={selected}
+          orderingOpen={
+            canCheckout &&
+            !selected.sold_out &&
+            isMenuItemAvailableNow(selected, timezone)
+          }
+          category={
+            menu.find((category) =>
+              category.items.some((item) => item.id === selected.id),
+            )?.name || ""
+          }
           initialLine={editingLine}
           onAdd={(line) => {
             setCart(
               editingLine
                 ? cart.map((candidate) =>
-                    candidate.line_id === editingLine.line_id ? line : candidate,
+                    candidate.line_id === editingLine.line_id
+                      ? line
+                      : candidate,
                   )
                 : [...cart, line],
+            );
+            setAnnouncement(
+              `${selected.name} ${editingLine ? "updated" : "added to your order"}`,
             );
             setEditingLine(null);
             setSelected(null);
@@ -317,26 +493,57 @@ export function OrderMenuClient({
 
 function ItemDialog({
   item,
+  category,
+  orderingOpen,
   initialLine,
   onAdd,
   onClose,
 }: {
   item: MenuItem;
+  category: string;
+  orderingOpen: boolean;
   initialLine: CartLine | null;
   onAdd: (line: CartLine) => void;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      dialog?.close();
+      previousFocus?.focus();
+    };
+  }, []);
   const [variantId, setVariantId] = useState<string | null>(
     initialLine?.variant_id ?? item.variants[0]?.id ?? null,
   );
   const [selectedChoices, setSelectedChoices] = useState<
     Record<string, number>
-  >(() => initialLine
-    ? Object.fromEntries(initialLine.modifiers.map((modifier) => [modifier.choice_id, modifier.quantity]))
-    : Object.fromEntries(item.modifier_groups.flatMap((group) => group.choices.filter((choice) => choice.default_selected).map((choice) => [choice.id, 1]))),
+  >(() =>
+    initialLine
+      ? Object.fromEntries(
+          initialLine.modifiers.map((modifier) => [
+            modifier.choice_id,
+            modifier.quantity,
+          ]),
+        )
+      : Object.fromEntries(
+          item.modifier_groups.flatMap((group) =>
+            group.choices
+              .filter((choice) => choice.default_selected)
+              .map((choice) => [choice.id, 1]),
+          ),
+        ),
   );
   const [quantity, setQuantity] = useState(initialLine?.quantity ?? 1);
-  const [instructions, setInstructions] = useState(initialLine?.special_instructions ?? "");
+  const [instructions, setInstructions] = useState(
+    initialLine?.special_instructions ?? "",
+  );
   const [error, setError] = useState("");
   const draftLine = useMemo<CartLine>(
     () => ({
@@ -379,183 +586,241 @@ function ItemDialog({
         return;
       }
     }
-    onAdd({ ...draftLine, line_id: initialLine?.line_id ?? crypto.randomUUID() });
+    onAdd({
+      ...draftLine,
+      line_id: initialLine?.line_id ?? crypto.randomUUID(),
+    });
   }
 
   return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
-      role="dialog"
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="item-dialog-title"
+      className="item-dialog"
+      onCancel={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="flex justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-black">{item.name}</h2>
-            <p className="mt-2 text-wayne-muted">{item.description}</p>
-          </div>
+      <div className="item-dialog-card">
+        <div className="item-dialog-photo">
+          <MenuImage
+            alt={item.image_alt || item.name}
+            name={item.name}
+            category={category}
+            path={item.image_path}
+            sizes="(max-width: 640px) 100vw, 640px"
+          />
           <button
             aria-label="Close item"
-            className="h-11 w-11 rounded-full border text-xl"
+            className="item-dialog-close"
             onClick={onClose}
           >
-            ×
+            <SiteIcon name="close" />
           </button>
         </div>
-        {item.variants.length ? (
-          <fieldset className="mt-6">
-            <legend className="font-black">Choose a size</legend>
-            <div className="mt-3 grid gap-2">
-              {item.variants.map((variant) => (
-                <label
-                  className="flex min-h-12 items-center justify-between rounded-xl border p-3"
-                  key={variant.id}
-                >
-                  <span>
-                    <input
-                      checked={variantId === variant.id}
-                      className="mr-3"
-                      name="variant"
-                      onChange={() => setVariantId(variant.id)}
-                      type="radio"
-                    />
-                    {variant.name}
-                  </span>
-                  <strong>{formatCents(variant.price_cents)}</strong>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ) : null}
-        {item.modifier_groups.map((group) => (
-          <fieldset className="mt-6" key={group.id}>
-            <legend className="font-black">
-              {group.customer_label}{" "}
-              <span className="text-sm font-normal text-wayne-muted">
-                ({group.min_select}–{group.max_select})
-              </span>
-            </legend>
-            <div className="mt-3 grid gap-2">
-              {group.choices.map((choice) => {
-                const count = selectedChoices[choice.id] ?? 0;
-                return (
-                  <div
-                    className="flex min-h-12 items-center justify-between rounded-xl border p-3"
-                    key={choice.id}
-                  >
-                    <label className="flex flex-1 items-center">
-                      <input
-                        checked={count > 0}
-                        className="mr-3"
-                        onChange={(event) =>
-                          setSelectedChoices({
-                            ...selectedChoices,
-                            [choice.id]: event.target.checked ? 1 : 0,
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      <span>
-                        {choice.name}
-                        {choice.price_delta_cents ? (
-                          <small className="ml-2 text-wayne-muted">
-                            {choice.price_delta_cents > 0 ? "+" : ""}
-                            {formatCents(choice.price_delta_cents)}
-                          </small>
-                        ) : null}
-                      </span>
-                    </label>
-                    {group.allow_quantities && count > 0 ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          aria-label={`Less ${choice.name}`}
-                          className="h-8 w-8 rounded-full border"
-                          onClick={() =>
-                            setSelectedChoices({
-                              ...selectedChoices,
-                              [choice.id]: Math.max(0, count - 1),
-                            })
-                          }
-                        >
-                          −
-                        </button>
-                        <strong>{count}</strong>
-                        <button
-                          aria-label={`More ${choice.name}`}
-                          className="h-8 w-8 rounded-full border"
-                          onClick={() =>
-                            setSelectedChoices({
-                              ...selectedChoices,
-                              [choice.id]: Math.min(20, count + 1),
-                            })
-                          }
-                        >
-                          +
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-        ))}
-        <label className="mt-6 grid gap-2 font-bold">
-          Item instructions
-          <textarea
-            className="rounded-xl border p-3 font-normal"
-            maxLength={500}
-            onChange={(event) => setInstructions(event.target.value)}
-            rows={3}
-            value={instructions}
-          />
-        </label>
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              aria-label="Decrease quantity"
-              className="h-11 w-11 rounded-full border"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            >
-              −
-            </button>
-            <strong>{quantity}</strong>
-            <button
-              aria-label="Increase quantity"
-              className="h-11 w-11 rounded-full border"
-              onClick={() => setQuantity(Math.min(20, quantity + 1))}
-            >
-              +
-            </button>
-          </div>
-          <Button onClick={add} type="button">
-            {initialLine ? "Save changes" : "Add"} ·{" "}
-            {formatCents(cartLineUnitCents(draftMenu, draftLine) * quantity)}
-          </Button>
-        </div>
-        {error ? (
-          <p
-            aria-live="polite"
-            className="mt-4 rounded-lg bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert"
-          >
-            {error}
+        <div className="item-dialog-body">
+          <p className="eyebrow">LET’S MAKE IT YOURS</p>
+          <h2 id="item-dialog-title">{item.name}</h2>
+          <p className="item-dialog-description">
+            {item.description ||
+              "Your Wayne’s favorite. Choose your size and make it just right."}
           </p>
-        ) : null}
+          {item.variants.length ? (
+            <fieldset className="mt-6">
+              <legend className="font-black">Choose a size</legend>
+              <div className="mt-3 grid gap-2">
+                {item.variants.map((variant) => (
+                  <label
+                    className="item-choice"
+                    data-selected={variantId === variant.id}
+                    key={variant.id}
+                  >
+                    <span>
+                      <input
+                        checked={variantId === variant.id}
+                        className="mr-3"
+                        name="variant"
+                        onChange={() => setVariantId(variant.id)}
+                        type="radio"
+                      />
+                      {variant.name}
+                    </span>
+                    <strong>{formatCents(variant.price_cents)}</strong>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
+          {item.modifier_groups.map((group) => (
+            <fieldset className="mt-6" key={group.id}>
+              <legend className="font-black">
+                {group.customer_label}{" "}
+                <span className="text-sm font-normal text-wayne-muted">
+                  ({group.min_select}–{group.max_select})
+                </span>
+              </legend>
+              <div className="mt-3 grid gap-2">
+                {group.choices.map((choice) => {
+                  const count = selectedChoices[choice.id] ?? 0;
+                  return (
+                    <div
+                      className="item-choice"
+                      data-selected={count > 0}
+                      key={choice.id}
+                    >
+                      <label className="flex flex-1 items-center">
+                        <input
+                          checked={count > 0}
+                          className="mr-3"
+                          onChange={(event) =>
+                            setSelectedChoices({
+                              ...selectedChoices,
+                              ...(group.max_select === 1
+                                ? Object.fromEntries(
+                                    group.choices.map((option) => [
+                                      option.id,
+                                      0,
+                                    ]),
+                                  )
+                                : {}),
+                              [choice.id]: event.target.checked ? 1 : 0,
+                            })
+                          }
+                          name={`modifier-${group.id}`}
+                          type={
+                            group.max_select === 1 && group.required
+                              ? "radio"
+                              : "checkbox"
+                          }
+                        />
+                        <span>
+                          {choice.name}
+                          {choice.price_delta_cents ? (
+                            <small className="ml-2 text-wayne-muted">
+                              {choice.price_delta_cents > 0 ? "+" : ""}
+                              {formatCents(choice.price_delta_cents)}
+                            </small>
+                          ) : null}
+                        </span>
+                      </label>
+                      {group.allow_quantities && count > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            aria-label={`Less ${choice.name}`}
+                            className="cart-quantity-button"
+                            onClick={() =>
+                              setSelectedChoices({
+                                ...selectedChoices,
+                                [choice.id]: Math.max(0, count - 1),
+                              })
+                            }
+                          >
+                            −
+                          </button>
+                          <strong>{count}</strong>
+                          <button
+                            aria-label={`More ${choice.name}`}
+                            className="cart-quantity-button"
+                            onClick={() =>
+                              setSelectedChoices({
+                                ...selectedChoices,
+                                [choice.id]: Math.min(20, count + 1),
+                              })
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+          <label className="mt-6 grid gap-2 font-bold">
+            Item instructions
+            <textarea
+              className="rounded-xl border p-3 font-normal"
+              maxLength={500}
+              onChange={(event) => setInstructions(event.target.value)}
+              rows={3}
+              value={instructions}
+            />
+          </label>
+          <div className="item-dialog-actions">
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="Decrease quantity"
+                className="h-11 w-11 rounded-full border"
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+              >
+                −
+              </button>
+              <strong>{quantity}</strong>
+              <button
+                aria-label="Increase quantity"
+                className="h-11 w-11 rounded-full border"
+                onClick={() => setQuantity(Math.min(20, quantity + 1))}
+              >
+                +
+              </button>
+            </div>
+            <Button
+              className="dialog-add-button"
+              disabled={!orderingOpen}
+              onClick={add}
+              type="button"
+            >
+              {initialLine ? "Save changes" : "Add"} ·{" "}
+              {formatCents(cartLineUnitCents(draftMenu, draftLine) * quantity)}
+            </Button>
+          </div>
+          {error ? (
+            <p
+              aria-live="polite"
+              className="mt-4 rounded-lg bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
-function CartLineOptions({ item, line }: { item: MenuItem | undefined; line: CartLine }) {
+function CartLineOptions({
+  item,
+  line,
+}: {
+  item: MenuItem | undefined;
+  line: CartLine;
+}) {
   if (!item) return null;
   const options = line.modifiers.flatMap((modifier) =>
     item.modifier_groups.flatMap((group) =>
       group.choices
         .filter((choice) => choice.id === modifier.choice_id)
-        .map((choice) => `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`),
+        .map(
+          (choice) =>
+            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
+        ),
     ),
   );
-  return <>{options.length ? <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p> : null}{line.special_instructions ? <p className="mt-1 text-sm text-wayne-muted">Note: {line.special_instructions}</p> : null}</>;
+  return (
+    <>
+      {options.length ? (
+        <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
+      ) : null}
+      {line.special_instructions ? (
+        <p className="mt-1 text-sm text-wayne-muted">
+          Note: {line.special_instructions}
+        </p>
+      ) : null}
+    </>
+  );
 }
 
 function updateQuantity(cart: CartLine[], lineId: string, quantity: number) {

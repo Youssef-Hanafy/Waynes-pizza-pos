@@ -38,7 +38,7 @@ export default async function OrderStatusPage({
   return (
     <div className="min-h-screen">
       <SiteHeader settings={settings} />
-      <main className="mx-auto max-w-3xl px-5 py-12">
+      <main id="main-content" className="mx-auto max-w-3xl px-5 py-12">
         <div className="rounded-3xl border border-wayne-border bg-white p-6 shadow-sm sm:p-9">
           <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">
             Order saved
