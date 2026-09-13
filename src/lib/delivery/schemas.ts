@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { spokenDatabaseMessage } from "@/lib/errors/database";
 
 export const deliveryAddressSchema = z.object({
   address1: z.string().default(""),
@@ -178,11 +179,5 @@ export function minutesBetween(from: string | null, to: string | null) {
 export function deliveryErrorMessage(error: { code?: string; message: string }) {
   if (error.code === "40001") return "Another screen changed this delivery. Refresh and try again.";
   if (error.code === "42501") return "Your account is not allowed to make this change. Ask a manager.";
-  const safe = [
-    "driver access", "not assigned to you", "ready", "cash", "reason", "already", "Only",
-    "Order not found", "Driver not found", "no longer out for delivery", "cancelled",
-  ];
-  return safe.some((part) => error.message.toLowerCase().includes(part.toLowerCase()))
-    ? error.message
-    : "The delivery could not be updated. Refresh to check it before retrying.";
+  return spokenDatabaseMessage(error, "The delivery could not be updated. Refresh to check it before retrying.");
 }

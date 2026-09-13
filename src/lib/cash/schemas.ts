@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { spokenDatabaseMessage } from "@/lib/errors/database";
 
 export const cashMovementKinds = ["paid_in", "paid_out", "drop", "driver_cash"] as const;
 export const cashMovementKindSchema = z.enum(cashMovementKinds);
@@ -152,11 +153,5 @@ export function cashErrorMessage(error: { code?: string; message: string }) {
     ? "That register already has an open drawer."
     : "Something changed on another screen. Refresh and try again.";
   if (error.code === "42501") return "Your account is not allowed to do that. Ask a manager.";
-  const safe = [
-    "drawer", "cash", "reason", "register", "Count", "amount", "tender", "already", "Explain",
-    "Order not found", "Open a drawer",
-  ];
-  return safe.some((part) => error.message.toLowerCase().includes(part.toLowerCase()))
-    ? error.message
-    : "That could not be saved. Check the drawer before retrying.";
+  return spokenDatabaseMessage(error, "That could not be saved. Check the drawer before retrying.");
 }

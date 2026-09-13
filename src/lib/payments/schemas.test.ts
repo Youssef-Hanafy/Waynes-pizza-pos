@@ -118,5 +118,7 @@ describe("payment error messages", () => {
     expect(paymentErrorMessage({ code: "22023", message: "This order is already paid" })).toBe("This order is already paid");
     expect(paymentErrorMessage({ code: "42P01", message: 'relation "public.payment_provider_settings" does not exist' }))
       .toBe("The payment could not be updated. Check it before retrying.");
+    expect(paymentErrorMessage({ code: "42P01", message: 'relation "public.refunds" does not exist' }))
+      .toBe("The payment could not be updated. Check it before retrying.");
   });
 });

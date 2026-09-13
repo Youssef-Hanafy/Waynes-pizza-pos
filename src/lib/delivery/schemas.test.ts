@@ -102,6 +102,8 @@ describe("delivery error messages", () => {
       .toBe("The kitchen has not marked this order ready yet");
     expect(deliveryErrorMessage({ code: "42P01", message: 'relation "public.delivery_assignments" does not exist' }))
       .toBe("The delivery could not be updated. Refresh to check it before retrying.");
+    expect(deliveryErrorMessage({ code: "42703", message: 'column "driver_cash_collected" does not exist' }))
+      .toBe("The delivery could not be updated. Refresh to check it before retrying.");
   });
 });
 

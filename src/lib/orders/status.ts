@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { spokenDatabaseMessage } from "@/lib/errors/database";
 
 export const openOrderStatuses = ["placed", "accepted", "in_kitchen", "ready", "out_for_delivery"] as const;
 export const openOrderStatusSchema = z.enum(openOrderStatuses);
@@ -34,8 +35,7 @@ export function isOpenOrderStatus(status: string): status is OpenOrderStatus {
 export function transitionErrorMessage(error: { code?: string; message: string }) {
   if (error.code === "40001") return "Another screen changed this order. Refresh and try again.";
   if (error.code === "42501") return "Your account is not allowed to make this change. Ask a manager.";
-  const safe = ["reason", "Only open orders", "Only ready delivery", "not found"];
-  return safe.some((part) => error.message.includes(part)) ? error.message : "The order could not be updated. Refresh to check it before retrying.";
+  return spokenDatabaseMessage(error, "The order could not be updated. Refresh to check it before retrying.");
 }
 
 export const openOrderSchema = z.object({

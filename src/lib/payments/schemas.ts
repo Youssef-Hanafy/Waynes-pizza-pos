@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { checkoutInputSchema } from "@/lib/orders/schemas";
+import { spokenDatabaseMessage } from "@/lib/errors/database";
 
 /** The Web Payments SDK script the browser loads. Sandbox and production differ. */
 export function squareWebSdkUrl(environment: string) {
@@ -155,12 +156,5 @@ export function parseAmountInput(raw: string) {
 export function paymentErrorMessage(error: { code?: string; message: string }) {
   if (error.code === "40001") return "A payment is already open on this order. Refresh and check it before retrying.";
   if (error.code === "42501") return "Your account is not allowed to make this change. Ask an owner.";
-  const safe = [
-    "already paid", "already open", "cancelled", "captured payment", "refund", "idempotency",
-    "not switched on", "provider is configured", "Order not found", "Payment not found",
-    "refundable", "card reader", "amount",
-  ];
-  return safe.some((part) => error.message.toLowerCase().includes(part.toLowerCase()))
-    ? error.message
-    : "The payment could not be updated. Check it before retrying.";
+  return spokenDatabaseMessage(error, "The payment could not be updated. Check it before retrying.");
 }

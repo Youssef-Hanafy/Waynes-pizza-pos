@@ -122,10 +122,17 @@ describe("cash error messages", () => {
     expect(cashErrorMessage({ code: "42501", message: "Cash management permission required" })).toContain("not allowed");
   });
 
-  it("passes through safe database messages and hides the rest", () => {
+  it("passes through the messages our own functions raise", () => {
     expect(cashErrorMessage({ code: "22023", message: "That is more cash than the drawer is holding" }))
       .toBe("That is more cash than the drawer is holding");
-    expect(cashErrorMessage({ code: "42P01", message: 'relation "public.register_shifts" does not exist' }))
-      .toBe("That could not be saved. Check the drawer before retrying.");
+    expect(cashErrorMessage({ code: "P0002", message: "Drawer not found" })).toBe("Drawer not found");
+  });
+
+  it("hides internal errors even when they quote our own table names", () => {
+    const hidden = "That could not be saved. Check the drawer before retrying.";
+    expect(cashErrorMessage({ code: "42P01", message: 'relation "public.register_shifts" does not exist' })).toBe(hidden);
+    expect(cashErrorMessage({ code: "23514", message: 'new row violates check constraint "cash_movements_amount_check"' })).toBe(hidden);
+    expect(cashErrorMessage({ code: "22P02", message: "invalid input syntax for type uuid" })).toBe(hidden);
+    expect(cashErrorMessage({ message: "fetch failed" })).toBe(hidden);
   });
 });
