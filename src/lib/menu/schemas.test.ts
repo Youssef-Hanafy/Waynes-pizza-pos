@@ -4,6 +4,7 @@ import {
   menuItemPayloadSchema,
   parseMoneyToCents,
   parseSignedMoneyToCents,
+  variantSchema,
 } from "./schemas";
 
 describe("menu validation", () => {
@@ -68,5 +69,22 @@ describe("menu validation", () => {
       ],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("variant SKUs", () => {
+  it("accepts the null the database sends for a variant with no SKU", () => {
+    // This is what took the POS down: every seeded variant has a null sku, the
+    // RPC passes it through, and a schema that only allowed string | undefined
+    // threw on the whole menu.
+    const parsed = variantSchema.safeParse({ id: "7b1f0f3c-2c9e-4a1b-9f11-2b3c4d5e6f70", name: "Large", price_cents: 1225, sku: null, sort_order: 10 });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.sku).toBe("");
+  });
+
+  it("still accepts a real SKU and an absent one", () => {
+    expect(variantSchema.safeParse({ name: "Small", price_cents: 825, sku: "PZ-SM" }).success).toBe(true);
+    const absent = variantSchema.safeParse({ name: "Small", price_cents: 825 });
+    expect(absent.success && absent.data.sku).toBe("");
   });
 });

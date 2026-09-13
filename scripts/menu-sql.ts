@@ -78,8 +78,8 @@ from (values
 join public.menu_categories c on c.name = d.category and c.archived_at is null
 where not exists (select 1 from public.menu_items i where i.category_id = c.id and i.name = d.item and i.archived_at is null);
 
-insert into public.menu_item_variants (menu_item_id, name, price_cents, sort_order)
-select i.id, d.size, d.price, d.sort
+insert into public.menu_item_variants (menu_item_id, name, price_cents, sku, sort_order)
+select i.id, d.size, d.price, '', d.sort
 from (values
   ${rows(variantRows)}
 ) as d(category, item, size, price, sort)

@@ -4,7 +4,10 @@ export const variantSchema = z.object({
   id: z.uuid().optional(),
   name: z.string().trim().min(1).max(120),
   price_cents: z.number().int().min(0).max(1_000_000),
-  sku: z.string().trim().max(80).optional().default(""),
+  // The column is nullable and a variant without a SKU is normal, so the database
+  // sends null here. Accepting only a string or undefined made every such variant
+  // fail to parse, which emptied the customer menu and took the POS down with it.
+  sku: z.string().trim().max(80).nullish().transform((value) => value ?? ""),
   sort_order: z.number().int().default(0)
 });
 

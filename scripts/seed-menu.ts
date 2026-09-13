@@ -116,6 +116,7 @@ async function main() {
           menu_item_id: itemId,
           name: variant.name,
           price_cents: variant.priceCents,
+          sku: "",
           sort_order: variantIndex * 10,
         }).select("id").single(), `create size ${variant.name} of ${item.name}`);
         tally.created += 1;
