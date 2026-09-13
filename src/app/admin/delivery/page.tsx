@@ -65,12 +65,12 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
       <div className="flex flex-wrap items-center gap-3"><AutoRefresh label="Updates automatically" /><Button asChild variant="secondary"><Link href="/admin/orders">Order history</Link></Button></div>
     </div>
 
-    {error ? <div className="mt-6 rounded-xl border border-red-400 bg-red-50 p-4 font-bold text-red-900" role="alert">{error}</div> : null}
-    {saved ? <div className="mt-6 rounded-xl border border-green-500 bg-green-50 p-4 font-bold text-green-900" role="status">{saved}</div> : null}
+    {error ? <div className="mt-6 rounded-xl border border-wayne-alert/50 bg-wayne-alert-soft p-4 font-bold text-wayne-alert" role="alert">{error}</div> : null}
+    {saved ? <div className="mt-6 rounded-xl border border-wayne-ok/50 bg-wayne-ok-soft p-4 font-bold text-wayne-ok" role="status">{saved}</div> : null}
 
     {canDispatch ? <section className="mt-8">
       <h2 className="text-2xl font-black">Live deliveries</h2>
-      {boardError ? <p className="mt-3 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">{boardError}</p> : null}
+      {boardError ? <p className="mt-3 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{boardError}</p> : null}
       <div className="mt-4 grid gap-4">
         {(board?.orders ?? []).map((order) => {
           const assignment = order.assignment;
@@ -81,7 +81,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
                 <div className="flex flex-wrap items-center gap-3">
                   <h3 className="text-2xl font-black">{order.order_number}</h3>
                   <Badge>{order.status.replaceAll("_", " ")}</Badge>
-                  {assignment ? <Badge className="bg-blue-100 text-blue-900">{driverStepLabels[assignment.assignment_status]}</Badge> : <Badge className="bg-stone-200 text-stone-700">Unassigned</Badge>}
+                  {assignment ? <Badge className="bg-wayne-info-soft text-wayne-info">{driverStepLabels[assignment.assignment_status]}</Badge> : <Badge className="bg-wayne-cream-deep text-wayne-muted">Unassigned</Badge>}
                 </div>
                 <p className="mt-2 font-bold">{order.customer_name} · {order.customer_phone}</p>
                 <p className="text-sm text-wayne-muted">{formatAddress(order.address) || "No address on this order"}</p>
@@ -115,7 +115,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
           </Card>;
         })}
         {board && !board.orders.length && !boardError ? <Card className="p-10 text-center"><h3 className="text-xl font-black">No delivery orders right now</h3><p className="mt-2 text-wayne-muted">Delivery orders appear here as soon as they are placed.</p></Card> : null}
-        {board && !board.drivers.length ? <p className="rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">No active staff member has the driver role yet. Add one under Staff before assigning deliveries.</p> : null}
+        {board && !board.drivers.length ? <p className="rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">No active staff member has the driver role yet. Add one under Staff before assigning deliveries.</p> : null}
       </div>
     </section> : null}
 
@@ -128,7 +128,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
         <Button type="submit">Run</Button>
         <Button asChild variant="secondary"><Link href="/admin/delivery">Today</Link></Button>
       </form></Card>
-      {metricsError ? <p className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">{metricsError}</p> : null}
+      {metricsError ? <p className="mt-4 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{metricsError}</p> : null}
       {metrics ? <>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Deliveries completed" value={String(metrics.totals.delivered_count)} />

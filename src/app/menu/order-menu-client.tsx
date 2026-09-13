@@ -92,7 +92,7 @@ export function OrderMenuClient({
           </div>
         </div>
         {!orderingOpen ? (
-          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 font-semibold">
+          <p className="mt-4 rounded-xl border border-wayne-warn/30 bg-wayne-warn-soft p-4 font-semibold">
             Online ordering is currently closed. You can browse, but checkout is
             unavailable.
           </p>
@@ -536,7 +536,7 @@ function ItemDialog({
         {error ? (
           <p
             aria-live="polite"
-            className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-800"
+            className="mt-4 rounded-lg bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert"
           >
             {error}
           </p>

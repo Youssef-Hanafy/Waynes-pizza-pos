@@ -40,7 +40,7 @@ export function LoginForm({ initialError, nextPath }: { initialError: string; ne
     <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
       <Input autoComplete="email" label="Email" name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
       <Input autoComplete="current-password" label="Password" name="password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
-      {error ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-800" role="alert">{error}</p> : null}
+      {error ? <p className="rounded-lg bg-wayne-alert-soft p-3 text-sm font-semibold text-wayne-alert" role="alert">{error}</p> : null}
       <Button disabled={pending} type="submit">{pending ? "Signing in…" : "Sign in"}</Button>
     </form>
   );

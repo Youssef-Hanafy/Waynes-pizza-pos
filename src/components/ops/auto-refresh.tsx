@@ -43,5 +43,5 @@ export function AutoRefresh({ intervalMs = 30_000, live = false, label = "Update
     };
   }, [intervalMs, label, live, router]);
 
-  return <span className="inline-flex items-center gap-2 text-xs font-bold text-wayne-muted" role="status"><span aria-hidden="true" className={`h-2 w-2 rounded-full ${status === "Live" ? "bg-green-600" : "bg-stone-400"}`} />{status}</span>;
+  return <span className="inline-flex items-center gap-2 text-xs font-bold text-wayne-muted" role="status"><span aria-hidden="true" className={`h-2 w-2 rounded-full ${status === "Live" ? "bg-wayne-ok" : "bg-wayne-border-strong"}`} />{status}</span>;
 }

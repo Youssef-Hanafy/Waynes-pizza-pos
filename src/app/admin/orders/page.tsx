@@ -77,7 +77,7 @@ export default async function AdminOrdersPage({
             <Card className="grid gap-4 p-5 transition hover:-translate-y-0.5 hover:border-wayne-red sm:grid-cols-[1.1fr_1.2fr_0.8fr_auto] sm:items-center">
               <div><strong className="text-lg">{order.order_number}</strong><p className="text-sm text-wayne-muted">{formatAdminDateTime(order.placed_at, settings.timezone)}</p></div>
               <div><strong>{order.customer_name_snapshot}</strong><p className="text-sm text-wayne-muted">{order.customer_phone_snapshot}</p></div>
-              <div className="flex flex-wrap gap-2"><Badge>{titleCase(order.status)}</Badge><Badge className="bg-stone-700">{titleCase(order.fulfillment_type)}</Badge><Badge className="bg-blue-700">{titleCase(order.source)}</Badge><Badge className="bg-emerald-700">{titleCase(order.payment_method)}</Badge></div>
+              <div className="flex flex-wrap gap-2"><Badge>{titleCase(order.status)}</Badge><Badge className="bg-wayne-ink">{titleCase(order.fulfillment_type)}</Badge><Badge className="bg-wayne-info">{titleCase(order.source)}</Badge><Badge className="bg-wayne-ok">{titleCase(order.payment_method)}</Badge></div>
               <strong className="text-lg sm:text-right">{formatCents(order.total_cents)}</strong>
             </Card>
           </Link>

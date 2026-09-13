@@ -27,9 +27,9 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">People</p>
     <h1 className="mt-3 text-4xl font-black">Staff & roles</h1>
     <p className="mt-3 max-w-3xl text-wayne-muted">Give every person their own sign-in so tickets, discounts, cancellations, and changes are attributed to them. Role and access changes are recorded in the audit log.{canManage ? "" : " Only the owner can change staff access."}</p>
-    {params.saved ? <p role="status" className="mt-5 rounded-xl bg-green-50 p-4 font-bold text-green-800">{params.saved}</p> : null}
-    {params.error ? <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 font-bold text-red-800">{params.error}</p> : null}
-    {pending.length ? <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4"><strong>{pending.length} account{pending.length === 1 ? "" : "s"} without access.</strong> New sign-ins start inactive until an owner turns them on here.</p> : null}
+    {params.saved ? <p role="status" className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{params.saved}</p> : null}
+    {params.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{params.error}</p> : null}
+    {pending.length ? <p className="mt-5 rounded-xl border border-wayne-warn/40 bg-wayne-warn-soft p-4"><strong>{pending.length} account{pending.length === 1 ? "" : "s"} without access.</strong> New sign-ins start inactive until an owner turns them on here.</p> : null}
 
     {canManage ? <Card className="mt-7 p-5"><h2 className="text-xl font-black">Add a staff member</h2><form action={createStaffMember} className="mt-4 grid gap-4 md:grid-cols-2">
       <Input autoComplete="off" label="Name shown on tickets" maxLength={120} name="display_name" required />
@@ -42,7 +42,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     <div className="mt-4 grid gap-4">{directory.staff.map((member) => {
       const self = member.id === access.profile_id;
       return <Card className="p-5" key={member.id}>
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-lg">{member.display_name}</strong>{self ? <span className="ml-2 text-sm text-wayne-muted">(you)</span> : null}<p className="text-sm text-wayne-muted">{member.email ?? "No email"} · last sign-in {member.last_sign_in_at ? formatAdminDateTime(member.last_sign_in_at, settings.timezone) : "never"}</p></div><div className="flex gap-2"><Badge>{member.role_name}</Badge>{member.active ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge className="bg-stone-200 text-stone-700">No access</Badge>}</div></div>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-lg">{member.display_name}</strong>{self ? <span className="ml-2 text-sm text-wayne-muted">(you)</span> : null}<p className="text-sm text-wayne-muted">{member.email ?? "No email"} · last sign-in {member.last_sign_in_at ? formatAdminDateTime(member.last_sign_in_at, settings.timezone) : "never"}</p></div><div className="flex gap-2"><Badge>{member.role_name}</Badge>{member.active ? <Badge className="bg-wayne-ok-soft text-wayne-ok">Active</Badge> : <Badge className="bg-wayne-cream-deep text-wayne-muted">No access</Badge>}</div></div>
         {canManage ? <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_20rem]">
           <form action={updateStaffMember} className="grid gap-3 sm:grid-cols-[1fr_12rem_auto_auto] sm:items-end"><input name="id" type="hidden" value={member.id} />
             <Input defaultValue={member.display_name} label="Name" maxLength={120} name="display_name" id={`name-${member.id}`} />

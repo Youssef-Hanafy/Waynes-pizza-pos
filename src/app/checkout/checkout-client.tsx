@@ -270,7 +270,7 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
             </div>
           </section>
         ) : (
-          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6">
+          <section className="rounded-2xl border border-wayne-warn/40 bg-wayne-warn-soft p-6">
             <h2 className="text-2xl font-black">TEST / MANUAL payment</h2>
             <p className="mt-2">
               No card information is requested and no payment is collected. This
@@ -355,7 +355,7 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
           </div>
         ) : null}
         {subtotal < minimum ? (
-          <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-800">
+          <p className="mt-4 rounded-lg bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">
             Add {formatCents(minimum - subtotal)} to meet the {fulfillment}{" "}
             minimum.
           </p>
@@ -363,7 +363,7 @@ export function CheckoutClient({ fulfillment, menu, paymentConfig, settings }: P
         {error ? (
           <p
             aria-live="polite"
-            className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-800"
+            className="mt-4 rounded-lg bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert"
           >
             {error}
           </p>

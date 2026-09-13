@@ -162,7 +162,7 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
     {open ? <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog" aria-label="Open orders">
       <section className="h-full w-full max-w-xl overflow-y-auto bg-white p-5 text-wayne-ink shadow-2xl">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">Open orders</h2><p className="text-sm text-wayne-muted">Today&apos;s tickets that are not yet picked up or delivered. Updates every 10 seconds.</p></div><Button onClick={() => setOpen(false)} variant="secondary">Close</Button></div>
-        {error ? <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800" role="alert">{error}</p> : null}
+        {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
         {terminals.length > 1 ? <label className="mt-4 grid gap-2 text-sm font-bold">Card reader
           <select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>
             {terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}
@@ -170,7 +170,7 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
         </label> : null}
         <ul className="mt-5 grid gap-3">{orders.map((order) => {
           const handOff = nextHandOff(order.status, order.fulfillment_type);
-          return <li className={`rounded-xl border p-4 ${order.status === "ready" ? "border-green-300 bg-green-50" : "border-wayne-border"}`} key={order.id}>
+          return <li className={`rounded-xl border p-4 ${order.status === "ready" ? "border-wayne-ok/40 bg-wayne-ok-soft" : "border-wayne-border"}`} key={order.id}>
             <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-xl">{order.order_number}</strong><p className="font-bold">{order.customer_name}</p><p className="text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · placed {time(order.placed_at)}{order.promised_at ? ` · promised ${time(order.promised_at)}` : ""}</p></div><div className="text-right"><span className="rounded-full bg-white px-3 py-1 text-sm font-black">{labels[order.status] ?? order.status}</span><p className="mt-2 font-black">{formatCents(order.total_cents)}</p><p className="text-xs capitalize text-wayne-muted">{order.payment_method.replace("_", " ")} · {order.payment_status}</p></div></div>
             <div className="mt-3 flex flex-wrap items-center gap-2">{handOff ? <Button disabled={pending !== null} onClick={() => { void move(order, handOff.status); }}>{pending === order.id ? "Saving…" : handOff.label}</Button> : <Button disabled={pending !== null} onClick={() => { void move(order, "completed"); }} variant="secondary">{pending === order.id ? "Saving…" : "Complete now (skip kitchen)"}</Button>}
               {terminals.length && order.payment_status === "unpaid" ? (charging === order.id
@@ -180,7 +180,7 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
                 ? <Button disabled={pending !== null} onClick={() => { setCashFor(order.id); setTendered((order.total_cents / 100).toFixed(2)); setError(""); }} variant="secondary">Take cash</Button>
                 : null}
             </div>
-            {cashFor === order.id ? <div className="mt-3 rounded-xl border border-wayne-border bg-stone-50 p-3">
+            {cashFor === order.id ? <div className="mt-3 rounded-xl border border-wayne-border bg-wayne-cream p-3">
               <p className="text-sm font-bold">Amount due {formatCents(order.total_cents)}</p>
               <label className="mt-2 grid gap-2 text-sm font-bold">Cash handed over
                 <input className="min-h-12 rounded-lg border border-wayne-border px-3 text-lg font-black" inputMode="decimal" onChange={(event) => setTendered(event.target.value)} value={tendered} />

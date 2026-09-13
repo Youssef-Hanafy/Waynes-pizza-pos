@@ -56,14 +56,14 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <Button asChild variant="secondary"><Link href="/admin/reports">Reports</Link></Button>
     </div>
 
-    {error ? <div className="mt-6 rounded-xl border border-red-400 bg-red-50 p-4 font-bold text-red-900" role="alert">{error}</div> : null}
-    {saved ? <div className="mt-6 rounded-xl border border-green-500 bg-green-50 p-4 font-bold text-green-900" role="status">{saved}</div> : null}
-    {consoleError ? <div className="mt-6 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">{consoleError}</div> : null}
+    {error ? <div className="mt-6 rounded-xl border border-wayne-alert/50 bg-wayne-alert-soft p-4 font-bold text-wayne-alert" role="alert">{error}</div> : null}
+    {saved ? <div className="mt-6 rounded-xl border border-wayne-ok/50 bg-wayne-ok-soft p-4 font-bold text-wayne-ok" role="status">{saved}</div> : null}
+    {consoleError ? <div className="mt-6 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{consoleError}</div> : null}
 
     <Card className="mt-8 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-black">Status</h2>
-        <Badge className={live ? "bg-green-100 text-green-900" : "bg-stone-200 text-stone-700"}>{live ? "Card payment is live" : "Card payment is off"}</Badge>
+        <Badge className={live ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-cream-deep text-wayne-muted"}>{live ? "Card payment is live" : "Card payment is off"}</Badge>
       </div>
       <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Server credentials" value={secrets ? "Installed" : "Missing"} />
@@ -71,7 +71,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         <Metric label="Failed in 24 hours" value={String(paymentConsole?.counts.failed_payments_24h ?? 0)} />
         <Metric label="Webhooks not verified" value={String(paymentConsole?.counts.unverified_webhooks ?? 0)} />
       </dl>
-      {!secrets ? <p className="mt-5 rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm font-bold">
+      {!secrets ? <p className="mt-5 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 text-sm font-bold">
         The processor access token and webhook signature key are not installed on this server. Add <code>SQUARE_ACCESS_TOKEN</code> and <code>SQUARE_WEBHOOK_SIGNATURE_KEY</code> to the environment, then redeploy. Until then a card can never be charged, whatever the switches below say.
       </p> : null}
     </Card>
@@ -141,7 +141,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         <Button type="submit">Run</Button>
         <Button asChild variant="secondary"><Link href="/admin/payments">Today</Link></Button>
       </form></Card>
-      {reconciliationError ? <p className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">{reconciliationError}</p> : null}
+      {reconciliationError ? <p className="mt-4 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{reconciliationError}</p> : null}
       {reconciliation ? <>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Captured" value={formatCents(reconciliation.totals.captured_cents)} />

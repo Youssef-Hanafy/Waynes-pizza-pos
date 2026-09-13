@@ -62,7 +62,7 @@ function Changes({ entry, roleNames }: { entry: AuditEntry; roleNames: Record<st
 async function ServerErrors({ timeZone }: { timeZone: string }) {
   const { errors, unavailable } = await getRecentServerErrors();
   return <div className="mt-6"><p className="text-sm text-wayne-muted">The 25 most recent server-side errors (kept 90 days). Query strings and credentials are removed before storage. Full details are in the hosting provider&apos;s logs — search for the digest.</p>
-    {unavailable ? <p className="mt-4 rounded-xl bg-amber-50 p-4">Error history is unavailable. Check that the database migrations are applied.</p> : null}
+    {unavailable ? <p className="mt-4 rounded-xl bg-wayne-warn-soft p-4">Error history is unavailable. Check that the database migrations are applied.</p> : null}
     <div className="mt-4 grid gap-3">{errors.map((error) => <Card className="p-4" key={error.id}><strong className="break-words">{error.message || "Unknown error"}</strong><p className="mt-1 text-sm text-wayne-muted">{formatAdminDateTime(error.occurred_at, timeZone)} · {error.method} {error.request_path} · {error.route_type}{error.digest ? ` · digest ${error.digest}` : ""}</p></Card>)}
       {!errors.length && !unavailable ? <Card className="p-8 text-center text-wayne-muted">No server errors recorded.</Card> : null}</div></div>;
 }

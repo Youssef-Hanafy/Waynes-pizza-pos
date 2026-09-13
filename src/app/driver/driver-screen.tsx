@@ -104,10 +104,10 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
   const active = board.assignments.filter((assignment) => assignment.assignment_status !== "delivered");
   const finished = board.assignments.filter((assignment) => assignment.assignment_status === "delivered");
 
-  return <div className="min-h-screen bg-stone-100 pb-16">
-    <header className="bg-wayne-ink px-5 py-4 text-white">
+  return <div className="min-h-screen bg-wayne-cream-deep pb-16">
+    <header className="bg-wayne-green px-5 py-4 text-wayne-cream">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div><p className="text-sm font-bold text-amber-300">Wayne&apos;s Pizza</p><h1 className="text-3xl font-black">Deliveries</h1><p className="text-sm text-stone-300">{staffName}</p></div>
+        <div><p className="text-sm font-bold text-wayne-gold">Wayne&apos;s Pizza</p><h1 className="text-3xl font-black">Deliveries</h1><p className="text-sm text-wayne-cream/70">{staffName}</p></div>
         <nav className="flex flex-wrap gap-2">
           {canOpenPos ? <Button asChild variant="secondary"><Link href="/pos">Front POS</Link></Button> : null}
           {canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin/delivery">Dispatch</Link></Button> : null}
@@ -121,9 +121,9 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
     </header>
 
     <main className="mx-auto max-w-3xl p-4 sm:p-6">
-      {error ? <div role="alert" className="mb-5 rounded-xl border border-red-400 bg-red-50 p-4 font-bold text-red-900">{error}</div> : null}
-      {!error && stale ? <div role="status" className="mb-5 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">Deliveries may be out of date. Reconnecting…</div> : null}
-      {notice ? <div role="status" className="mb-5 rounded-xl border border-green-500 bg-green-50 p-4 font-bold text-green-900">{notice}</div> : null}
+      {error ? <div role="alert" className="mb-5 rounded-xl border border-wayne-alert/50 bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{error}</div> : null}
+      {!error && stale ? <div role="status" className="mb-5 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">Deliveries may be out of date. Reconnecting…</div> : null}
+      {notice ? <div role="status" className="mb-5 rounded-xl border border-wayne-ok/50 bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{notice}</div> : null}
 
       <h2 className="text-2xl font-black">Your deliveries ({active.length})</h2>
       <div className="mt-4 grid gap-4">
@@ -134,7 +134,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
           const phone = telephoneUrl(assignment.customer_phone);
           const showCash = cashOpen === assignment.order_id;
           return <article className="overflow-hidden rounded-2xl border border-wayne-border bg-white shadow-sm" key={assignment.order_id}>
-            <div className={`p-5 ${assignment.assignment_status === "picked_up" ? "bg-blue-100" : "bg-amber-100"}`}>
+            <div className={`p-5 ${assignment.assignment_status === "picked_up" ? "bg-wayne-info-soft" : "bg-wayne-warn-soft"}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-3xl font-black">{assignment.order_number}</h3>
                 <strong className="rounded-full bg-white px-3 py-2 text-sm">{driverStepLabels[assignment.assignment_status]}</strong>
@@ -144,12 +144,12 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
             </div>
             <div className="p-5">
               <p className="text-lg font-bold">{address || "No address on this order — call the store."}</p>
-              {assignment.delivery_instructions ? <p className="mt-2 whitespace-pre-wrap rounded-lg border border-amber-300 bg-amber-50 p-3 font-bold">Door note: {assignment.delivery_instructions}</p> : null}
-              {assignment.order_instructions ? <p className="mt-2 whitespace-pre-wrap rounded-lg border border-wayne-border bg-stone-50 p-3">Order note: {assignment.order_instructions}</p> : null}
+              {assignment.delivery_instructions ? <p className="mt-2 whitespace-pre-wrap rounded-lg border border-wayne-warn/40 bg-wayne-warn-soft p-3 font-bold">Door note: {assignment.delivery_instructions}</p> : null}
+              {assignment.order_instructions ? <p className="mt-2 whitespace-pre-wrap rounded-lg border border-wayne-border bg-wayne-cream p-3">Order note: {assignment.order_instructions}</p> : null}
 
               <dl className="mt-4 grid grid-cols-2 gap-3">
                 <div><dt className="text-sm font-bold text-wayne-muted">Order total</dt><dd className="text-xl font-black">{formatCents(assignment.total_cents)}</dd></div>
-                <div><dt className="text-sm font-bold text-wayne-muted">Collect at the door</dt><dd className={`text-xl font-black ${assignment.amount_due_cents > 0 ? "text-wayne-red" : "text-green-700"}`}>{assignment.amount_due_cents > 0 ? `${formatCents(assignment.amount_due_cents)} cash` : "Nothing — already paid"}</dd></div>
+                <div><dt className="text-sm font-bold text-wayne-muted">Collect at the door</dt><dd className={`text-xl font-black ${assignment.amount_due_cents > 0 ? "text-wayne-red" : "text-wayne-ok"}`}>{assignment.amount_due_cents > 0 ? `${formatCents(assignment.amount_due_cents)} cash` : "Nothing — already paid"}</dd></div>
               </dl>
               {assignment.items.length ? <ul className="mt-4 divide-y divide-wayne-border text-sm">{assignment.items.map((item, index) => <li className="py-2 font-bold" key={`${assignment.order_id}-${index}`}>{item.quantity}× {item.name}{item.variant ? ` · ${item.variant}` : ""}</li>)}</ul> : null}
               <p className="mt-3 text-sm text-wayne-muted">Kitchen status: <span className="capitalize">{assignment.status.replaceAll("_", " ")}</span>{assignment.picked_up_at && now ? ` · picked up ${minutesBetween(assignment.picked_up_at, new Date(now).toISOString())} min ago` : ""}</p>
@@ -163,7 +163,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
               >{pending === assignment.order_id ? "Saving…" : step.label}</Button> : null}
               {step && !step.ready ? <p className="mt-2 text-sm font-bold text-wayne-muted">Waiting for the kitchen to mark this order ready.</p> : null}
 
-              {showCash ? <div className="mt-4 rounded-xl border border-wayne-border bg-stone-50 p-4">
+              {showCash ? <div className="mt-4 rounded-xl border border-wayne-border bg-wayne-cream p-4">
                 <h4 className="text-lg font-black">Close out {assignment.order_number}</h4>
                 <p className="mt-1 text-sm text-wayne-muted">{assignment.amount_due_cents > 0 ? `Cash owed at the door: ${formatCents(assignment.amount_due_cents)}. Card payment at the door is not available yet.` : "This order is already paid. Do not collect cash."}</p>
                 {assignment.amount_due_cents > 0 ? <label className="mt-3 grid gap-2 text-sm font-bold">Cash collected
@@ -198,7 +198,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
         <h2 className="text-2xl font-black">Delivered in the last few hours</h2>
         <div className="mt-4 grid gap-3">
           {finished.map((assignment) => <article className="rounded-2xl border border-wayne-border bg-white p-5" key={assignment.order_id}>
-            <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-black">{assignment.order_number}</h3><strong className="text-green-800">Delivered</strong></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-black">{assignment.order_number}</h3><strong className="text-wayne-ok">Delivered</strong></div>
             <p className="mt-1 text-sm text-wayne-muted">{assignment.customer_name} · cash collected {formatCents(assignment.cash_collected_cents)} of {formatCents(assignment.amount_due_cents)}{assignment.delivery_note ? ` · ${assignment.delivery_note}` : ""}</p>
           </article>)}
         </div>

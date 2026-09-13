@@ -54,29 +54,29 @@ export default async function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-wayne-cream">
+    <div className="flex min-h-screen flex-col bg-wayne-cream">
       <SiteHeader settings={settings} />
       <main>
-        <section className="relative overflow-hidden border-b border-wayne-border bg-wayne-ink text-white">
-          <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_20%_10%,#ef4444,transparent_35%),radial-gradient(circle_at_80%_80%,#f59e0b,transparent_32%)]" />
-          <div className="relative mx-auto max-w-7xl px-5 py-14 text-center sm:py-20">
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-300">
+        <section className="relative overflow-hidden bg-wayne-green text-wayne-cream">
+          <div className="absolute inset-0 opacity-70 [background-image:radial-gradient(circle_at_18%_-10%,rgba(217,154,33,0.28),transparent_45%),radial-gradient(circle_at_88%_120%,rgba(176,34,34,0.35),transparent_45%)]" />
+          <div className="relative mx-auto max-w-7xl px-5 py-16 text-center sm:py-24">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-wayne-gold sm:text-sm">
               {settings.homepage_eyebrow}
             </p>
-            <h1 className="mx-auto mt-4 max-w-4xl text-5xl font-black tracking-tight sm:text-7xl">
+            <h1 className="mx-auto mt-5 max-w-4xl font-display text-5xl font-black leading-[0.95] tracking-tight sm:text-7xl">
               {settings.homepage_heading}
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-stone-300">
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-wayne-cream/75">
               {settings.homepage_description}
             </p>
             {!orderingAvailable ? (
-              <p className="mx-auto mt-6 max-w-lg rounded-full bg-white/10 px-5 py-3 font-bold">
+              <p className="mx-auto mt-7 max-w-lg rounded-full bg-wayne-cream/10 px-5 py-3 font-bold ring-1 ring-wayne-cream/20">
                 Ordering is currently closed. Please check back during regular
                 hours.
               </p>
             ) : null}
           </div>
-          <div className="relative mx-auto grid max-w-7xl gap-px bg-white/20 sm:grid-cols-2">
+          <div className="relative mx-auto grid max-w-7xl gap-px bg-wayne-cream/15 sm:grid-cols-2">
             <OrderChoice
               enabled={orderingAvailable && settings.pickup_enabled}
               fulfillment="pickup"
@@ -92,13 +92,13 @@ export default async function HomePage() {
           </div>
         </section>
         {settings.general_notice ? (
-          <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-center font-semibold">
+          <div className="border-b border-wayne-warn/30 bg-wayne-warn-soft px-5 py-4 text-center font-semibold">
             {settings.general_notice}
           </div>
         ) : null}
         <section className="mx-auto grid max-w-7xl gap-10 px-5 py-16 lg:grid-cols-2 lg:py-24">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-green">
               About Wayne&apos;s
             </p>
             <h2 className="mt-3 text-4xl font-black tracking-tight">
@@ -108,13 +108,13 @@ export default async function HomePage() {
               {settings.story}
             </p>
             <Link
-              className="mt-7 inline-flex font-bold text-wayne-red underline-offset-4 hover:underline"
+              className="mt-7 inline-flex items-center gap-2 font-bold text-wayne-green underline-offset-4 hover:underline"
               href="/about"
             >
-              Read our story →
+              Read our story <span aria-hidden>→</span>
             </Link>
           </div>
-          <div className="rounded-3xl border border-wayne-border bg-white p-7 shadow-sm">
+          <div className="rounded-3xl border border-wayne-border bg-wayne-surface p-7 shadow-card">
             <h2 className="text-2xl font-black">{settings.contact_heading}</h2>
             <p className="mt-3 text-wayne-muted">{formatAddress(settings)}</p>
             {settings.public_phone ? (
@@ -136,11 +136,11 @@ export default async function HomePage() {
           </div>
         </section>
         {featured.length ? (
-          <section className="bg-white px-5 py-16">
+          <section className="border-y border-wayne-border bg-wayne-surface px-5 py-16 lg:py-20">
             <div className="mx-auto max-w-7xl">
               <div className="flex items-end justify-between gap-5">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">
+                  <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-green">
                     Popular picks
                   </p>
                   <h2 className="mt-2 text-4xl font-black">
@@ -148,16 +148,16 @@ export default async function HomePage() {
                   </h2>
                 </div>
                 <Link
-                  className="hidden font-bold text-wayne-red sm:block"
+                  className="hidden items-center gap-2 font-bold text-wayne-green sm:flex"
                   href="/menu"
                 >
-                  Full menu →
+                  Full menu <span aria-hidden>→</span>
                 </Link>
               </div>
               <div className="mt-8 grid gap-6 md:grid-cols-3">
                 {featured.map((item) => (
                   <article
-                    className="overflow-hidden rounded-2xl border border-wayne-border bg-wayne-cream"
+                    className="group overflow-hidden rounded-2xl border border-wayne-border bg-wayne-cream shadow-card transition hover:-translate-y-1 hover:shadow-raised"
                     key={item.id}
                   >
                     <MenuImage
@@ -166,8 +166,8 @@ export default async function HomePage() {
                     />
                     <div className="p-5">
                       <div className="flex justify-between gap-4">
-                        <h3 className="text-xl font-black">{item.name}</h3>
-                        <span className="font-bold text-wayne-red">
+                        <h3 className="text-xl font-black leading-tight">{item.name}</h3>
+                        <span className="shrink-0 font-display font-black text-wayne-red">
                           {item.variants.length
                             ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}`
                             : formatCents(item.base_price_cents)}
@@ -184,7 +184,7 @@ export default async function HomePage() {
           </section>
         ) : null}
         <section className="mx-auto max-w-4xl px-5 py-16">
-          <p className="text-center text-sm font-black uppercase tracking-[0.2em] text-wayne-red">
+          <p className="text-center text-sm font-black uppercase tracking-[0.2em] text-wayne-green">
             Good to know
           </p>
           <h2 className="mt-2 text-center text-4xl font-black">
@@ -193,11 +193,12 @@ export default async function HomePage() {
           <div className="mt-8 grid gap-4">
             {settings.faq_items.map((faq) => (
               <details
-                className="rounded-2xl border border-wayne-border bg-white p-5"
+                className="group rounded-2xl border border-wayne-border bg-wayne-surface p-5 shadow-card transition open:border-wayne-green/30"
                 key={faq.question}
               >
-                <summary className="cursor-pointer font-black">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-display font-black marker:content-['']">
                   {faq.question}
+                  <span aria-hidden className="text-wayne-green transition group-open:rotate-45">+</span>
                 </summary>
                 <p className="mt-3 leading-7 text-wayne-muted">{faq.answer}</p>
               </details>
@@ -229,21 +230,21 @@ function OrderChoice({
 }) {
   const content = (
     <>
-      <span className="text-sm font-black uppercase tracking-[0.25em] text-amber-300">
+      <span className="text-xs font-black uppercase tracking-[0.3em] text-wayne-gold">
         Order now
       </span>
-      <span className="mt-2 text-4xl font-black uppercase sm:text-5xl">
+      <span className="mt-3 font-display text-4xl font-black uppercase tracking-tight sm:text-5xl">
         {heading}
       </span>
-      <span className="mt-3 max-w-sm text-stone-300">{description}</span>
-      <span aria-hidden className="mt-6 text-2xl">
+      <span className="mt-3 max-w-sm text-wayne-cream/70">{description}</span>
+      <span aria-hidden className="mt-7 grid h-11 w-11 place-items-center rounded-full bg-wayne-cream/10 text-xl transition group-hover:bg-wayne-red">
         →
       </span>
     </>
   );
   return enabled ? (
     <Link
-      className="flex min-h-64 flex-col items-center justify-center bg-black/20 px-8 py-10 text-center transition hover:bg-wayne-red focus:bg-wayne-red"
+      className="group flex min-h-64 flex-col items-center justify-center bg-wayne-green-dark/40 px-8 py-12 text-center transition hover:bg-wayne-green-dark focus:bg-wayne-green-dark"
       href={`/menu?fulfillment=${fulfillment}`}
     >
       {content}
@@ -251,7 +252,7 @@ function OrderChoice({
   ) : (
     <div
       aria-disabled="true"
-      className="flex min-h-64 flex-col items-center justify-center bg-black/40 px-8 py-10 text-center opacity-50"
+      className="group flex min-h-64 flex-col items-center justify-center bg-wayne-green-dark/60 px-8 py-12 text-center opacity-50"
     >
       {content}
     </div>

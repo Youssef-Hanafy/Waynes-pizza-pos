@@ -43,10 +43,10 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
       <Button asChild variant="secondary"><Link href="/admin/orders">← Order history</Link></Button>
       <div className="mt-6 flex flex-wrap items-end justify-between gap-5">
         <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Order detail</p><h1 className="mt-2 text-4xl font-black">{order.order_number}</h1><p className="mt-2 text-wayne-muted">Placed {formatAdminDateTime(order.placed_at, settings.timezone)}</p></div>
-        <div className="flex flex-wrap items-center gap-2">{isOpenOrderStatus(order.status) ? <AutoRefresh intervalMs={20_000} live /> : null}<Badge>{titleCase(order.status)}</Badge><Badge className="bg-stone-700">{titleCase(order.fulfillment_type)}</Badge></div>
+        <div className="flex flex-wrap items-center gap-2">{isOpenOrderStatus(order.status) ? <AutoRefresh intervalMs={20_000} live /> : null}<Badge>{titleCase(order.status)}</Badge><Badge className="bg-wayne-ink">{titleCase(order.fulfillment_type)}</Badge></div>
       </div>
-      {notice.saved && savedMessages[notice.saved] ? <p role="status" className="mt-5 rounded-xl bg-green-50 p-4 font-bold text-green-800">{savedMessages[notice.saved]}</p> : null}
-      {notice.error ? <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 font-bold text-red-800">{notice.error}</p> : null}
+      {notice.saved && savedMessages[notice.saved] ? <p role="status" className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{savedMessages[notice.saved]}</p> : null}
+      {notice.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{notice.error}</p> : null}
       {isOpenOrderStatus(order.status) ? <StatusActions canCancel={hasPermission(access, "orders.cancel")} canManage={hasPermission(access, "orders.manage")} fulfillment={order.fulfillment_type} orderId={order.id} status={order.status} /> : null}
       {order.status === "cancelled" ? <CancellationNotice events={order.events} /> : null}
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -79,7 +79,7 @@ function StatusActions({ canCancel, canManage, fulfillment, orderId, status }: {
         {status !== "ready" && status !== "out_for_delivery" ? <form action={changeOrderStatus}><Hidden orderId={orderId} status={status} next="completed" /><Button variant="secondary">Complete now (skip kitchen steps)</Button></form> : null}
         {status === "ready" && fulfillment === "delivery" ? <form action={changeOrderStatus}><Hidden orderId={orderId} status={status} next="completed" /><Button variant="secondary">Delivered / completed</Button></form> : null}
       </div> : <div />}
-      {canCancel ? <form action={changeOrderStatus} className="grid gap-3 rounded-xl border border-red-200 bg-red-50/40 p-4"><Hidden orderId={orderId} status={status} next="cancelled" />
+      {canCancel ? <form action={changeOrderStatus} className="grid gap-3 rounded-xl border border-wayne-alert/30 bg-wayne-alert-soft/40 p-4"><Hidden orderId={orderId} status={status} next="cancelled" />
         <label className="grid gap-2 text-sm font-bold">Cancellation reason<input className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" maxLength={500} minLength={3} name="reason" required /></label>
         <label className="flex items-start gap-2 text-sm"><input className="mt-1" name="confirm" required type="checkbox" />I understand this cancels the order, removes it from sales, and cannot be undone. Any collected payment must be refunded separately.</label>
         <Button variant="danger">Cancel order</Button></form> : null}
@@ -93,7 +93,7 @@ function Hidden({ orderId, status, next }: { orderId: string; status: string; ne
 function CancellationNotice({ events }: { events: Array<{ event_type: string; metadata: Record<string, unknown>; actor_name: string | null }> }) {
   const cancelled = [...events].reverse().find((event) => event.event_type === "order.cancelled");
   if (!cancelled) return null;
-  return <p className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4"><strong>Cancelled{cancelled.actor_name ? ` by ${cancelled.actor_name}` : ""}.</strong> {typeof cancelled.metadata.reason === "string" ? `Reason: ${cancelled.metadata.reason}.` : ""}{cancelled.metadata.refund_required === true ? " A payment had been collected — issue the refund with the payment provider." : ""}</p>;
+  return <p className="mt-5 rounded-xl border border-wayne-alert/30 bg-wayne-alert-soft p-4"><strong>Cancelled{cancelled.actor_name ? ` by ${cancelled.actor_name}` : ""}.</strong> {typeof cancelled.metadata.reason === "string" ? `Reason: ${cancelled.metadata.reason}.` : ""}{cancelled.metadata.refund_required === true ? " A payment had been collected — issue the refund with the payment provider." : ""}</p>;
 }
 
 /** Processor payments on this order, with refund and void for whoever may issue them. */
@@ -109,7 +109,7 @@ function PaymentsCard({ canManage, orderId, payments, timeZone }: { canManage: b
               <div className="border-t border-wayne-border pt-4 first:border-0 first:pt-0" key={payment.id}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <strong>{formatCents(payment.amount_cents)}</strong>
-                  <Badge className={payment.status === "captured" ? "bg-green-100 text-green-900" : payment.status === "failed" ? "bg-red-100 text-red-900" : ""}>
+                  <Badge className={payment.status === "captured" ? "bg-wayne-ok-soft text-wayne-ok" : payment.status === "failed" ? "bg-wayne-alert-soft text-wayne-alert" : ""}>
                     {paymentStatusLabels[payment.status] ?? payment.status}
                   </Badge>
                 </div>
@@ -120,11 +120,11 @@ function PaymentsCard({ canManage, orderId, payments, timeZone }: { canManage: b
                   {` · ${formatAdminDateTime(payment.created_at, timeZone)}`}
                 </p>
                 {payment.refunded_cents ? <p className="mt-1 text-sm font-bold">Refunded {formatCents(payment.refunded_cents)}</p> : null}
-                {payment.failure_reason ? <p className="mt-1 text-sm text-red-800">{payment.failure_reason}</p> : null}
+                {payment.failure_reason ? <p className="mt-1 text-sm text-wayne-alert">{payment.failure_reason}</p> : null}
                 {payment.receipt_url ? <p className="mt-1 text-sm"><a className="underline" href={payment.receipt_url} rel="noreferrer" target="_blank">Processor receipt ↗</a></p> : null}
 
                 {canManage && refundable > 0 ? (
-                  <form action={refundOrderPayment} className="mt-4 grid gap-3 rounded-xl border border-wayne-border bg-stone-50 p-4">
+                  <form action={refundOrderPayment} className="mt-4 grid gap-3 rounded-xl border border-wayne-border bg-wayne-cream p-4">
                     <input name="order_id" type="hidden" value={orderId} />
                     <input name="payment_id" type="hidden" value={payment.id} />
                     <input name="idempotency_key" type="hidden" value={`refund-${payment.id}-${payment.refunded_cents}-${refundable}`} />

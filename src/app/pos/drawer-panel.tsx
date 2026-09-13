@@ -127,8 +127,8 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
           <div><h2 className="text-2xl font-black">Cash drawer</h2><p className="text-sm text-wayne-muted">Every movement is recorded with your name and a reason.</p></div>
           <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>
         </div>
-        {error ? <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800" role="alert">{error}</p> : null}
-        {notice ? <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm font-bold text-green-800" role="status">{notice}</p> : null}
+        {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
+        {notice ? <p className="mt-4 rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok" role="status">{notice}</p> : null}
 
         {!shift ? <div className="mt-6 grid gap-4">
           <h3 className="text-xl font-black">Open a drawer</h3>
@@ -192,7 +192,7 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
               <label className="grid gap-2 text-sm font-bold">Counted cash
                 <input className="min-h-14 rounded-lg border border-wayne-border px-4 text-xl font-black" inputMode="decimal" onChange={(event) => setCounted(event.target.value)} placeholder="0.00" value={counted} />
               </label>
-              {liveVariance !== null ? <p className={`text-sm font-bold ${liveVariance === 0 ? "text-green-800" : "text-wayne-red"}`}>
+              {liveVariance !== null ? <p className={`text-sm font-bold ${liveVariance === 0 ? "text-wayne-ok" : "text-wayne-red"}`}>
                 {liveVariance === 0 ? "Balanced." : `${varianceLabel(liveVariance)} by ${formatCents(Math.abs(liveVariance))}.`}
               </p> : null}
               <label className="grid gap-2 text-sm font-bold">Note {liveVariance !== null && Math.abs(liveVariance) >= 500 ? "(required)" : "(optional)"}

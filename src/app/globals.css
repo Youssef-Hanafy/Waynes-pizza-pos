@@ -1,13 +1,48 @@
 @import "tailwindcss";
 
+/*
+ * Wayne's is a green shield with a red pizza slice on cream paper, and has been
+ * for fifty years. So green anchors the chrome — header, footer, nav, anything
+ * that frames the page — red is reserved for the thing you want someone to press,
+ * and cream is the paper it all sits on. Using red for both, as this did before,
+ * made the brand shout and left nothing to mark an action.
+ */
 @theme {
-  --color-wayne-red: #a61b1b;
-  --color-wayne-red-dark: #7d1212;
-  --color-wayne-cream: #fff8e7;
-  --color-wayne-ink: #211b18;
-  --color-wayne-muted: #6f625c;
-  --color-wayne-border: #dfd4c7;
+  /* Brand */
+  --color-wayne-green: #1f4b3a;
+  --color-wayne-green-dark: #143327;
+  --color-wayne-green-soft: #e7efe9;
+  --color-wayne-red: #b02222;
+  --color-wayne-red-dark: #8a1a1a;
+  --color-wayne-red-soft: #fbeaea;
+  --color-wayne-gold: #d99a21;
+  --color-wayne-gold-soft: #fdf3dd;
+
+  /* Paper and ink */
+  --color-wayne-cream: #fbf5e9;
+  --color-wayne-cream-deep: #f4ead6;
+  --color-wayne-surface: #ffffff;
+  --color-wayne-ink: #1c1a17;
+  --color-wayne-muted: #6b615a;
+  --color-wayne-border: #e4dac9;
+  --color-wayne-border-strong: #cfc0a8;
+
+  /* Status, used by the kitchen, POS and admin screens */
+  --color-wayne-ok: #1d7a4c;
+  --color-wayne-ok-soft: #e6f4ec;
+  --color-wayne-warn: #b26a00;
+  --color-wayne-warn-soft: #fdf1dd;
+  --color-wayne-alert: #b02222;
+  --color-wayne-alert-soft: #fbeaea;
+  /* Delivery, on the kitchen and driver boards, needs to be tellable from "ready" at a glance. */
+  --color-wayne-info: #1f5d7a;
+  --color-wayne-info-soft: #e7f0f4;
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(28 26 23 / 6%), 0 8px 24px -16px rgb(28 26 23 / 28%);
+  --shadow-raised: 0 2px 4px rgb(28 26 23 / 8%), 0 18px 40px -24px rgb(28 26 23 / 40%);
 }
 
 :root {
@@ -28,8 +63,25 @@ body {
 
 body {
   background:
-    radial-gradient(circle at 15% 0%, rgb(166 27 27 / 8%), transparent 28rem),
+    radial-gradient(circle at 12% -4%, rgb(31 75 58 / 7%), transparent 26rem),
+    radial-gradient(circle at 92% 4%, rgb(217 154 33 / 9%), transparent 22rem),
     var(--color-wayne-cream);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Headings carry the display face everywhere at once, so a page written before
+ * this existed still reads as Wayne's without being touched. Archivo is a
+ * variable face, so the font-black already scattered through the app renders as
+ * a real 900 weight rather than a browser's faux-bold smear.
+ */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 button,
@@ -40,6 +92,23 @@ textarea {
 }
 
 :focus-visible {
-  outline: 3px solid #2563eb;
+  outline: 3px solid var(--color-wayne-green);
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A tap on a touch POS should never leave a grey flash behind. */
+@media (hover: none) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -50,8 +50,8 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
       <Button asChild variant="secondary"><Link href="/admin/reports">Reports</Link></Button>
     </div>
 
-    {error ? <div className="mt-6 rounded-xl border border-red-400 bg-red-50 p-4 font-bold text-red-900" role="alert">{error}</div> : null}
-    {saved ? <div className="mt-6 rounded-xl border border-green-500 bg-green-50 p-4 font-bold text-green-900" role="status">{saved}</div> : null}
+    {error ? <div className="mt-6 rounded-xl border border-wayne-alert/50 bg-wayne-alert-soft p-4 font-bold text-wayne-alert" role="alert">{error}</div> : null}
+    {saved ? <div className="mt-6 rounded-xl border border-wayne-ok/50 bg-wayne-ok-soft p-4 font-bold text-wayne-ok" role="status">{saved}</div> : null}
 
     <Card className="mt-8 p-6">
       <h2 className="text-2xl font-black">Registers</h2>
@@ -85,7 +85,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
         <Button type="submit">Run</Button>
         <Button asChild variant="secondary"><Link href="/admin/cash">Today</Link></Button>
       </form></Card>
-      {closeoutError ? <p className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-4 font-bold">{closeoutError}</p> : null}
+      {closeoutError ? <p className="mt-4 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{closeoutError}</p> : null}
 
       {closeout ? <>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -108,9 +108,9 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
               <div>
                 <div className="flex flex-wrap items-center gap-3">
                   <h4 className="text-xl font-black">{shift.register_label}</h4>
-                  <Badge className={shift.status === "open" ? "bg-amber-100 text-amber-900" : "bg-stone-200 text-stone-700"}>{shift.status === "open" ? "Open" : "Closed"}</Badge>
+                  <Badge className={shift.status === "open" ? "bg-wayne-warn-soft text-wayne-warn" : "bg-wayne-cream-deep text-wayne-muted"}>{shift.status === "open" ? "Open" : "Closed"}</Badge>
                   {shift.status === "closed" && shift.variance_cents !== null && shift.variance_cents !== 0
-                    ? <Badge className="bg-red-100 text-red-900">{varianceLabel(shift.variance_cents)} {formatCents(Math.abs(shift.variance_cents))}</Badge>
+                    ? <Badge className="bg-wayne-alert-soft text-wayne-alert">{varianceLabel(shift.variance_cents)} {formatCents(Math.abs(shift.variance_cents))}</Badge>
                     : null}
                 </div>
                 <p className="mt-2 text-sm text-wayne-muted">

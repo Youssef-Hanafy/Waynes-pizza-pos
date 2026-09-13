@@ -298,7 +298,7 @@ function Notice({
 }) {
   return (
     <div
-      className={`mt-5 rounded-xl border p-4 font-semibold ${kind === "success" ? "border-green-200 bg-green-50 text-green-900" : "border-red-200 bg-red-50 text-red-900"}`}
+      className={`mt-5 rounded-xl border p-4 font-semibold ${kind === "success" ? "border-wayne-ok/30 bg-wayne-ok-soft text-wayne-ok" : "border-wayne-alert/30 bg-wayne-alert-soft text-wayne-alert"}`}
     >
       {children}
     </div>

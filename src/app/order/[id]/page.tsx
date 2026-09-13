@@ -40,7 +40,7 @@ export default async function OrderStatusPage({
       <SiteHeader settings={settings} />
       <main className="mx-auto max-w-3xl px-5 py-12">
         <div className="rounded-3xl border border-wayne-border bg-white p-6 shadow-sm sm:p-9">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-green-700">
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">
             Order saved
           </p>
           <h1 className="mt-3 text-4xl font-black">
@@ -50,7 +50,7 @@ export default async function OrderStatusPage({
             Order <strong>{order.order_number}</strong> is placed for{" "}
             <strong className="capitalize">{order.fulfillment_type}</strong>.
           </p>
-          <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-5">
+          <div className="mt-5 rounded-2xl border border-wayne-warn/40 bg-wayne-warn-soft p-5">
             <strong>TEST / MANUAL payment</strong>
             <p className="mt-1 text-sm">
               No card payment was collected. Payment status:{" "}

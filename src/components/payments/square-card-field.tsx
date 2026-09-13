@@ -110,7 +110,7 @@ export function SquareCardField({ config, onReady, onStatus }: {
     <div>
       <div aria-label="Card details" className="min-h-14 rounded-xl border border-wayne-border bg-white p-3" ref={container} />
       {!loaded && !error ? <p className="mt-2 text-sm text-wayne-muted">Loading secure card entry…</p> : null}
-      {error ? <p className="mt-2 text-sm font-bold text-red-800" role="alert">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
       <p className="mt-2 text-xs text-wayne-muted">Card details are entered directly with Wayne&apos;s payment processor. Wayne&apos;s never sees or stores your card number.</p>
     </div>
   );
