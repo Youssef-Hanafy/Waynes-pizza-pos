@@ -108,6 +108,13 @@ export function OrderMenuClient({
     router.replace(`/menu?fulfillment=${next}`, { scroll: false });
   }
 
+  function chooseCategory(categoryId: string) {
+    setActiveCategory(categoryId);
+    setQuery("");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#category-${categoryId}`);
+    window.requestAnimationFrame(() => document.getElementById(`category-${categoryId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
   return (
     <div className="site-container ordering-layout">
       <div className="menu-main">
@@ -182,15 +189,7 @@ export function OrderMenuClient({
                 aria-pressed={!query && activeCategory === category.id}
                 className="menu-category-card"
                 key={category.id}
-                onClick={() => {
-                  setActiveCategory(category.id);
-                  setQuery("");
-                  window.history.replaceState(
-                    null,
-                    "",
-                    `${window.location.pathname}${window.location.search}#category-${category.id}`,
-                  );
-                }}
+                onClick={() => chooseCategory(category.id)}
                 type="button"
               >
                 <MenuImage
@@ -216,15 +215,7 @@ export function OrderMenuClient({
               type="button"
               aria-pressed={!query && activeCategory === category.id}
               key={category.id}
-              onClick={() => {
-                setActiveCategory(category.id);
-                setQuery("");
-                window.history.replaceState(
-                  null,
-                  "",
-                  `${window.location.pathname}${window.location.search}#category-${category.id}`,
-                );
-              }}
+              onClick={() => chooseCategory(category.id)}
             >
               {category.name}
             </button>

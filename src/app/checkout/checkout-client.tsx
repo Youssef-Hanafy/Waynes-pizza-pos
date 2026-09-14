@@ -28,6 +28,7 @@ import {
   SquareCardField,
   type Tokenizer,
 } from "@/components/payments/square-card-field";
+import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
@@ -243,12 +244,7 @@ export function CheckoutClient({
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Delivery address</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Input
-                className="sm:col-span-2"
-                label="Street address"
-                name="address1"
-                required
-              />
+              <GoogleAddressInput />
               <Input label="Apartment / unit (optional)" name="address2" />
               <Input label="City" name="city" required />
               <Input defaultValue="MA" label="State" name="state" required />
