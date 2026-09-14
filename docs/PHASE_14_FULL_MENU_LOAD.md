@@ -20,6 +20,12 @@ old schema could only hold one price per option, so per-size pricing was added:
   option's default price when a size has no override.
 - Admin → Menu shows a price box per size under each option. Leave one blank
   and that size uses the default price shown as its placeholder.
+- The POS item screen and the online ordering screen both show the price for
+  the size currently selected, so the number next to a topping is the number
+  that gets charged. Picking a different size re-prices every topping on screen.
+- A modifier priced below zero subtracts. "No Cheese" and the other removals are
+  $0.00, but Ehab can set any of them to a credit (e.g. -$1.00) in Admin → Menu
+  and both screens will show and charge it as a subtraction.
 
 ## What was loaded
 
