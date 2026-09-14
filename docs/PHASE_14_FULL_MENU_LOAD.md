@@ -46,6 +46,31 @@ items they belong to so it is clear in Admin what each one drives.
 The previous simplified printed-menu seed was **archived, not deleted**
 (`archived_at` set), so nothing was lost and no order history can break.
 
+## Verified after loading
+
+Every count matched, no orphaned or mismatched per-size prices, and these orders
+priced correctly straight out of the live customer menu feed:
+
+| Order | Total |
+|---|---|
+| Large Three Topping Pizza + pepperoni + extra cheese | $22.00 |
+| Small Three Topping Pizza + pepperoni + extra cheese | $13.25 |
+| Steak Bomb Sub + bacon + provolone | $16.65 |
+| Chicken Finger Dinner + 2 sides | $13.00 |
+| Large cheese pizza, no cheese (removal is free) | $12.25 |
+| Italian Style cheese pizza + extra cheese (used to be free) | $17.75 |
+
+Two things were tidied after the load and are in the repo:
+
+- The customer menu feed was 2.3 MB, because a shared option group carried the
+  sizes of every item using it. Each choice now sends only the sizes of the item
+  it appears under — 1.2 MB, with identical prices.
+- The required-choice groups read as "One Topping Pizza – One Topping Pizza" on
+  the ordering screen. Renamed to what a customer should see: "Choose your
+  topping", "Choose 2 sides", "Choose your dressing", "Spaghetti or ziti?".
+  The paid extra-dressing group sat next to the free one under almost the same
+  name; it now reads "Extra dressing".
+
 ## Data fixes applied during the load
 
 Wayne's live system has some mistakes in it. These were corrected on the way in
