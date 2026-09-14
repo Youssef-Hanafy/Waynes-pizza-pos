@@ -2298,3 +2298,324 @@
   .site-topbar { font-size: 8px; letter-spacing: .3px; } .site-topbar .site-container { gap: 12px; min-height: 33px; height: auto; padding-block: 7px; } .site-topbar button { font-size: 9px; flex-shrink: 0; color: #f3ce85; }
 }
 @media (max-width: 430px) { .menu-product-grid { grid-template-columns: minmax(0, 1fr); } .header-cart span { display: none; } .brand-word { font-size: 32px; } }
+
+/* ==========================================================================
+   Photo-first storefront.
+   Pictures are what make people hungry, so every food slot now shows one -
+   an owner-uploaded photo when Admin -> Menu photos has one, and Wayne's own
+   tiled wordmark when it does not, which keeps an empty slot looking branded
+   instead of broken. Warm oven colours (flame, amber, crust) carry the food
+   and the buttons; the green stays on the chrome so it still reads as Wayne's.
+   ========================================================================== */
+
+/* --- Logo lockup ------------------------------------------------------- */
+.brand-mark {
+  flex-direction: row;
+  align-items: center;
+  gap: 11px;
+  transform: none;
+}
+.brand-badge {
+  flex-shrink: 0;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.brand-word {
+  font-size: 34px;
+  letter-spacing: -2px;
+}
+.brand-sub {
+  margin-top: 4px;
+  font-size: 7.5px;
+  letter-spacing: 1.6px;
+}
+.site-footer .brand-mark {
+  color: #fdf3dd;
+}
+
+/* --- Branded photo placeholder ----------------------------------------- */
+.menu-photo {
+  background: #1f4b3a;
+}
+.menu-photo-empty {
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+.menu-photo-pattern {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+.menu-photo-empty-mark {
+  display: block;
+  width: 38%;
+  max-width: 70px;
+  min-width: 34px;
+  filter: drop-shadow(0 5px 12px rgb(8 24 16 / 45%));
+}
+
+/* --- Hero: warm, oven-lit --------------------------------------------- */
+.pizza-hero {
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 78% 8%,
+      rgb(240 180 41 / 30%),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 60% 70% at 8% 100%,
+      rgb(31 75 58 / 55%),
+      transparent 60%
+    ),
+    linear-gradient(155deg, #c3311d 0%, #a5231c 48%, #7d1614 100%);
+}
+.pizza-hero::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 9px;
+  background: repeating-linear-gradient(
+    90deg,
+    #f0b429 0 22px,
+    #1f4b3a 22px 44px
+  );
+  z-index: 1;
+}
+.hero-actions .order-button {
+  background: linear-gradient(180deg, #ffe7bb, #f5cf8d);
+  color: #8a1a1a;
+  box-shadow: 0 12px 26px -14px rgb(20 8 4 / 80%);
+}
+
+/* --- "What sounds good?" category tiles -------------------------------- */
+.category-grid {
+  gap: 16px;
+}
+.category-tile {
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #e6dfd2;
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 1px 2px rgb(28 26 23 / 5%);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.category-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -18px rgb(28 26 23 / 55%);
+}
+.category-tile .menu-photo {
+  border-radius: 0;
+  aspect-ratio: 1.15;
+}
+.category-tile > span {
+  gap: 8px;
+  padding: 12px 13px;
+  font-size: 12.5px;
+  line-height: 1.25;
+}
+.category-tile > span svg {
+  flex-shrink: 0;
+  color: #c3311d;
+}
+
+/* --- Featured items ----------------------------------------------------- */
+.favorite-photo:not(:has(.menu-photo)) {
+  padding: 0;
+}
+.favorite-photo .menu-photo {
+  aspect-ratio: 1.45;
+}
+.favorite-photo:not(:has(.menu-photo)) .food-tag,
+.favorite-photo .food-tag {
+  position: absolute;
+  display: inline-block;
+}
+.add-button {
+  background: linear-gradient(180deg, #c3311d, #9d1f18);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* --- Menu page: pick a category the way you'd point at a menu board ---- */
+.menu-category-board {
+  margin: 20px 0 6px;
+}
+.menu-category-board > p {
+  margin: 0 0 12px;
+  color: #7b7266;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.menu-category-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.menu-category-card {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #e6dfd2;
+  border-radius: 11px;
+  background: #fffdf8;
+  text-align: left;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.menu-category-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -16px rgb(28 26 23 / 55%);
+}
+.menu-category-card[aria-pressed="true"] {
+  border-color: #c3311d;
+  box-shadow: 0 0 0 2px rgb(195 49 29 / 25%);
+}
+.menu-category-card .menu-photo {
+  aspect-ratio: 1.25;
+  border-radius: 0;
+}
+.menu-category-card > span {
+  display: block;
+  padding: 10px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.menu-category-card > span small {
+  display: block;
+  margin-top: 3px;
+  color: #8a8075;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* --- Menu items: let the food do the selling --------------------------- */
+.menu-product .menu-photo {
+  max-height: none;
+  aspect-ratio: 1.5;
+}
+.menu-product {
+  overflow: hidden;
+}
+.storefront .menu-customize-button {
+  min-height: 42px;
+  border-color: transparent;
+  background: linear-gradient(180deg, #c3311d, #9d1f18);
+  color: #fff;
+}
+.storefront .menu-customize-button:disabled {
+  background: #efe7db;
+  color: #8a8075;
+}
+
+/* --- Section polish ---------------------------------------------------- */
+.section-heading .eyebrow,
+.category-section .eyebrow {
+  color: #c3311d;
+}
+.favorites-section {
+  background:
+    radial-gradient(circle at 90% 0%, rgb(240 180 41 / 12%), transparent 45%),
+    #f4f1e6;
+}
+.order-button {
+  background: linear-gradient(180deg, #c3311d, #9d1f18);
+}
+
+@media (max-width: 1150px) {
+  .menu-category-cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 13px;
+  }
+  .category-tile .menu-photo {
+    aspect-ratio: 1.3;
+  }
+  .menu-category-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .favorite-photo .menu-photo {
+    aspect-ratio: 1.5;
+  }
+}
+@media (max-width: 700px) {
+  .brand-word {
+    font-size: 27px;
+    letter-spacing: -1.5px;
+  }
+  .brand-sub {
+    font-size: 6.5px;
+    letter-spacing: 1.2px;
+  }
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .category-tile .menu-photo {
+    aspect-ratio: 1.2;
+  }
+  .menu-category-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .menu-category-card > span {
+    padding: 8px 9px;
+    font-size: 11px;
+  }
+  .menu-product .menu-photo {
+    aspect-ratio: 1.35;
+  }
+}
+@media (max-width: 430px) {
+  .brand-word {
+    font-size: 24px;
+  }
+  .brand-sub {
+    display: none;
+  }
+  .menu-category-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .menu-product .menu-photo {
+    aspect-ratio: 1.6;
+  }
+}
+
+/* On a phone the category board behaves like a menu board you swipe, which is
+   how people already browse pizza apps, instead of a wall of tiny tiles. */
+@media (max-width: 700px) {
+  .menu-category-cards {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .menu-category-card {
+    flex: 0 0 44%;
+    max-width: 175px;
+    scroll-snap-align: start;
+  }
+  .menu-category-card .menu-photo {
+    aspect-ratio: 1.35;
+  }
+}

@@ -37,6 +37,6 @@ export async function POST(request: Request) {
     }
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return Response.json({ error: "Text Daily signup is temporarily unavailable. Please try again later." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ error: "Wayne’s Rewards signup is temporarily unavailable. Please try again later." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

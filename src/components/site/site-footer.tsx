@@ -20,7 +20,7 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
         <nav aria-label="Footer navigation">
           <h2>COME HUNGRY</h2>
           <Link href="/menu">Explore the menu</Link>
-          <Link href="/rewards">Wayne’s Text Daily</Link>
+          <Link href="/rewards">Wayne’s Rewards</Link>
           <Link href="/about">The Wayne&apos;s story</Link>
           <Link href="/contact">Hours & location</Link>
         </nav>

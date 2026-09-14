@@ -2,14 +2,26 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SiteIcon } from "./site-icon";
-const ArrowRight = ({ size = 18 }: { size?: number }) => <SiteIcon name="arrow" size={size} />;
-const Check = ({ size = 18 }: { size?: number }) => <SiteIcon name="check" size={size} />;
-const Gift = ({ size = 18 }: { size?: number }) => <SiteIcon name="bag" size={size} />;
-const X = ({ size = 18 }: { size?: number }) => <SiteIcon name="close" size={size} />;
-import { WAYNE_REWARDS_CONSENT, WAYNE_REWARDS_CONSENT_VERSION } from "@/lib/wayne/rewards";
+import { WayneBadge } from "./wayne-badge";
+import {
+  WAYNE_REWARDS_CONSENT,
+  WAYNE_REWARDS_CONSENT_VERSION,
+} from "@/lib/wayne/rewards";
 import styles from "./rewards.module.css";
 
-export function RewardsSignup({ open, onClose }: { open: boolean; onClose: () => void }) {
+const perks = [
+  "Member-only deals",
+  "First to hear about specials",
+  "Free to join",
+];
+
+export function RewardsSignup({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -25,7 +37,9 @@ export function RewardsSignup({ open, onClose }: { open: boolean; onClose: () =>
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previousOverflow; };
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -34,28 +48,160 @@ export function RewardsSignup({ open, onClose }: { open: boolean; onClose: () =>
     setStatus("submitting");
     try {
       const response = await fetch("/api/rewards", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, phone, consent, consentVersion: WAYNE_REWARDS_CONSENT_VERSION })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          phone,
+          consent,
+          consentVersion: WAYNE_REWARDS_CONSENT_VERSION,
+        }),
       });
       const result = await response.json();
-      if (!response.ok || !result.ok) throw new Error(result.error || "We couldn’t complete your signup. Please try again.");
+      if (!response.ok || !result.ok)
+        throw new Error(
+          result.error || "We couldn’t complete your signup. Please try again.",
+        );
       setStatus("done");
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Please try again in a moment.");
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Please try again in a moment.",
+      );
       setStatus("idle");
     }
   }
 
-  return <dialog ref={dialog} className={styles.dialog} aria-labelledby="rewards-title" onCancel={onClose} onClose={onClose} onClick={(event) => { if (event.target === dialog.current) { const bounds = dialog.current.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose(); } }}>
-    <button className={styles.dialogClose} type="button" aria-label="Close rewards signup" onClick={onClose} autoFocus><X size={18} /></button>
-    <div className={styles.dialogIntro}><Gift size={29} aria-hidden="true" /><span className={styles.eyebrow}>WAYNE’S REWARDS · TEXT DAILY</span><h2 id="rewards-title">Good pizza.<br /><em>Better perks.</em></h2><p>Join the Wayne’s text club for member offers and more reasons to make it a pizza night.</p></div>
-    {status === "done" ? <div className={styles.signupSuccess} role="status"><Check size={34} /><h3>You’re on the list!</h3><p>Your Text Daily signup is saved. Keep an eye out for Wayne’s member offers.</p><button onClick={onClose}>Let’s find your pizza <ArrowRight size={14} /></button></div> : <form className={styles.signupForm} onSubmit={submit}>
-      <div className={styles.nameFields}><label>First name<input required autoComplete="given-name" maxLength={100} value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label><label>Last name<input required autoComplete="family-name" maxLength={100} value={lastName} onChange={(event) => setLastName(event.target.value)} /></label></div>
-      <label>Mobile number<input type="tel" autoComplete="tel" inputMode="tel" required maxLength={24} placeholder="(508) 000-0000" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-      <label className={styles.consent}><input type="checkbox" required checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>{WAYNE_REWARDS_CONSENT}</span></label>
-      {error && <p className={styles.signupError} role="alert">{error}</p>}
-      <button type="submit" disabled={status === "submitting"}>{status === "submitting" ? "Joining…" : "Join Text Daily"}<ArrowRight size={17} /></button>
-      <small>Free to join. Your next favorite offer starts here.</small>
-    </form>}
-  </dialog>;
+  return (
+    <dialog
+      aria-labelledby="rewards-title"
+      className={styles.dialog}
+      onCancel={onClose}
+      onClose={onClose}
+      onClick={(event) => {
+        if (event.target !== dialog.current) return;
+        const bounds = dialog.current.getBoundingClientRect();
+        if (
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          onClose();
+      }}
+      ref={dialog}
+    >
+      <button
+        aria-label="Close"
+        autoFocus
+        className={styles.dialogClose}
+        onClick={onClose}
+        type="button"
+      >
+        <SiteIcon name="close" size={18} />
+      </button>
+
+      <div className={styles.dialogIntro}>
+        <WayneBadge className={styles.dialogBadge} size={62} />
+        <span className={styles.eyebrow}>WAYNE’S REWARDS</span>
+        <h2 id="rewards-title">
+          Good pizza.
+          <br />
+          <em>Better perks.</em>
+        </h2>
+        <p>
+          Drop your number and we’ll text you the deals we save for regulars.
+        </p>
+        <ul className={styles.perks}>
+          {perks.map((perk) => (
+            <li key={perk}>
+              <SiteIcon name="check" size={14} />
+              {perk}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {status === "done" ? (
+        <div className={styles.signupSuccess} role="status">
+          <span className={styles.successMark}>
+            <SiteIcon name="check" size={30} />
+          </span>
+          <h3>You’re in.</h3>
+          <p>
+            Welcome to Wayne’s Rewards. Watch your texts — the good offers land
+            there first.
+          </p>
+          <button onClick={onClose} type="button">
+            Let’s find your pizza <SiteIcon name="arrow" size={16} />
+          </button>
+        </div>
+      ) : (
+        <form className={styles.signupForm} onSubmit={submit}>
+          <div className={styles.nameFields}>
+            <label>
+              First name
+              <input
+                autoComplete="given-name"
+                maxLength={100}
+                onChange={(event) => setFirstName(event.target.value)}
+                required
+                value={firstName}
+              />
+            </label>
+            <label>
+              Last name
+              <input
+                autoComplete="family-name"
+                maxLength={100}
+                onChange={(event) => setLastName(event.target.value)}
+                required
+                value={lastName}
+              />
+            </label>
+          </div>
+          <label>
+            Mobile number
+            <input
+              autoComplete="tel"
+              inputMode="tel"
+              maxLength={24}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="(508) 000-0000"
+              required
+              type="tel"
+              value={phone}
+            />
+          </label>
+          <label className={styles.consent}>
+            <input
+              checked={consent}
+              onChange={(event) => setConsent(event.target.checked)}
+              required
+              type="checkbox"
+            />
+            <span>{WAYNE_REWARDS_CONSENT}</span>
+          </label>
+          {error && (
+            <p className={styles.signupError} role="alert">
+              {error}
+            </p>
+          )}
+          <button disabled={status === "submitting"} type="submit">
+            {status === "submitting" ? "Joining…" : "Join Wayne’s Rewards"}
+            <SiteIcon name="arrow" size={17} />
+          </button>
+          <button
+            className={styles.dismiss}
+            onClick={onClose}
+            type="button"
+          >
+            No thanks, I’m just hungry
+          </button>
+        </form>
+      )}
+    </dialog>
+  );
 }

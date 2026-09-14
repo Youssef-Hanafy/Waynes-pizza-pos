@@ -77,11 +77,16 @@ export default async function MenuAdminPage({
             remains safe.
           </p>
         </div>
-        {categories.some((category) => !category.archived_at) ? (
-          <Button asChild>
-            <Link href="/admin/menu/new">Create menu item</Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild variant="secondary">
+            <Link href="/admin/menu/photos">Menu photos</Link>
           </Button>
-        ) : null}
+          {categories.some((category) => !category.archived_at) ? (
+            <Button asChild>
+              <Link href="/admin/menu/new">Create menu item</Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
       {params.saved ? (
         <Notice kind="success">Menu changes saved.</Notice>

@@ -174,6 +174,42 @@ export function OrderMenuClient({
             unavailable.
           </p>
         ) : null}
+        <div className="menu-category-board">
+          <p>Pick a category</p>
+          <div className="menu-category-cards">
+            {menu.map((category) => (
+              <button
+                aria-pressed={!query && activeCategory === category.id}
+                className="menu-category-card"
+                key={category.id}
+                onClick={() => {
+                  setActiveCategory(category.id);
+                  setQuery("");
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `${window.location.pathname}${window.location.search}#category-${category.id}`,
+                  );
+                }}
+                type="button"
+              >
+                <MenuImage
+                  alt={category.image_alt || category.name}
+                  name={category.name}
+                  path={category.image_path}
+                  sizes="(max-width: 700px) 45vw, 200px"
+                />
+                <span>
+                  {category.name}
+                  <small>
+                    {category.items.length} item
+                    {category.items.length === 1 ? "" : "s"}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
         <nav aria-label="Menu categories" className="menu-category-nav">
           {menu.map((category) => (
             <button
@@ -421,7 +457,7 @@ export function OrderMenuClient({
           <SiteIcon name="check" size={14} /> Customize every bite before
           checkout.
         </p>
-        <RewardsButton className="cart-rewards-link">Pizza person? Join Wayne’s Text Daily →</RewardsButton>
+        <RewardsButton className="cart-rewards-link">Pizza person? Join Wayne’s Rewards →</RewardsButton>
       </aside>
 
       <div role="status" className={announcement ? "cart-toast" : "sr-only"}>

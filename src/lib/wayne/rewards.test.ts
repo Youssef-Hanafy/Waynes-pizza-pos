@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseRewardsSignup, WAYNE_REWARDS_CONSENT_VERSION } from "./rewards";
 const signup = { phone: "(508) 555-0198", consent: true, consentVersion: WAYNE_REWARDS_CONSENT_VERSION };
-describe("Text Daily signup", () => {
+describe("Wayne’s Rewards signup", () => {
   it("normalizes valid US numbers", () => {
     expect(parseRewardsSignup(signup).phone).toBe("+15085550198");
     expect(parseRewardsSignup({ ...signup, phone: "+1 508 555 0198" }).phone).toBe("+15085550198");

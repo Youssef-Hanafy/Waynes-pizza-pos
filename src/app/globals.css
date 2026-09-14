@@ -18,6 +18,19 @@
   --color-wayne-gold: #d99a21;
   --color-wayne-gold-soft: #fdf3dd;
 
+  /*
+   * The appetite half of the palette. Warm reds through to crust gold are the
+   * colours that read as "hot food" - they carry the hero, the food tiles and
+   * every add-to-order control, while the green above keeps holding the chrome
+   * so the brand still looks like Wayne's sign and not a generic pizza chain.
+   */
+  --color-wayne-flame: #c3311d;
+  --color-wayne-ember: #9d1f18;
+  --color-wayne-amber: #e8873a;
+  --color-wayne-crust: #f0b429;
+  --color-wayne-crust-soft: #f8e3b0;
+  --color-wayne-basil: #3f7d4f;
+
   /* Paper and ink */
   --color-wayne-cream: #fbf5e9;
   --color-wayne-cream-deep: #f4ead6;

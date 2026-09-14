@@ -1,8 +1,12 @@
+import Image from "next/image";
 import Link from "next/link";
+import { getPublicAssetUrl } from "@/lib/images/public-url";
 import { SiteIcon } from "./site-icon";
 
 export function StartOrder({
   deliveryEnabled,
+  heroImageAlt = "",
+  heroImagePath = null,
   orderingAvailable,
   phone,
   pickupEnabled,
@@ -10,12 +14,17 @@ export function StartOrder({
   deliveryMinutes = 45,
 }: {
   deliveryEnabled: boolean;
+  /* Whatever photo the owner put on the first menu category carries the hero,
+     so the front page updates from Admin -> Menu photos like everything else. */
+  heroImageAlt?: string;
+  heroImagePath?: string | null;
   orderingAvailable: boolean;
   phone: string;
   pickupEnabled: boolean;
   pickupMinutes?: number;
   deliveryMinutes?: number;
 }) {
+  const heroImageUrl = getPublicAssetUrl(heroImagePath);
   const choices = [
     {
       enabled: pickupEnabled,
@@ -35,6 +44,21 @@ export function StartOrder({
   return (
     <>
       <section className="pizza-hero">
+        {heroImageUrl ? (
+          <>
+            <div className="hero-photograph">
+              <Image
+                alt={heroImageAlt}
+                className="object-cover"
+                fill
+                priority
+                sizes="100vw"
+                src={heroImageUrl}
+              />
+            </div>
+            <div className="hero-shade" />
+          </>
+        ) : null}
         <div className="site-container hero-content">
           <div className="hero-copy">
             <p className="eyebrow light">

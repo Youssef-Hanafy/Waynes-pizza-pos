@@ -262,6 +262,90 @@ async function writeMenuItem(id: string | null, formData: FormData) {
   menuRedirect();
 }
 
+/*
+ * One-photo-at-a-time upload used by the Menu photos board, so the owner can
+ * work through every category and item without opening a full edit form for
+ * each one. Photos live in Supabase storage and are referenced by image_path,
+ * never bundled with the code, so a swap here changes the site immediately.
+ */
+export async function setMenuPhotoAction(
+  kind: "category" | "item",
+  id: string,
+  formData: FormData,
+) {
+  await requirePermission("menu.manage", "/admin/menu");
+  const target = z.uuid().safeParse(id);
+  if (!target.success) photoRedirect("That menu record could not be found.");
+
+  const table = kind === "category" ? "menu_categories" : "menu_items";
+  const supabase = await createServerSupabaseClient();
+
+  if (formData.get("remove") === "1") {
+    const { data: existing } = await supabase
+      .from(table)
+      .select("image_path")
+      .eq("id", target.data)
+      .maybeSingle<{ image_path: string | null }>();
+    const { error } = await supabase
+      .from(table)
+      .update({ image_path: null })
+      .eq("id", target.data);
+    if (error) photoRedirect(error.message);
+    if (existing?.image_path) await removeUploadedImage(existing.image_path);
+    revalidateMenu();
+    revalidatePath("/admin/menu/photos");
+    photoRedirect();
+  }
+
+  const image = formData.get("image");
+  if (!(image instanceof File) || image.size === 0)
+    photoRedirect("Choose a photo first.");
+
+  let imagePath: string | null = null;
+  try {
+    imagePath = await uploadOptimizedImage(
+      image as File,
+      kind === "category" ? "categories" : "items",
+    );
+  } catch (error) {
+    photoRedirect(
+      error instanceof Error ? error.message : "Image upload failed",
+    );
+  }
+  if (!imagePath) photoRedirect("Image upload failed.");
+
+  const altText = String(formData.get("image_alt") ?? "").trim().slice(0, 300);
+  const { data: previous } = await supabase
+    .from(table)
+    .select("image_path")
+    .eq("id", target.data)
+    .maybeSingle<{ image_path: string | null }>();
+  const { error } = await supabase
+    .from(table)
+    .update(
+      altText
+        ? { image_path: imagePath, image_alt: altText }
+        : { image_path: imagePath },
+    )
+    .eq("id", target.data);
+  if (error) {
+    await removeUploadedImage(imagePath);
+    photoRedirect(error.message);
+  }
+  if (previous?.image_path) await removeUploadedImage(previous.image_path);
+  revalidateMenu();
+  revalidatePath("/admin/menu/photos");
+  photoRedirect();
+}
+
+function photoRedirect(error?: string): never {
+  redirect(
+    error
+      ? `/admin/menu/photos?error=${encodeURIComponent(error)}`
+      : "/admin/menu/photos?saved=1",
+  );
+}
+
 async function removeUploadedImage(path: string) {
   const supabase = await createServerSupabaseClient();
   await supabase.storage.from("wayne-menu").remove([path]);

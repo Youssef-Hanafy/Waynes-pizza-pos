@@ -22,7 +22,7 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
             {settings.announcement_text ||
               "GOOD FOOD. GREAT NEIGHBORS. THAT’S WAYNE’S."}
           </span>
-          <RewardsButton>Join Wayne’s Text Daily →</RewardsButton>
+          <RewardsButton>Join Wayne’s Rewards →</RewardsButton>
         </div>
       </div>
       <RewardsExperience />

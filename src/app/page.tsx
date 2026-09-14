@@ -65,6 +65,13 @@ export default async function HomePage() {
   ].flatMap((name) =>
     menu.filter((category) => category.name === name && category.items.length),
   );
+  const heroCategory =
+    menu.find((category) => category.name === "Pizza" && category.image_path) ||
+    menu.find((category) => category.image_path);
+  const mealCategory =
+    menu.find(
+      (category) => category.name === "Appetizers" && category.image_path,
+    ) || menu.find((category) => category.name === "Appetizers");
   const cheapest = (item: (typeof featured)[number]) =>
     item.variants.length
       ? Math.min(...item.variants.map((variant) => variant.price_cents))
@@ -95,6 +102,8 @@ export default async function HomePage() {
       <main id="main-content">
         <StartOrder
           deliveryEnabled={settings.delivery_enabled}
+          heroImageAlt={heroCategory?.image_alt || "Fresh from Wayne's oven"}
+          heroImagePath={heroCategory?.image_path ?? null}
           orderingAvailable={orderingAvailable}
           phone={settings.public_phone}
           pickupEnabled={settings.pickup_enabled}
@@ -230,13 +239,21 @@ export default async function HomePage() {
                 Something for everyone at the table.
               </p>
               <Link
-                href={`/menu#category-${menu.find((category) => category.name === "Appetizers")?.id || ""}`}
+                href={`/menu#category-${mealCategory?.id || ""}`}
                 className="order-button"
               >
                 Meet the whole menu <SiteIcon name="arrow" size={18} />
               </Link>
             </div>
-
+            {mealCategory?.image_path ? (
+              <div className="more-photo">
+                <MenuImage
+                  alt={mealCategory.image_alt || "Sides from Wayne's"}
+                  path={mealCategory.image_path}
+                  sizes="(max-width: 900px) 100vw, 700px"
+                />
+              </div>
+            ) : null}
           </div>
         </section>
         <section className="story-section">
