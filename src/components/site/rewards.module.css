@@ -113,6 +113,65 @@
   font-size: 0.86rem;
   line-height: 1.55;
 }
+/* The offer is the reason to hand over a phone number, so it gets its own
+   line rather than being buried in the perk chips. */
+.offerRibbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  max-width: none !important;
+  margin: 14px auto 0 !important;
+  padding: 9px 12px;
+  border: 1px dashed rgb(248 202 107 / 70%);
+  border-radius: 10px;
+  background: rgb(255 244 224 / 12%);
+  color: #ffeeD2 !important;
+  font-size: 0.78rem !important;
+  font-weight: 800;
+}
+.offerRibbon span {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #f8ca6b;
+  color: #6d1410;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.rewardCode {
+  margin: 16px auto 0;
+  padding: 16px;
+  border: 2px dashed #e0c48a;
+  border-radius: 12px;
+  background: #fff6e4;
+}
+.rewardCode small {
+  display: block;
+  color: #9a7b45;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+.rewardCode strong {
+  display: block;
+  margin: 6px 0 8px;
+  color: #a5231c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  word-break: break-all;
+}
+.rewardCode span {
+  display: block;
+  color: #6d6155;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
 .perks {
   display: flex;
   flex-wrap: wrap;

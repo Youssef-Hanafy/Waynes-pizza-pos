@@ -12,8 +12,9 @@ export function RewardsSection() {
           <em>We’ll bring the perks.</em>
         </h2>
         <p>
-          Member-only deals, texted straight to you. No app, no points to chase
-          — just the offers we save for regulars. Free to join, easy to love.
+          Join today and your first order comes with a free small side.
+          After that it’s member-only deals texted straight to you — no app, no
+          points to chase. Free to join, easy to love.
         </p>
         <RewardsButton>Count me in →</RewardsButton>
         <small>No purchase needed to join. Opt out anytime.</small>

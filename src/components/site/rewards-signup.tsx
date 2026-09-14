@@ -15,6 +15,16 @@ const perks = [
   "Free to join",
 ];
 
+type Reward = {
+  code: string;
+  expires_at: string;
+  discount_cents: number;
+  minimum_order_cents: number;
+};
+
+const money = (cents: number) =>
+  `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
+
 export function RewardsSignup({
   open,
   onClose,
@@ -29,6 +39,7 @@ export function RewardsSignup({
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState<"idle" | "submitting" | "done">("idle");
   const [error, setError] = useState("");
+  const [reward, setReward] = useState<Reward | null>(null);
 
   useEffect(() => {
     const element = dialog.current;
@@ -63,6 +74,7 @@ export function RewardsSignup({
         throw new Error(
           result.error || "We couldn’t complete your signup. Please try again.",
         );
+      setReward(result.reward ?? null);
       setStatus("done");
     } catch (failure) {
       setError(
@@ -114,6 +126,9 @@ export function RewardsSignup({
         <p>
           Drop your number and we’ll text you the deals we save for regulars.
         </p>
+        <p className={styles.offerRibbon}>
+          <span>JOIN TODAY</span> Free small side on your first order
+        </p>
         <ul className={styles.perks}>
           {perks.map((perk) => (
             <li key={perk}>
@@ -130,10 +145,30 @@ export function RewardsSignup({
             <SiteIcon name="check" size={30} />
           </span>
           <h3>You’re in.</h3>
-          <p>
-            Welcome to Wayne’s Rewards. Watch your texts — the good offers land
-            there first.
-          </p>
+          {reward ? (
+            <>
+              <p>
+                Here’s your welcome offer — we’re texting it to you as well, so
+                it’s there when you’re hungry.
+              </p>
+              <div className={styles.rewardCode}>
+                <small>YOUR CODE</small>
+                <strong>{reward.code}</strong>
+                <span>
+                  {money(reward.discount_cents)} off — a free small side — on
+                  orders of {money(reward.minimum_order_cents)} or more.
+                  {reward.expires_at
+                    ? ` Good through ${new Date(reward.expires_at).toLocaleDateString("en-US", { month: "long", day: "numeric" })}.`
+                    : ""}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p>
+              Welcome to Wayne’s Rewards. Watch your texts — the good offers
+              land there first.
+            </p>
+          )}
           <button onClick={onClose} type="button">
             Let’s find your pizza <SiteIcon name="arrow" size={16} />
           </button>

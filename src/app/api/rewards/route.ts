@@ -35,7 +35,14 @@ export async function POST(request: Request) {
       const updated = await db.from("customers").update({ sms_marketing_opt_in: true }).eq("id", customer.data.id).eq("sms_marketing_opt_in", false);
       if (updated.error) throw updated.error;
     }
-    return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+    // Mint the welcome offer. It is idempotent per customer, so a retried or
+    // repeated signup hands back the code already issued rather than a new one.
+    // A failure here must not fail the signup - the consent is what matters -
+    // so the popup simply shows without a code and Hanafy still gets the join.
+    let reward: { code: string; expires_at: string; minimum_order_cents: number; discount_cents: number } | null = null;
+    const issued = await db.rpc("wayne_issue_welcome_reward", { target_customer_id: customer.data.id });
+    if (!issued.error && issued.data && typeof issued.data === "object") reward = issued.data as typeof reward;
+    return Response.json({ ok: true, reward }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Wayne’s Rewards signup is temporarily unavailable. Please try again later." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
