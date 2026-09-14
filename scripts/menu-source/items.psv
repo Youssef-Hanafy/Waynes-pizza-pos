@@ -1,0 +1,137 @@
+# CATEGORY|NAME|COMES_WITH|MODSET|SIZES|REQUIRED|DESC
+# SIZES shorthand: S3:x => One Size/White Wrap/Wheat Wrap all at x ; W2:x => White Wrap/Wheat Wrap ; else Name=price;Name=price ; NONE => no sizes (flat base price in DESC field col5 as BASE:x)
+Cold Subs|Cold Vegetarian Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.35||
+Cold Subs|Bologna Sub|Bologna, Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.25||
+Cold Subs|Genoa Salami Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.25||
+Cold Subs|Ham Sub|Provolone Cheese, Lettuce, Onion, Tomato|M16|S3:10.25||
+Cold Subs|BLT Sub|Bacon, Lettuce, Tomato|M17|S3:10.25||
+Cold Subs|Italian Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.25||
+Cold Subs|American Sub|American Cheese, Lettuce, Tomato, Onion|M18|S3:10.25||
+Cold Subs|Turkey Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.50||
+Cold Subs|Turkey Bacon Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:11.80||
+Cold Subs|Turkey Roast Beef Bacon Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:12.95||
+Cold Subs|Turkey Ham Bacon Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:12.95||
+Cold Subs|Roast Beef Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:11.50||
+Cold Subs|Tuna Sub|Lettuce, Onion, Tomato, American Cheese|M15|S3:10.25||
+Cold Subs|Seafood Salad Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:10.35||
+Cold Subs|Chicken Salad Sub|Provolone Cheese, Lettuce, Onion, Tomato|M15|S3:11.50||
+Hot Subs|Gyro||M19|One Size=10.25||
+Hot Subs|Chicken Parm Sub|Marinara Sauce, Provolone Cheese|M20|S3:10.90||
+Hot Subs|Cheeseburger Sub|American Cheese, Lettuce, Tomato, Onion|M21|S3:10.50||
+Hot Subs|Homemade Meatball Parm Sub|Meatball, Marinara Sauce, Provolone Cheese|M22|S3:10.75||
+Hot Subs|Bacon Cheeseburger Sub|Bacon, American Cheese, Onion, Tomato, Lettuce|M21|S3:12.10||
+Hot Subs|Sausage Parm Sub|Sausage, Provolone Cheese|M22|One Size=10.75;Wheat Wrap=10.75||
+Hot Subs|Grilled Veggie Sub|Broccoli, Grilled Mushrooms, Grilled Onions, Grilled Peppers|M21|S3:10.25||
+Hot Subs|Meatball/Sausage Sub|Meatball, Sausage, Provolone Cheese|M22|S3:12.10||
+Hot Subs|Eggplant Parm Sub|Provolone Cheese, Marinara Sauce|M23|S3:10.90||
+Egg & Cheese Subs|Egg & Cheese Sub|American Cheese|M24|S3:10.75||
+Egg & Cheese Subs|Ham, Egg & Cheese Sub|American Cheese|M25|S3:11.25||
+Egg & Cheese Subs|Bacon, Egg & Cheese Sub|American Cheese|M26|S3:11.50||
+Egg & Cheese Subs|Pepper, Egg & Cheese Sub|American Cheese, Grilled Peppers|M27|S3:11.00||
+Steak Subs|Steak and Cheese Sub|American Cheese|M28|S3:11.00||
+Steak Subs|BBQ Steak Sub|American Cheese|M29|S3:11.55||
+Steak Subs|Steak and Onion Sub|American Cheese, Grilled Onions|M30|S3:11.55||
+Steak Subs|Steak and Pepper Sub|American Cheese, Grilled Peppers|M31|S3:11.55||
+Steak Subs|Steak and Mushroom Sub|American Cheese, Grilled Mushrooms|M32|S3:11.55||
+Steak Subs|Steak Teriyaki Sub|American Cheese|M28|S3:11.55||
+Steak Subs|Steak Special Sub|American Cheese, Grilled Mushrooms, Grilled Onions, Grilled Peppers|M33|S3:12.35||
+Steak Subs|Steak Bomb Sub|American Cheese, Salami, Grilled Onions, Grilled Peppers, Grilled Mushrooms|M34|S3:13.65||
+Steak Subs|Steak Tip Sub|American Cheese, Grilled Onions, Grilled Peppers|M35|S3:16.45||
+Steak Subs|Hot Pastrami Sub|Provolone Cheese|M36|S3:11.15||
+Chicken Subs|Grilled Chicken Sub|American Cheese, Lettuce, Tomato, Onion|M37|S3:10.90||
+Chicken Subs|Chicken Stir Fry Sub|American Cheese, Broccoli, Grilled Onions, Grilled Peppers, Grilled Mushrooms|M38|S3:11.50||
+Chicken Subs|Buffalo Chicken Sub|Bleu Cheese, Lettuce, Tomato, Onion|M39|S3:11.50||
+Chicken Subs|Chicken Club Sub|Provolone Cheese, Lettuce, Tomato, Onion|M40|S3:12.35||
+Chicken Subs|Grilled Chicken Parmesan Sub|Provolone Cheese, Marinara Sauce|M41|S3:11.25||
+Chicken Subs|Chicken Cordon Bleu Sub|Provolone Cheese, Lettuce, Tomato, Onion|M42|S3:12.65||Provolone Cheese, Ham, Lettuce, Tomatoes and Onion
+Chicken Subs|Chicken Cutlet Sub|Lettuce, Tomato, Onion, Provolone Cheese|M21|S3:11.30||
+Chicken Subs|Chicken Finger|Provolone Cheese, Lettuce, Tomato, Onion|M21|S3:11.30||
+Fat Subs|Fat Buffalo Chicken Sub||M43|One Size=14.70||
+Fat Subs|Fat Chicken Finger Sub||M43|One Size=14.70||
+Fat Subs|Fat Cow Cheeseburger Sub||M43|One Size=14.70||
+Wraps|Caesar Wrap|Parmesan Cheese, Caesar Dressing|M44|W2:8.65||
+Wraps|Chicken Caesar Wrap|Parmesan Cheese, Caesar Dressing|M45|W2:11.45||
+Wraps|Chicken Mediterranean Wrap||M46|W2:12.35||
+Wraps|Mediterranean Steak Tip Wrap|Steak|M46|W2:16.45||
+Salads|Garden Salad|Cucumbers, Tomato|M47|BASE:8.45|DRESS|
+Salads|Greek Salad|Cucumbers, Tomato, Feta, Black Olives|M47|BASE:11.45|DRESS|
+Salads|Antipasto Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Tuna Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Seafood Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Chicken Salad Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Chef Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Caesar Salad|Caesar Dressing|M47|BASE:8.45|DRESS|
+Salads|Turkey Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Ham and Provolone Salad|Cucumbers, Tomato|M47|BASE:11.45|DRESS|
+Salads|Chicken Salad|Cucumbers, Tomato|M47|BASE:12.50|CHICK;;DRESS|
+Salads|Chicken Caesar Salad||M47|BASE:12.50|CHICK|
+Salads|Steak Tip Salad|Cucumbers, Tomato|M47|BASE:16.99|DRESS|
+Salads|Steak Mediterranean Salad|Cucumbers, Tomato, Feta, Black Olives|M47|BASE:18.99|DRESS|
+Salads|Chicken Mediterranean Salad|Cucumbers, Tomato, Feta, Black Olives|M47|BASE:14.25|CHICK;;DRESS|
+Pasta|Pasta with Sauce|Marinara Sauce|M48|BASE:9.26|PASTA|
+Pasta|Pasta with Meatball|Marinara Sauce|M48|BASE:11.25|PASTA|
+Pasta|Pasta with Sausage|Marinara Sauce|M48|BASE:11.25|PASTA|
+Pasta|Pasta with Chicken|Marinara Sauce|M48|BASE:12.25|PASTA|
+Pasta|Pasta with Eggplant|Marinara Sauce|M48|BASE:11.25|PASTA|
+Pasta|Pasta with Mushrooms|Marinara Sauce|M48|BASE:11.25|PASTA|
+Pasta|Chicken Broccoli Alfredo|Alfredo Sauce, Grilled Chicken|M48|BASE:14.50|PASTA|
+Pasta|Pasta Special|Marinara Sauce|M48|BASE:14.50|PASTA;;Pasta Special~0~2~Sausage,Meatball,Eggplant,Mushrooms,Extra Meat|
+Pasta|Manicotti|Marinara Sauce|M48|BASE:12.62||
+Pasta|Lasagna|Marinara Sauce|M48|BASE:12.62||
+Pasta|Shrimp Broccoli Alfredo|Marinara Sauce|M48|BASE:15.50|PASTA|
+Dinners|Chicken Finger Dinner|Sweet and Sour|M49|BASE:13.00|SIDES|
+Dinners|Buffalo Chicken Finger Dinner|Bleu Cheese|M49|BASE:13.75|SIDES|
+Dinners|Chicken Wing Dinner|Sweet and Sour|M49|BASE:13.50|SIDES|
+Dinners|Buffalo Wing Dinner|Bleu Cheese|M49|BASE:14.50|SIDES|
+Dinners|Cheeseburger Dinner||M50|BASE:13.50|SIDES|
+Dinners|Chicken Kabob Dinner||M49|BASE:14.00|SIDES|
+Dinners|Steak Tip Dinner||M49|BASE:18.99|SIDES|
+Dinners|Gyro Dinner||M49|BASE:13.50|SIDES|
+Dinners|Quesadilla Dinner|Salsa, Sour Cream|M49|BASE:16.75|Quesadilla~1~5~Ham,Salami,Veggies,Steak,Mozzarella Cheese;;SIDES|
+Dinners|Fish & chips||M49|BASE:13.75|SIDES|
+Dinners|Shrimp Dinner||M49|BASE:14.75|SIDES|
+Kids|Kid's Chicken Fingers|Sweet and Sour|M51|BASE:8.50||
+Kids|Kid's Cheeseburger||M52|BASE:8.50||
+Kids|Kid's Pasta||M51|BASE:8.25||
+Chips|Plain Chips|||Small=1.50;Large=3.65||
+Chips|BBQ Chips|||Small=1.50;Large=3.65||
+Chips|Ripple Chips|||Large=3.65||
+Chips|Sour Cream & Onion Chips|||Small=1.50;Large=3.65||
+Chips|Dirty Sea Salt|||Small=2.50||
+Chips|Dirty Jalapeno|||Small=2.50||
+Chips|Dirty BBQ|||Small=2.50||
+Chips|Dirty Sour Cream & Onion|||Small=2.50||
+Desserts|Baklava|||BASE:4.54||
+Desserts|Brownie|||BASE:3.32||
+Desserts|Fried Dough|||BASE:6.03||
+Desserts|Fried Oreo|||BASE:6.95||
+Beverages|2L Coca-Cola|||BASE:3.65||
+Beverages|2L Diet  Coca-Cola|||BASE:3.65||
+Beverages|2L Zero Sugar-Coca|||BASE:3.65||
+Beverages|2L Sprite|||BASE:3.65||
+Beverages|2L Canada-Dry|||BASE:3.65||
+Beverages|2L Dr.Pepper|||BASE:3.65||
+Beverages|2L Fanta Orange|||BASE:3.65||
+Beverages|2L Crush Grape|||BASE:3.65||
+Beverages|20 oz Coca-Cola|||BASE:2.60||
+Beverages|20 oz Diet Coca-Cola|||BASE:2.60||
+Beverages|20 oz Fanta Grape|||BASE:2.60||
+Beverages|20 oz Canada-Dry|||BASE:2.60||
+Beverages|20 oz Sprite|||BASE:2.60||
+Beverages|20 oz Dr.Pepper|||BASE:2.60||
+Beverages|20 oz Fanta Orange|||BASE:2.60||
+Beverages|Monster Energy|||BASE:3.80||
+Beverages|20 oz Coca-Cola Zero|||BASE:2.60||
+Beverages|20 oz Smart Water|||BASE:2.60||
+Beverages|Lemonade|||BASE:2.60||
+Beverages|Iced Tea|||BASE:2.60||
+Beverages|Water|||BASE:1.99||
+Beverages|Can Soda|||BASE:1.55||
+Beverages|Blue Power Ade|||BASE:2.40||
+Beverages|Vitamin Water Dragonfruit|||BASE:2.55||
+Beverages|2L Ice Tea|||BASE:3.65||
+Beverages|Fruit Punch|||BASE:2.60||
+Beverages|Apple Juice|||BASE:2.55||
+Beverages|Strawberry Banana ARMOR|||BASE:2.75||
+Beverages|Chocolate milk|||BASE:2.85||
+Beverages|Fanta Pineapple|||BASE:2.60||

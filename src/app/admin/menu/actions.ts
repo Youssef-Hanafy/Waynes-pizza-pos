@@ -38,6 +38,9 @@ const editorConfigSchema = z.object({
               name: z.string(),
               price: z.string(),
               default_selected: z.boolean(),
+              // Phase 14: per-size price overrides, keyed by the size's own
+              // name (e.g. "Small", "Large"). Empty for items with no sizes.
+              variant_prices: z.record(z.string(), z.string()).default({}),
             }),
           )
           .max(100),
@@ -240,6 +243,12 @@ async function writeMenuItem(id: string | null, formData: FormData) {
           .map((choice) => ({
             ...choice,
             price_delta_cents: signedCents(choice.price),
+            variant_prices: Object.entries(choice.variant_prices)
+              .filter(([variantName]) => variantName.trim())
+              .map(([variant_name, price]) => ({
+                variant_name,
+                price_delta_cents: signedCents(price),
+              })),
           })),
       })),
   });

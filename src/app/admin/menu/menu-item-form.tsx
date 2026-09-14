@@ -4,7 +4,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type DraftChoice = { name: string; price: string; default_selected: boolean };
+// Phase 14: variant_prices holds one $ string per size the owner has
+// explicitly overridden, keyed by that size's *current* name. A size with no
+// key here uses the choice's flat `price` -- which is also the only price an
+// item with no sizes at all ever uses.
+type DraftChoice = {
+  name: string;
+  price: string;
+  default_selected: boolean;
+  variant_prices: Record<string, string>;
+};
 type DraftGroup = {
   name: string;
   customer_label: string;
@@ -45,6 +54,7 @@ const emptyChoice = (): DraftChoice => ({
   name: "",
   price: "0.00",
   default_selected: false,
+  variant_prices: {},
 });
 const emptyGroup = (): DraftGroup => ({
   name: "",
@@ -370,56 +380,90 @@ export function MenuItemForm({
               <strong>Choices</strong>
               {group.choices.map((choice, choiceIndex) => (
                 <div
-                  className="grid gap-3 rounded-lg bg-white p-3 md:grid-cols-[1fr_10rem_auto_auto]"
+                  className="grid gap-3 rounded-lg bg-white p-3"
                   key={choiceIndex}
                 >
-                  <Input
-                    label="Choice"
-                    value={choice.name}
-                    onChange={(event) =>
-                      changeChoice(groupIndex, choiceIndex, {
-                        name: event.target.value,
-                      })
-                    }
-                  />
-                  <Input
-                    label="Price change ($)"
-                    value={choice.price}
-                    onChange={(event) =>
-                      changeChoice(groupIndex, choiceIndex, {
-                        price: event.target.value,
-                      })
-                    }
-                  />
-                  <Check
-                    checked={choice.default_selected}
-                    label="Default"
-                    onChange={(event) =>
-                      changeChoice(groupIndex, choiceIndex, {
-                        default_selected: event.target.checked,
-                      })
-                    }
-                  />
-                  <Button
-                    onClick={() =>
-                      setGroups(
-                        groups.map((item, index) =>
-                          index === groupIndex
-                            ? {
-                                ...item,
-                                choices: item.choices.filter(
-                                  (_, innerIndex) => innerIndex !== choiceIndex,
-                                ),
+                  <div className="grid gap-3 md:grid-cols-[1fr_10rem_auto_auto]">
+                    <Input
+                      label="Choice"
+                      value={choice.name}
+                      onChange={(event) =>
+                        changeChoice(groupIndex, choiceIndex, {
+                          name: event.target.value,
+                        })
+                      }
+                    />
+                    <Input
+                      label={
+                        variants.length > 0
+                          ? "Default price change ($)"
+                          : "Price change ($)"
+                      }
+                      value={choice.price}
+                      onChange={(event) =>
+                        changeChoice(groupIndex, choiceIndex, {
+                          price: event.target.value,
+                        })
+                      }
+                    />
+                    <Check
+                      checked={choice.default_selected}
+                      label="Default"
+                      onChange={(event) =>
+                        changeChoice(groupIndex, choiceIndex, {
+                          default_selected: event.target.checked,
+                        })
+                      }
+                    />
+                    <Button
+                      onClick={() =>
+                        setGroups(
+                          groups.map((item, index) =>
+                            index === groupIndex
+                              ? {
+                                  ...item,
+                                  choices: item.choices.filter(
+                                    (_, innerIndex) => innerIndex !== choiceIndex,
+                                  ),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                      type="button"
+                      variant="secondary"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  {variants.length > 0 && (
+                    <div className="grid gap-2 rounded-lg border border-dashed border-wayne-border p-3">
+                      <span className="text-xs font-semibold text-wayne-muted">
+                        Price by size -- leave a size blank to use the default
+                        price change above
+                      </span>
+                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                        {variants
+                          .filter((variant) => variant.name.trim())
+                          .map((variant) => (
+                            <Input
+                              key={variant.name}
+                              label={`${variant.name} ($)`}
+                              placeholder={choice.price}
+                              value={choice.variant_prices[variant.name] ?? ""}
+                              onChange={(event) =>
+                                changeChoiceVariantPrice(
+                                  groupIndex,
+                                  choiceIndex,
+                                  variant.name,
+                                  event.target.value,
+                                )
                               }
-                            : item,
-                        ),
-                      )
-                    }
-                    type="button"
-                    variant="secondary"
-                  >
-                    Remove
-                  </Button>
+                            />
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               <Button
@@ -476,6 +520,29 @@ export function MenuItemForm({
               choices: group.choices.map((choice, innerIndex) =>
                 innerIndex === choiceIndex ? { ...choice, ...change } : choice,
               ),
+            }
+          : group,
+      ),
+    );
+  }
+  function changeChoiceVariantPrice(
+    groupIndex: number,
+    choiceIndex: number,
+    variantName: string,
+    price: string,
+  ) {
+    setGroups(
+      groups.map((group, index) =>
+        index === groupIndex
+          ? {
+              ...group,
+              choices: group.choices.map((choice, innerIndex) => {
+                if (innerIndex !== choiceIndex) return choice;
+                const variant_prices = { ...choice.variant_prices };
+                if (price.trim()) variant_prices[variantName] = price;
+                else delete variant_prices[variantName];
+                return { ...choice, variant_prices };
+              }),
             }
           : group,
       ),
