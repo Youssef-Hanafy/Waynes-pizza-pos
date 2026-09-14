@@ -16,3 +16,4 @@ menu-load.sql
 # Files delivered into the chat land here; not source
 Claude outputs/
 .vercel
+.env*
