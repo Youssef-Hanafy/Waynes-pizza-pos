@@ -2619,3 +2619,32 @@
     aspect-ratio: 1.35;
   }
 }
+
+/* The shade over a hero photo was still mixing to the old green hero. It now
+   fades to the oven-red the hero actually uses, and on a phone - where the photo
+   sits across the top rather than off to the right - it fades downward instead
+   of sideways so the headline stays readable over it. */
+.hero-shade {
+  background: linear-gradient(
+    90deg,
+    #a5231c 0%,
+    rgb(165 35 28 / 96%) 30%,
+    rgb(140 28 22 / 55%) 50%,
+    transparent 72%
+  );
+}
+@media (max-width: 640px) {
+  .hero-photograph {
+    width: 100%;
+    height: 52%;
+  }
+  .hero-shade {
+    background: linear-gradient(
+      180deg,
+      rgb(125 22 20 / 80%) 0%,
+      rgb(150 30 24 / 70%) 26%,
+      #a5231c 48%,
+      #7d1614 100%
+    );
+  }
+}
