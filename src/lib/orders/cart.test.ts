@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cartLineUnitCents, cartSubtotalCents, readCart } from "./cart";
+import {
+  cartLineUnitCents,
+  cartSubtotalCents,
+  choicePriceDeltaCents,
+  readCart,
+} from "./cart";
 import type { PublicMenu } from "@/lib/menu/schemas";
 
 const menu = [
@@ -145,5 +150,38 @@ describe("cart", () => {
     const largeLine = { ...smallLine, line_id: "line-large", variant_id: largeId };
     expect(cartLineUnitCents(sizedMenu, smallLine)).toBe(950 + 100);
     expect(cartLineUnitCents(sizedMenu, largeLine)).toBe(1425 + 200);
+  });
+});
+
+describe("modifier pricing by size", () => {
+  const small = crypto.randomUUID();
+  const large = crypto.randomUUID();
+  const topping = {
+    price_delta_cents: 200,
+    variant_prices: [
+      { variant_id: small, price_delta_cents: 100 },
+      { variant_id: large, price_delta_cents: 200 },
+    ],
+  };
+
+  it("charges the price of the size that was chosen", () => {
+    expect(choicePriceDeltaCents(topping, small)).toBe(100);
+    expect(choicePriceDeltaCents(topping, large)).toBe(200);
+  });
+
+  it("falls back to the flat price for a size with no price of its own", () => {
+    const glutenFree = crypto.randomUUID();
+    expect(choicePriceDeltaCents(topping, glutenFree)).toBe(200);
+    expect(choicePriceDeltaCents(topping, null)).toBe(200);
+  });
+
+  it("subtracts when taking something off costs less, not more", () => {
+    // "No Cheese" is free; a size may go further and take money off.
+    const noCheese = {
+      price_delta_cents: 0,
+      variant_prices: [{ variant_id: large, price_delta_cents: -150 }],
+    };
+    expect(choicePriceDeltaCents(noCheese, small)).toBe(0);
+    expect(choicePriceDeltaCents(noCheese, large)).toBe(-150);
   });
 });

@@ -24,7 +24,7 @@ export function findMenuItem(menu: PublicMenu, itemId: string) {
 // Small pizza and +$2 on a Large. `variant_prices` carries the sizes that have
 // an explicit override; anything else -- including every choice on an item
 // with no sizes at all -- uses the flat `price_delta_cents`.
-function choicePriceDeltaCents(
+export function choicePriceDeltaCents(
   choice: { price_delta_cents: number; variant_prices: { variant_id: string; price_delta_cents: number }[] },
   variantId: string | null | undefined,
 ) {

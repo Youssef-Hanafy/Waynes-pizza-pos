@@ -12,6 +12,7 @@ import {
   CART_STORAGE_KEY,
   cartLineUnitCents,
   cartSubtotalCents,
+  choicePriceDeltaCents,
   findMenuItem,
   readCart,
 } from "@/lib/orders/cart";
@@ -690,6 +691,8 @@ function ItemDialog({
               <div className="mt-3 grid gap-2">
                 {group.choices.map((choice) => {
                   const count = selectedChoices[choice.id] ?? 0;
+                  // what this option costs on the size chosen above
+                  const delta = choicePriceDeltaCents(choice, variantId);
                   return (
                     <div
                       className="item-choice"
@@ -723,10 +726,10 @@ function ItemDialog({
                         />
                         <span>
                           {choice.name}
-                          {choice.price_delta_cents ? (
+                          {delta ? (
                             <small className="ml-2 text-wayne-muted">
-                              {choice.price_delta_cents > 0 ? "+" : ""}
-                              {formatCents(choice.price_delta_cents)}
+                              {delta > 0 ? "+" : ""}
+                              {formatCents(delta)}
                             </small>
                           ) : null}
                         </span>
