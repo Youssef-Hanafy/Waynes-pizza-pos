@@ -7,6 +7,7 @@ import type { StoreSettings } from "@/lib/content/schemas";
 import { BrandMark } from "./brand-mark";
 import { SiteIcon } from "./site-icon";
 import { SiteNavigation } from "./site-navigation";
+import { SocialLinks } from "./social-links";
 
 export function SiteHeader({ settings }: { settings: StoreSettings }) {
   const logoUrl = getPublicAssetUrl(settings.logo_path);
@@ -60,7 +61,8 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
               </span>
             </div>
           </div>
-          <SiteNavigation />
+          <SocialLinks className="header-social" settings={settings} />
+          <SiteNavigation social={<SocialLinks settings={settings} />} />
         </div>
       </header>
     </>

@@ -17,6 +17,15 @@ import {
   readCart,
 } from "@/lib/orders/cart";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
+import { OrderStartGate } from "@/components/site/order-start-gate";
+import {
+  ORDER_DETAILS_STORAGE_KEY,
+  estimateRange,
+  orderDetailsComplete,
+  readOrderDetails,
+  residenceLabels,
+  type OrderDetails,
+} from "@/lib/orders/order-details";
 import type { CartLine } from "@/lib/orders/schemas";
 
 type Fulfillment = "pickup" | "delivery";
@@ -86,7 +95,23 @@ export function OrderMenuClient({
     return () => window.removeEventListener("hashchange", followHash);
   }, [menu]);
   const [editingLine, setEditingLine] = useState<CartLine | null>(null);
+  /* Delivery cannot be quoted without an address and pickup cannot be called
+     out without a name, so both are asked for before the first item goes in the
+     cart rather than at the end. */
+  const [details, setDetails] = useState<OrderDetails | null>(null);
+  const [detailsReady, setDetailsReady] = useState(false);
+  /* null means "decide from what we know": the gate opens by itself when the
+     details for this fulfillment are missing. Opening or dismissing it by hand
+     overrides that until the fulfillment changes. */
+  const [gateManual, setGateManual] = useState<boolean | null>(null);
 
+  useEffect(() => {
+    const saved = readOrderDetails(window.localStorage.getItem(ORDER_DETAILS_STORAGE_KEY));
+    queueMicrotask(() => {
+      setDetails(saved);
+      setDetailsReady(true);
+    });
+  }, []);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
@@ -106,8 +131,32 @@ export function OrderMenuClient({
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   function changeFulfillment(next: Fulfillment) {
     setFulfillment(next);
+    // Delivery and pickup ask for different things, so the question is open again.
+    setGateManual(null);
     router.replace(`/menu?fulfillment=${next}`, { scroll: false });
   }
+
+  function saveDetails(next: OrderDetails) {
+    setDetails(next);
+    try {
+      window.localStorage.setItem(ORDER_DETAILS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // A browser with storage blocked still gets to order; checkout simply asks
+      // for the address again rather than failing here.
+    }
+    setGateManual(null);
+  }
+
+  function cancelGate() {
+    setGateManual(false);
+    // "Switch to pickup" is the honest way out of the delivery question: someone
+    // who cannot give an address can still come and get it.
+    if (fulfillment === "delivery" && pickupEnabled) changeFulfillment("pickup");
+  }
+
+  const detailsSet = orderDetailsComplete(details, fulfillment);
+  // Ask as soon as the choice is made, not when they try to leave with a cart.
+  const gateOpen = gateManual ?? (detailsReady && orderingOpen && !detailsSet);
 
   function chooseCategory(categoryId: string) {
     setActiveCategory(categoryId);
@@ -119,6 +168,29 @@ export function OrderMenuClient({
   return (
     <div className="site-container ordering-layout">
       <div className="menu-main">
+        {detailsSet && details ? (
+          <div className="order-gate-summary">
+            <SiteIcon name={fulfillment === "delivery" ? "truck" : "bag"} size={17} />
+            <span>
+              {fulfillment === "delivery" ? (
+                <>
+                  <strong>{details.address1}</strong>
+                  {details.address2 ? `, ${details.address2}` : ""} ·{" "}
+                  {residenceLabels[details.residence_type]} ·{" "}
+                  {estimateRange(deliveryMinutes)}
+                </>
+              ) : (
+                <>
+                  Pickup for <strong>{details.first_name}</strong> ·{" "}
+                  {estimateRange(pickupMinutes)}
+                </>
+              )}
+            </span>
+            <button onClick={() => setGateManual(true)} type="button">
+              Change
+            </button>
+          </div>
+        ) : null}
         <div className="fulfillment-toolbar">
           <div>
             <span className="eyebrow">YOUR ORDER, YOUR WAY</span>
@@ -420,13 +492,22 @@ export function OrderMenuClient({
               Delivery fee, discounts, tax, and optional tip are finalized
               securely at checkout.
             </p>
-            {canCheckout ? (
+            {canCheckout && detailsSet ? (
               <Link
                 className="order-button cart-checkout"
                 href={`/checkout?fulfillment=${fulfillment}`}
               >
                 Continue to checkout <SiteIcon name="arrow" size={18} />
               </Link>
+            ) : canCheckout ? (
+              <button
+                className="order-button cart-checkout"
+                onClick={() => setGateManual(true)}
+                type="button"
+              >
+                {fulfillment === "delivery" ? "Add your address" : "Add your name"}{" "}
+                <SiteIcon name="arrow" size={18} />
+              </button>
             ) : (
               <p className="site-notice">Checkout is currently closed.</p>
             )}
@@ -479,6 +560,15 @@ export function OrderMenuClient({
           </strong>
         </a>
       )}
+      <OrderStartGate
+        deliveryMinutes={deliveryMinutes}
+        fulfillment={fulfillment}
+        initial={details}
+        onCancel={cancelGate}
+        onSave={saveDetails}
+        open={gateOpen}
+        pickupMinutes={pickupMinutes}
+      />
       {selected ? (
         <ItemDialog
           item={selected}

@@ -322,7 +322,17 @@ export default async function SettingsPage({
               name="instagram_url"
               type="url"
             />
+            <Input
+              defaultValue={settings.tiktok_url}
+              label="TikTok URL (optional)"
+              name="tiktok_url"
+              type="url"
+            />
           </div>
+          <p className="text-sm text-wayne-muted">
+            Each link you fill in shows as an icon at the top of every page.
+            Clear one to take it down.
+          </p>
         </SettingsSection>
         <SettingsSection title="Regular hours">
           <div className="grid gap-3">

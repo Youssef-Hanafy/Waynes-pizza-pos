@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatAddress, type StoreSettings } from "@/lib/content/schemas";
 import { BrandMark } from "./brand-mark";
 import { SiteIcon } from "./site-icon";
+import { SocialLinks } from "./social-links";
 export function SiteFooter({ settings }: { settings: StoreSettings }) {
   return (
     <footer className="site-footer">
@@ -31,16 +32,7 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
             <SiteIcon name="phone" size={17} />
             {settings.public_phone}
           </a>
-          {settings.facebook_url && (
-            <a href={settings.facebook_url} target="_blank" rel="noreferrer">
-              Facebook ↗
-            </a>
-          )}
-          {settings.instagram_url && (
-            <a href={settings.instagram_url} target="_blank" rel="noreferrer">
-              Instagram ↗
-            </a>
-          )}
+          <SocialLinks settings={settings} />
         </div>
         <div className="footer-cta">
           <SiteIcon name="pizza" size={37} />

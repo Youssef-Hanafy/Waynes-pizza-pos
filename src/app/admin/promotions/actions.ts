@@ -9,7 +9,7 @@ import { parsePromotionForm } from "@/lib/promotions/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const back = (message: string, key: "error" | "saved" = "error") => redirect(`/admin/promotions?${key}=${encodeURIComponent(message)}`);
-const fields = ["code", "description", "discount_type", "discount_amount", "minimum_order", "fulfillment_type", "starts_at", "ends_at", "total_usage_limit", "per_customer_limit", "active"];
+const fields = ["code", "description", "discount_type", "discount_amount", "minimum_order", "fulfillment_type", "starts_at", "ends_at", "total_usage_limit", "per_customer_limit", "active", "members_only"];
 const dbError = (message: string) => message.includes("promotions_active_code_idx") || message.includes("duplicate key") ? "Another active promotion already uses that code." : "The promotion could not be saved.";
 
 export async function savePromotion(form: FormData) {

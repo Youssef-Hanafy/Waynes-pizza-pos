@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SiteIcon } from "./site-icon";
 
-export function SiteNavigation() {
+export function SiteNavigation({ social }: { social?: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   return (
@@ -12,7 +12,7 @@ export function SiteNavigation() {
       <nav className="desktop-nav" aria-label="Main navigation">
         {[
           { href: "/menu", label: "Menu" },
-          { href: "/#deals", label: "Deals" },
+          { href: "/offers", label: "Offers" },
           { href: "/rewards", label: "My rewards" },
           { href: "/contact", label: "Visit us" },
         ].map((link) => (
@@ -48,6 +48,7 @@ export function SiteNavigation() {
         >
           {[
             { href: "/menu", label: "Menu" },
+            { href: "/offers", label: "Offers" },
             { href: "/rewards", label: "My rewards" },
             { href: "/contact", label: "Hours & location" },
           ].map((link) => (
@@ -60,6 +61,7 @@ export function SiteNavigation() {
               <SiteIcon name="arrow" />
             </Link>
           ))}
+          {social}
         </nav>
       )}
     </>

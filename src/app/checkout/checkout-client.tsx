@@ -29,6 +29,11 @@ import {
   type Tokenizer,
 } from "@/components/payments/square-card-field";
 import { GoogleAddressInput } from "@/components/checkout/google-address-input";
+import {
+  ORDER_DETAILS_STORAGE_KEY,
+  readOrderDetails,
+  type OrderDetails,
+} from "@/lib/orders/order-details";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
@@ -63,6 +68,13 @@ export function CheckoutClient({
   const [error, setError] = useState("");
   const tokenizer = useRef<Tokenizer | null>(null);
   const [cardReady, setCardReady] = useState(false);
+  /* Whatever the customer told us before they started ordering — their name, and
+     for delivery the address — is filled in here so nobody types it twice. */
+  const [details, setDetails] = useState<OrderDetails | null>(null);
+  useEffect(() => {
+    const savedDetails = readOrderDetails(window.localStorage.getItem(ORDER_DETAILS_STORAGE_KEY));
+    queueMicrotask(() => setDetails(savedDetails));
+  }, []);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
@@ -234,9 +246,28 @@ export function CheckoutClient({
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
           <h2 className="text-2xl font-black">Your details</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Input label="First name" name="first_name" required />
-            <Input label="Last name" name="last_name" required />
-            <Input label="Phone" name="phone" required type="tel" />
+            <Input
+              defaultValue={details?.first_name ?? ""}
+              key={`first-${details?.first_name ?? ""}`}
+              label="First name"
+              name="first_name"
+              required
+            />
+            <Input
+              defaultValue={details?.last_name ?? ""}
+              key={`last-${details?.last_name ?? ""}`}
+              label="Last name"
+              name="last_name"
+              required
+            />
+            <Input
+              defaultValue={details?.phone ?? ""}
+              key={`phone-${details?.phone ?? ""}`}
+              label="Phone"
+              name="phone"
+              required
+              type="tel"
+            />
             <Input label="Email (optional)" name="email" type="email" />
           </div>
         </section>
@@ -244,13 +275,41 @@ export function CheckoutClient({
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Delivery address</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <GoogleAddressInput />
-              <Input label="Apartment / unit (optional)" name="address2" />
-              <Input label="City" name="city" required />
-              <Input defaultValue="MA" label="State" name="state" required />
-              <Input label="Postal code" name="postal_code" required />
+              <GoogleAddressInput
+                defaultValue={details?.address1 ?? ""}
+                key={`address1-${details?.address1 ?? ""}`}
+              />
+              <Input
+                defaultValue={details?.address2 ?? ""}
+                key={`address2-${details?.address2 ?? ""}`}
+                label="Apartment / unit (optional)"
+                name="address2"
+              />
+              <Input
+                defaultValue={details?.city ?? ""}
+                key={`city-${details?.city ?? ""}`}
+                label="City"
+                name="city"
+                required
+              />
+              <Input
+                defaultValue={details?.state || "MA"}
+                key={`state-${details?.state ?? ""}`}
+                label="State"
+                name="state"
+                required
+              />
+              <Input
+                defaultValue={details?.postal_code ?? ""}
+                key={`zip-${details?.postal_code ?? ""}`}
+                label="Postal code"
+                name="postal_code"
+                required
+              />
             </div>
             <TextArea
+              defaultValue={details?.delivery_instructions ?? ""}
+              key={`instructions-${details?.delivery_instructions ?? ""}`}
               label="Delivery instructions (optional)"
               name="delivery_instructions"
             />
@@ -456,12 +515,13 @@ function Check({ label, name }: { label: string; name: string }) {
     </label>
   );
 }
-function TextArea({ label, name }: { label: string; name: string }) {
+function TextArea({ defaultValue = "", label, name }: { defaultValue?: string; label: string; name: string }) {
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
       <textarea
         className="rounded-xl border p-3 font-normal"
+        defaultValue={defaultValue}
         maxLength={1000}
         name={name}
         rows={3}
