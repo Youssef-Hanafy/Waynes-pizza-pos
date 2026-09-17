@@ -381,6 +381,9 @@ begin
 end;
 $$;
 
+-- A trigger function has no business being callable over the REST API.
+revoke all on function public.wayne_enforce_member_only_discount() from public, anon, authenticated;
+
 drop trigger if exists wayne_order_discounts_member_only on public.order_discounts;
 create trigger wayne_order_discounts_member_only
 before insert on public.order_discounts
