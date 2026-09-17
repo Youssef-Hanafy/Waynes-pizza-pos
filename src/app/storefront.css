@@ -2842,6 +2842,11 @@
   max-height: min(92vh, 860px);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
   color: #1f1a17;
+  /* Centre it explicitly rather than trusting each browser's dialog defaults:
+     with a max-height set, some of them pin the box to the top of the screen. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
 }
 .order-gate::backdrop {
   background: rgba(20, 14, 10, 0.62);

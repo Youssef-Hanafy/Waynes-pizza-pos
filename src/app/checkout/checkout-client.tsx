@@ -32,6 +32,7 @@ import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 import {
   ORDER_DETAILS_STORAGE_KEY,
   readOrderDetails,
+  residenceLabels,
   type OrderDetails,
 } from "@/lib/orders/order-details";
 
@@ -104,6 +105,19 @@ export function CheckoutClient({
     setCardReady(Boolean(next));
   }, []);
 
+  /**
+   * Whether it is a house or a third-floor apartment is the single most useful
+   * thing a driver can be told, and it is asked for before the order starts. It
+   * would be lost if it stayed in the browser, so it rides along on the line the
+   * driver actually reads.
+   */
+  function deliveryInstructions(typed: string) {
+    if (fulfillment !== "delivery" || !details) return typed;
+    const residence = residenceLabels[details.residence_type];
+    if (!residence || typed.toLowerCase().includes(residence.toLowerCase())) return typed;
+    return [residence, typed.trim()].filter(Boolean).join(" · ");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -131,7 +145,9 @@ export function CheckoutClient({
         city: String(form.get("city") ?? ""),
         state: String(form.get("state") ?? ""),
         postal_code: String(form.get("postal_code") ?? ""),
-        delivery_instructions: String(form.get("delivery_instructions") ?? ""),
+        delivery_instructions: deliveryInstructions(
+          String(form.get("delivery_instructions") ?? ""),
+        ),
       },
       items: cart.map((line) => ({
         menu_item_id: line.menu_item_id,
@@ -141,6 +157,26 @@ export function CheckoutClient({
         modifiers: line.modifiers,
       })),
     };
+    // Keep the saved copy in step with whatever they actually submitted, so the
+    // address on the menu page is the one the order went to, and their next
+    // order starts from the corrected version rather than the old one.
+    try {
+      window.localStorage.setItem(
+        ORDER_DETAILS_STORAGE_KEY,
+        JSON.stringify({
+          ...(details ?? {}),
+          fulfillment,
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          phone: payload.phone,
+          residence_type: details?.residence_type ?? "house",
+          ...payload.address,
+        }),
+      );
+    } catch {
+      // Storage being unavailable is not a reason to fail an order.
+    }
+
     try {
       if (paymentConfig) {
         if (!tokenizer.current) {
@@ -274,6 +310,16 @@ export function CheckoutClient({
         {fulfillment === "delivery" ? (
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Delivery address</h2>
+            {details?.address1 ? (
+              /* The address they gave before they started ordering, shown back to
+                 them here so a wrong street is caught now and not by a driver. */
+              <p className="mt-3 rounded-xl bg-wayne-ok-soft p-3 text-sm font-semibold">
+                Delivering to {details.address1}
+                {details.address2 ? `, ${details.address2}` : ""} —{" "}
+                {residenceLabels[details.residence_type].toLowerCase()}. Change
+                anything below if it is not right.
+              </p>
+            ) : null}
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <GoogleAddressInput
                 defaultValue={details?.address1 ?? ""}
