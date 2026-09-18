@@ -3,6 +3,8 @@ import {
   cartLineUnitCents,
   cartSubtotalCents,
   choicePriceDeltaCents,
+  describeLineModifiers,
+  includedSelection,
   readCart,
 } from "./cart";
 import type { PublicMenu } from "@/lib/menu/schemas";
@@ -183,5 +185,50 @@ describe("modifier pricing by size", () => {
     };
     expect(choicePriceDeltaCents(noCheese, small)).toBe(0);
     expect(choicePriceDeltaCents(noCheese, large)).toBe(-150);
+  });
+});
+
+describe("toppings an item comes with", () => {
+  const pepperoni = { id: crypto.randomUUID(), name: "Pepperoni", price_delta_cents: 200, default_selected: true, variant_prices: [] };
+  const salami = { id: crypto.randomUUID(), name: "Salami", price_delta_cents: 200, default_selected: true, variant_prices: [] };
+  const mushrooms = { id: crypto.randomUUID(), name: "Mushrooms", price_delta_cents: 200, default_selected: false, variant_prices: [] };
+  const meatLovers = {
+    id: crypto.randomUUID(),
+    name: "Meat Lovers",
+    description: "Comes with: Pepperoni, Salami",
+    image_path: null,
+    image_alt: "",
+    base_price_cents: 1300,
+    included_count_label: "",
+    sold_out: false,
+    featured: false,
+    available_days: [0, 1, 2, 3, 4, 5, 6],
+    available_start: null,
+    available_end: null,
+    variants: [],
+    modifier_groups: [
+      { id: crypto.randomUUID(), name: "Meats", customer_label: "Meats", min_select: 0, max_select: 10, required: false, allow_quantities: true, choices: [pepperoni, salami, mushrooms] },
+    ],
+  };
+  const pizzaMenu = [{ id: crypto.randomUUID(), name: "Gourmet", description: "", image_path: null, image_alt: "", items: [meatLovers] }] satisfies PublicMenu;
+  const base = { line_id: "l", menu_item_id: meatLovers.id, variant_id: null, quantity: 1, special_instructions: "" };
+
+  it("starts with everything the item comes with already selected", () => {
+    expect(includedSelection(meatLovers)).toEqual({ [pepperoni.id]: 1, [salami.id]: 1 });
+  });
+
+  it("does not charge for what the item comes with, or credit it when removed", () => {
+    expect(cartLineUnitCents(pizzaMenu, { ...base, modifiers: [{ choice_id: pepperoni.id, quantity: 1 }, { choice_id: salami.id, quantity: 1 }] })).toBe(1300);
+    expect(cartLineUnitCents(pizzaMenu, { ...base, modifiers: [{ choice_id: pepperoni.id, quantity: 1 }] })).toBe(1300);
+  });
+
+  it("charges extra portions and added toppings", () => {
+    expect(cartLineUnitCents(pizzaMenu, { ...base, modifiers: [{ choice_id: pepperoni.id, quantity: 2 }, { choice_id: salami.id, quantity: 1 }, { choice_id: mushrooms.id, quantity: 1 }] })).toBe(1700);
+  });
+
+  it("reads like a ticket: only what changed from the recipe", () => {
+    const notes = describeLineModifiers(meatLovers, { modifiers: [{ choice_id: pepperoni.id, quantity: 2 }, { choice_id: mushrooms.id, quantity: 1 }] });
+    expect(notes.map((note) => note.label)).toEqual(["NO Salami", "Extra Pepperoni", "Mushrooms"]);
+    expect(describeLineModifiers(meatLovers, { modifiers: [{ choice_id: pepperoni.id, quantity: 1 }, { choice_id: salami.id, quantity: 1 }] })).toEqual([]);
   });
 });

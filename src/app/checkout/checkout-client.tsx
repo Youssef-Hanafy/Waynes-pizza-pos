@@ -16,6 +16,7 @@ import {
   CART_STORAGE_KEY,
   cartLineUnitCents,
   cartSubtotalCents,
+  describeLineModifiers,
   findMenuItem,
   readCart,
 } from "@/lib/orders/cart";
@@ -155,6 +156,7 @@ export function CheckoutClient({
         quantity: line.quantity,
         special_instructions: line.special_instructions,
         modifiers: line.modifiers,
+        lists_included: true,
       })),
     };
     // Keep the saved copy in step with whatever they actually submitted, so the
@@ -529,16 +531,7 @@ function CartLineOptions({
   line: CartLine;
 }) {
   if (!item) return null;
-  const options = line.modifiers.flatMap((modifier) =>
-    item.modifier_groups.flatMap((group) =>
-      group.choices
-        .filter((choice) => choice.id === modifier.choice_id)
-        .map(
-          (choice) =>
-            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
-        ),
-    ),
-  );
+  const options = describeLineModifiers(item, line).map((note) => note.label);
   return (
     <>
       {options.length ? (

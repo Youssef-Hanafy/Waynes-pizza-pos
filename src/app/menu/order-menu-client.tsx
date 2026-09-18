@@ -13,7 +13,10 @@ import {
   cartLineUnitCents,
   cartSubtotalCents,
   choicePriceDeltaCents,
+  describeLineModifiers,
   findMenuItem,
+  includedSelection,
+  isIncludedChoice,
   readCart,
 } from "@/lib/orders/cart";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
@@ -650,13 +653,7 @@ function ItemDialog({
             modifier.quantity,
           ]),
         )
-      : Object.fromEntries(
-          item.modifier_groups.flatMap((group) =>
-            group.choices
-              .filter((choice) => choice.default_selected)
-              .map((choice) => [choice.id, 1]),
-          ),
-        ),
+      : includedSelection(item),
   );
   const [quantity, setQuantity] = useState(initialLine?.quantity ?? 1);
   const [instructions, setInstructions] = useState(
@@ -686,6 +683,29 @@ function ItemDialog({
       items: [item],
     },
   ] as PublicMenu;
+  // What the item comes with, once each, for the summary at the top.
+  const comesWith = item.modifier_groups
+    .flatMap((group) =>
+      group.choices.filter(isIncludedChoice).map((choice) => ({ group, choice })),
+    )
+    .filter(
+      (entry, index, all) =>
+        all.findIndex((other) => other.choice.id === entry.choice.id) === index,
+    );
+
+  function setChoice(
+    group: MenuItem["modifier_groups"][number],
+    choiceId: string,
+    count: number,
+  ) {
+    setSelectedChoices({
+      ...selectedChoices,
+      ...(group.max_select === 1 && count > 0
+        ? Object.fromEntries(group.choices.map((option) => [option.id, 0]))
+        : {}),
+      [choiceId]: count,
+    });
+  }
 
   function add() {
     for (const group of item.modifier_groups) {
@@ -740,10 +760,37 @@ function ItemDialog({
         <div className="item-dialog-body">
           <p className="eyebrow">LET’S MAKE IT YOURS</p>
           <h2 id="item-dialog-title">{item.name}</h2>
-          <p className="item-dialog-description">
-            {item.description ||
-              "Your Wayne’s favorite. Choose your size and make it just right."}
-          </p>
+          {comesWith.length ? (
+            <div className="item-comes-with" aria-label="Comes with">
+              <p className="item-comes-with-title">Comes with</p>
+              <div className="item-comes-with-list">
+                {comesWith.map(({ group, choice }) => {
+                  const on = Boolean(selectedChoices[choice.id]);
+                  return (
+                    <button
+                      aria-pressed={on}
+                      className="item-comes-with-chip"
+                      data-on={on}
+                      key={choice.id}
+                      onClick={() => setChoice(group, choice.id, on ? 0 : 1)}
+                      type="button"
+                    >
+                      {on ? "✓ " : "No "}
+                      {choice.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="item-comes-with-hint">
+                Tap to take something off — it stays the same price.
+              </p>
+            </div>
+          ) : (
+            <p className="item-dialog-description">
+              {item.description ||
+                "Your Wayne’s favorite. Choose your size and make it just right."}
+            </p>
+          )}
           {item.variants.length ? (
             <fieldset className="mt-6">
               <legend className="font-black">Choose a size</legend>
@@ -779,13 +826,21 @@ function ItemDialog({
                 </span>
               </legend>
               <div className="mt-3 grid gap-2">
-                {group.choices.map((choice) => {
+                {[...group.choices]
+                  .sort(
+                    (a, b) =>
+                      Number(isIncludedChoice(b)) - Number(isIncludedChoice(a)),
+                  )
+                  .map((choice) => {
                   const count = selectedChoices[choice.id] ?? 0;
                   // what this option costs on the size chosen above
                   const delta = choicePriceDeltaCents(choice, variantId);
+                  const included = isIncludedChoice(choice);
                   return (
                     <div
                       className="item-choice"
+                      data-included={included}
+                      data-removed={included && count === 0}
                       data-selected={count > 0}
                       key={choice.id}
                     >
@@ -814,12 +869,18 @@ function ItemDialog({
                               : "checkbox"
                           }
                         />
-                        <span>
+                        <span className="item-choice-name">
                           {choice.name}
-                          {delta ? (
+                          {included ? (
+                            <small className="item-choice-tag">
+                              {count ? "Included" : "Removed"}
+                            </small>
+                          ) : null}
+                          {delta && (!included || count > 0) ? (
                             <small className="ml-2 text-wayne-muted">
                               {delta > 0 ? "+" : ""}
                               {formatCents(delta)}
+                              {included ? " extra" : ""}
                             </small>
                           ) : null}
                         </span>
@@ -919,16 +980,7 @@ function CartLineOptions({
   line: CartLine;
 }) {
   if (!item) return null;
-  const options = line.modifiers.flatMap((modifier) =>
-    item.modifier_groups.flatMap((group) =>
-      group.choices
-        .filter((choice) => choice.id === modifier.choice_id)
-        .map(
-          (choice) =>
-            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
-        ),
-    ),
-  );
+  const options = describeLineModifiers(item, line).map((note) => note.label);
   return (
     <>
       {options.length ? (

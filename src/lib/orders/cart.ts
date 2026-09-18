@@ -1,7 +1,10 @@
 import type { PublicMenu } from "@/lib/menu/schemas";
 import { cartLineSchema, type CartLine } from "./schemas";
 
-export const CART_STORAGE_KEY = "wayne-cart-v1";
+// v2: lines now list what the item comes with.  A v1 cart never pre-selected
+// included toppings, so reading one as v2 would turn a Meat Lovers into
+// "NO pepperoni, NO sausage…" -- old carts are simply left behind.
+export const CART_STORAGE_KEY = "wayne-cart-v2";
 
 export function readCart(value: string | null): CartLine[] {
   if (!value) return [];
@@ -35,6 +38,65 @@ export function choicePriceDeltaCents(
   return choice.price_delta_cents;
 }
 
+type ChoiceLike = {
+  id: string;
+  name: string;
+  default_selected: boolean;
+  price_delta_cents: number;
+  variant_prices: { variant_id: string; price_delta_cents: number }[];
+};
+type ItemLike = { modifier_groups: { choices: ChoiceLike[] }[] };
+
+// `default_selected` in the menu feed means "this item comes with it": the
+// database sets it per item from the "Comes with" list (or the Admin -> Menu
+// checkbox).  The first portion is already in the item's price.
+export function isIncludedChoice(choice: { default_selected: boolean }) {
+  return choice.default_selected;
+}
+
+// The portions of a selected option that are actually charged.
+export function chargedPortions(choice: { default_selected: boolean }, portions: number) {
+  return Math.max(0, portions - (isIncludedChoice(choice) ? 1 : 0));
+}
+
+// Starting selection for a fresh item: everything it comes with, once.
+export function includedSelection(item: ItemLike): Record<string, number> {
+  return Object.fromEntries(
+    item.modifier_groups.flatMap((group) =>
+      group.choices.filter(isIncludedChoice).map((choice) => [choice.id, 1] as const),
+    ),
+  );
+}
+
+export type LineModifierNote = { kind: "removed" | "extra" | "added"; label: string };
+
+/**
+ * How a line reads on a ticket or in a cart: only what differs from the
+ * recipe.  Kept included toppings are not repeated; a removed one reads
+ * "NO Onion"; extra portions of an included one read "Extra Pepperoni".
+ */
+export function describeLineModifiers(item: ItemLike | undefined, line: Pick<CartLine, "modifiers">): LineModifierNote[] {
+  if (!item) return [];
+  const choices = new Map<string, ChoiceLike>();
+  for (const group of item.modifier_groups) for (const choice of group.choices) if (!choices.has(choice.id)) choices.set(choice.id, choice);
+  const selected = new Map(line.modifiers.map((modifier) => [modifier.choice_id, modifier.quantity]));
+  const notes: LineModifierNote[] = [];
+  for (const choice of choices.values()) {
+    if (isIncludedChoice(choice) && !selected.get(choice.id)) notes.push({ kind: "removed", label: `NO ${choice.name}` });
+  }
+  for (const modifier of line.modifiers) {
+    const choice = choices.get(modifier.choice_id);
+    if (!choice) continue;
+    if (isIncludedChoice(choice)) {
+      const extra = modifier.quantity - 1;
+      if (extra > 0) notes.push({ kind: "extra", label: `${extra > 1 ? `${extra}× ` : ""}Extra ${choice.name}` });
+    } else {
+      notes.push({ kind: "added", label: `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}` });
+    }
+  }
+  return notes;
+}
+
 export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {
   const item = findMenuItem(menu, line.menu_item_id);
   if (!item) return 0;
@@ -48,7 +110,7 @@ export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {
     line.modifiers.reduce((sum, selected) => {
       const choice = choices.find((candidate) => candidate.id === selected.choice_id);
       if (!choice) return sum;
-      return sum + choicePriceDeltaCents(choice, line.variant_id) * selected.quantity;
+      return sum + choicePriceDeltaCents(choice, line.variant_id) * chargedPortions(choice, selected.quantity);
     }, 0)
   );
 }

@@ -1897,6 +1897,89 @@
   background: #eff3e7;
   box-shadow: inset 0 0 0 1px #789869;
 }
+/* What the item comes with: lit up while on, struck through once removed,
+   so "what comes on it?" is answered without reading the description. */
+.item-choice[data-included="true"][data-selected="true"] {
+  border-color: #315939;
+  background: #e3ecd6;
+  box-shadow: inset 0 0 0 2px #315939;
+}
+.item-choice[data-included="true"][data-selected="true"] .item-choice-name {
+  font-weight: 800;
+  color: #1f3f26;
+}
+.item-choice[data-removed="true"] {
+  border: 2px dashed #b02222;
+  background: #fff;
+}
+.item-choice[data-removed="true"] .item-choice-name {
+  color: #b02222;
+  text-decoration: line-through;
+}
+.item-choice[data-selected="false"]:not([data-removed="true"]) .item-choice-name {
+  color: #5d5a52;
+}
+.item-choice-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #315939;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  vertical-align: middle;
+}
+.item-choice[data-removed="true"] .item-choice-tag {
+  background: #b02222;
+}
+.item-comes-with {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 2px solid #315939;
+  border-radius: 10px;
+  background: #eff3e7;
+}
+.item-comes-with-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #315939;
+}
+.item-comes-with-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.item-comes-with-chip {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 2px solid #315939;
+  background: #315939;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.item-comes-with-chip[data-on="false"] {
+  border-style: dashed;
+  border-color: #b02222;
+  background: #fff;
+  color: #b02222;
+  text-decoration: line-through;
+}
+.item-comes-with-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #5d5a52;
+}
 .item-choice input {
   accent-color: #315939;
   width: 16px;

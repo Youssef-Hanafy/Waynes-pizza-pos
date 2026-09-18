@@ -19,7 +19,13 @@ export default async function EditMenuItemPage({ params }: { params: Promise<{ i
   const [{ data: itemData }, { data: categoryData }, { data: variantData }, { data: linkData }] = await Promise.all([supabase.from("menu_items").select("id,category_id,name,description,image_alt,base_price_cents,tax_category,included_count_label,sold_out,customer_visible,pos_visible,featured,kitchen_route,available_days,available_start,available_end,sort_order").eq("id", id).maybeSingle(), supabase.from("menu_categories").select("id,name").is("archived_at", null).order("sort_order"), supabase.from("menu_item_variants").select("id,name,price_cents,sku").eq("menu_item_id", id).eq("active", true).is("archived_at", null).order("sort_order"), supabase.from("menu_item_modifier_groups").select("modifier_group_id,sort_order").eq("menu_item_id", id).eq("active", true).order("sort_order")]);
   if (!itemData) notFound(); const item = itemData as ItemRow; const links = (linkData ?? []) as LinkRow[]; const groupIds = links.map((link) => link.modifier_group_id);
   const [{ data: groupData }, { data: choiceData }] = groupIds.length ? await Promise.all([supabase.from("modifier_groups").select("id,name,customer_label,min_select,max_select,required,allow_quantities").in("id", groupIds).eq("active", true), supabase.from("modifier_choices").select("id,modifier_group_id,name,price_delta_cents,default_selected,sort_order").in("modifier_group_id", groupIds).eq("active", true).is("archived_at", null).order("sort_order")]) : [{ data: [] }, { data: [] }];
-  const groups = (groupData ?? []) as GroupRow[]; const choices = (choiceData ?? []) as ChoiceRow[];
+  const groups = (groupData ?? []) as GroupRow[];
+  // "Comes with" for this item: either the option's own flag, or -- for option
+  // groups shared across items -- a per-item row.  Saving copies it onto this
+  // item's own options, so the checkbox below always shows the live answer.
+  const { data: includedData } = await supabase.from("menu_item_included_choices").select("modifier_choice_id").eq("menu_item_id", id);
+  const includedIds = new Set(((includedData ?? []) as { modifier_choice_id: string }[]).map((row) => row.modifier_choice_id));
+  const choices = ((choiceData ?? []) as ChoiceRow[]).map((choice) => ({ ...choice, default_selected: choice.default_selected || includedIds.has(choice.id) }));
   const variantRows = (variantData ?? []) as VariantRow[];
   const variantNameById = new Map(variantRows.map((variant) => [variant.id, variant.name]));
   const choiceIds = choices.map((choice) => choice.id);

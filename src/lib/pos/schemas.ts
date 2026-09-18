@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cartLineSchema } from "@/lib/orders/schemas";
+import { orderLineSchema } from "@/lib/orders/schemas";
 
 export const posCustomerAddressSchema = z.object({
   id: z.uuid(),
@@ -57,7 +57,7 @@ export const posOrderInputSchema = z.object({
   manual_discount_reason: z.string().trim().max(500),
   tip_cents: z.number().int().min(0).max(1_000_000),
   special_instructions: z.string().trim().max(1500),
-  items: z.array(cartLineSchema.omit({ line_id: true })).min(1).max(50),
+  items: z.array(orderLineSchema).min(1).max(50),
 }).superRefine((value, context) => {
   if (value.customer_mode === "walk_in" && (value.source !== "pos" || value.fulfillment_type !== "pickup")) {
     context.addIssue({ code: "custom", message: "Walk-in orders must be pickup orders.", path: ["fulfillment_type"] });

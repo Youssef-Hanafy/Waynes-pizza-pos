@@ -408,7 +408,7 @@ export function MenuItemForm({
                     />
                     <Check
                       checked={choice.default_selected}
-                      label="Default"
+                      label="Comes with it"
                       onChange={(event) =>
                         changeChoice(groupIndex, choiceIndex, {
                           default_selected: event.target.checked,
