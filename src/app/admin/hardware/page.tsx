@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { requirePermission } from "@/lib/auth/access";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -65,33 +66,35 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
       <Card className="p-6">
         <h2 className="text-2xl font-black">Printers</h2>
         <p className="mt-1 text-sm text-wayne-muted">Wayne&apos;s has two Epson printers. The <strong>TM-T20III</strong> (thermal &quot;box&quot;) at the front prints customer receipts, every online order slip and its tip &amp; signature slip, and opens the cash drawer. The <strong>TM-U220B</strong> (impact, round top) prints kitchen tickets only. Both are on the network, port 9100. They&apos;re reached from the Wayne&apos;s POS Android app; a web browser cannot open a printer connection. Turn a printer on once its IP address is in, then press its test button below.</p>
-        <div className="mt-4 grid gap-6 lg:grid-cols-2">
-          <fieldset className="grid gap-3 rounded-2xl border border-wayne-border p-4">
-            <legend className="px-1 font-black">Receipt &amp; online orders {receipt.enabled ? "" : "· Off"}</legend>
-            <Input defaultValue={receipt.name ?? ""} label="Name" name="receipt_name" placeholder="Front receipt" />
-            <ModelFields current={receipt.model_key} model={receipt.model} prefix="receipt" />
-            <div className="grid grid-cols-[1fr_7rem] gap-3"><Input defaultValue={receipt.ip ?? ""} label="IP address" name="receipt_ip" placeholder="192.168.88.x" /><Input defaultValue={receipt.port ?? ""} label="Port" max={65535} min={1} name="receipt_port" type="number" /></div>
-            <ProtocolFields columns={receipt.columns ?? null} current={receipt.protocol ?? ""} paper={receipt.paper_width_mm ?? 80} prefix="receipt" />
-            <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={receipt.online_order_slips !== false} name="receipt_online_slips" type="checkbox" />Print every online order automatically</label>
-            <label className="grid gap-1.5 text-sm font-bold" htmlFor="receipt_tip_slip">Tip &amp; signature slip for online orders
-              <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={receipt.tip_slip === "card" || receipt.tip_slip === "never" ? receipt.tip_slip : "always"} id="receipt_tip_slip" name="receipt_tip_slip">
-                <option value="always">Every online order</option>
-                <option value="card">Only card orders</option>
-                <option value="never">Never</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={receipt.enabled ?? false} name="receipt_enabled" type="checkbox" />Printer on</label>
-          </fieldset>
-          <fieldset className="grid gap-3 rounded-2xl border border-wayne-border p-4">
-            <legend className="px-1 font-black">Kitchen tickets {kitchen.enabled ? "" : "· Off"}</legend>
-            <Input defaultValue={kitchen.name ?? ""} label="Name" name="kitchen_name" placeholder="Kitchen" />
-            <ModelFields current={kitchen.model_key} model={kitchen.model} prefix="kitchen" />
-            <div className="grid grid-cols-[1fr_7rem] gap-3"><Input defaultValue={kitchen.ip ?? ""} label="IP address" name="kitchen_ip" placeholder="192.168.88.x" /><Input defaultValue={kitchen.port ?? ""} label="Port" max={65535} min={1} name="kitchen_port" type="number" /></div>
-            <ProtocolFields columns={kitchen.columns ?? null} current={kitchen.protocol ?? ""} paper={kitchen.paper_width_mm ?? 76} prefix="kitchen" />
-            <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={kitchen.two_color === true} name="kitchen_two_color" type="checkbox" />Black/red ribbon fitted (print &quot;NO …&quot; and notes in red)</label>
-            <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={kitchen.enabled ?? false} name="kitchen_enabled" type="checkbox" />Printer on</label>
-            {menu.length ? <div><p className="text-sm font-bold">Categories that print in the kitchen</p><p className="text-xs text-wayne-muted">None ticked = the whole order prints.</p><div className="mt-2 flex flex-wrap gap-2">{menu.map((category) => <label className="flex min-h-11 items-center gap-2 rounded-xl border border-wayne-border px-3 text-sm" key={category.id}><input defaultChecked={routed.has(category.name)} name="kitchen_categories" type="checkbox" value={category.name} />{category.name}</label>)}</div></div> : null}
-          </fieldset>
+        <div className="mt-5 grid gap-5">
+          <PrinterPanel
+            enabled={receipt.enabled ?? false}
+            prefix="receipt"
+            subtitle="Front counter · customer receipts, online order slips, tip & signature slips, cash drawer"
+            title="Receipt & online orders"
+          >
+            <PrinterFields defaultPaper={80} namePlaceholder="Front receipt" printer={receipt} prefix="receipt" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField defaultValue={receipt.tip_slip === "card" || receipt.tip_slip === "never" ? receipt.tip_slip : "always"} id="receipt_tip_slip" label="Tip & signature slip for online orders"
+                options={[["always", "Every online order"], ["card", "Only card orders"], ["never", "Never"]]} />
+              <label className="flex min-h-11 items-center gap-3 self-end text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.online_order_slips !== false} name="receipt_online_slips" type="checkbox" />Print every online order automatically</label>
+            </div>
+          </PrinterPanel>
+
+          <PrinterPanel
+            enabled={kitchen.enabled ?? false}
+            prefix="kitchen"
+            subtitle="Kitchen · food tickets for every order, no prices"
+            title="Kitchen tickets"
+          >
+            <PrinterFields defaultPaper={76} namePlaceholder="Kitchen" printer={kitchen} prefix="kitchen" />
+            <label className="flex min-h-11 items-center gap-3 text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={kitchen.two_color === true} name="kitchen_two_color" type="checkbox" />Black/red ribbon fitted (print &quot;NO …&quot; toppings and notes in red)</label>
+            {menu.length ? <div className="border-t border-wayne-border pt-4">
+              <p className="text-sm font-bold">Categories that print in the kitchen</p>
+              <p className="text-xs text-wayne-muted">Leave all unticked to print the whole order.</p>
+              <div className="mt-3 flex flex-wrap gap-2">{menu.map((category) => <label className="flex min-h-11 items-center gap-2 rounded-xl border border-wayne-border bg-white px-3 text-sm" key={category.id}><input defaultChecked={routed.has(category.name)} name="kitchen_categories" type="checkbox" value={category.name} />{category.name}</label>)}</div>
+            </div> : null}
+          </PrinterPanel>
         </div>
         <p className="mt-4 text-sm text-wayne-muted">Automatic printing (kitchen tickets for every order, online order slips) runs on the one register switched to <strong>Print station</strong> on the POS screen. If that register is off, tickets wait in Admin → Printing and print when it comes back (anything over an hour old is held there instead, so nothing old prints by surprise).</p>
       </Card>
@@ -120,38 +123,49 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
   </main>;
 }
 
-/**
- * How the POS speaks to a printer.  ESC/POS is only offered as a choice to
- * make once the model is confirmed to support it — nothing is assumed (§2.7).
- */
-function ProtocolFields({ columns, current, paper, prefix }: { columns: number | null; current: string; paper: number; prefix: string }) {
-  return <div className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem]">
-    <label className="grid gap-1.5 text-sm font-bold" htmlFor={`${prefix}_protocol`}>How to print
-      <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={["", "browser", "escpos"].includes(current) ? current : ""} id={`${prefix}_protocol`} name={`${prefix}_protocol`}>
-        <option value="">Not chosen yet</option>
-        <option value="browser">This device&apos;s print dialog</option>
-        <option value="escpos">ESC/POS over the network (Epson, port 9100)</option>
-      </select>
-    </label>
-    <label className="grid gap-1.5 text-sm font-bold" htmlFor={`${prefix}_paper`}>Paper
-      <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={String(paper === 58 || paper === 76 ? paper : 80)} id={`${prefix}_paper`} name={`${prefix}_paper`}>
-        <option value="80">80 mm</option>
-        <option value="76">76 mm</option>
-        <option value="58">58 mm</option>
-      </select>
-    </label>
-    <Input defaultValue={columns ?? ""} label="Chars / line" max={64} min={24} name={`${prefix}_columns`} placeholder="Auto" type="number" />
+type PrinterSettingsValue = { name?: string; model?: string; model_key?: string; ip?: string; port?: number | null; protocol?: string; paper_width_mm?: number; columns?: number | null };
+
+/** One printer: a full-width panel with its on/off switch in the header. */
+function PrinterPanel({ children, enabled, prefix, subtitle, title }: { children: ReactNode; enabled: boolean; prefix: string; subtitle: string; title: string }) {
+  return <div className="min-w-0 rounded-2xl border border-wayne-border bg-wayne-cream/40 p-4 sm:p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-wayne-border pb-4">
+      <div className="min-w-0">
+        <h3 className="text-lg font-black">{title}</h3>
+        <p className="text-sm text-wayne-muted">{subtitle}</p>
+      </div>
+      <label className="flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-wayne-border bg-white px-4 text-sm font-black">
+        <input className="h-5 w-5" defaultChecked={enabled} name={`${prefix}_enabled`} type="checkbox" />Printer on
+      </label>
+    </div>
+    <div className="mt-4 grid gap-4">{children}</div>
   </div>;
 }
 
-/** Which printer this is. The key drives paper width, line length and how it cuts; the free text is the exact model for the record. */
-function ModelFields({ current, model, prefix }: { current?: string; model?: string; prefix: string }) {
-  return <div className="grid gap-3 sm:grid-cols-2">
-    <label className="grid gap-1.5 text-sm font-bold" htmlFor={`${prefix}_model_key`}>Printer type
-      <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={current && current in printerModels ? current : "generic"} id={`${prefix}_model_key`} name={`${prefix}_model_key`}>
-        {printerModelKeys.map((key) => <option key={key} value={key}>{printerModels[key].label}</option>)}
-      </select>
-    </label>
-    <Input defaultValue={model ?? ""} label="Exact model" name={`${prefix}_model`} placeholder="e.g. TM-T20III L (M352A)" />
-  </div>;
+/** The fields every printer has, on a grid that folds down cleanly on a tablet or phone. */
+function PrinterFields({ defaultPaper, namePlaceholder, prefix, printer }: { defaultPaper: number; namePlaceholder: string; prefix: string; printer: PrinterSettingsValue }) {
+  const paper = printer.paper_width_mm === 58 || printer.paper_width_mm === 76 || printer.paper_width_mm === 80 ? printer.paper_width_mm : defaultPaper;
+  return <>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.name ?? ""} label="Name" name={`${prefix}_name`} placeholder={namePlaceholder} />
+      <SelectField defaultValue={printer.model_key && printer.model_key in printerModels ? printer.model_key : "generic"} id={`${prefix}_model_key`} label="Printer type"
+        options={printerModelKeys.map((key) => [key, printerModels[key].label])} />
+      <Input className="min-w-0 sm:col-span-2 lg:col-span-1" inputClassName="w-full min-w-0" defaultValue={printer.model ?? ""} label="Exact model" name={`${prefix}_model`} placeholder="e.g. TM-T20III L (M352A)" />
+    </div>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.ip ?? ""} inputMode="decimal" label="IP address" name={`${prefix}_ip`} placeholder="192.168.88.x" />
+      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.port ?? ""} label="Port" max={65535} min={1} name={`${prefix}_port`} placeholder="9100" type="number" />
+      <SelectField defaultValue={["", "browser", "escpos"].includes(printer.protocol ?? "") ? printer.protocol ?? "" : ""} id={`${prefix}_protocol`} label="How to print"
+        options={[["", "Not chosen yet"], ["browser", "Device print dialog"], ["escpos", "Network (ESC/POS)"]]} />
+      <SelectField defaultValue={String(paper)} id={`${prefix}_paper`} label="Paper" options={[["80", "80 mm"], ["76", "76 mm"], ["58", "58 mm"]]} />
+      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.columns ?? ""} label="Chars / line" max={64} min={24} name={`${prefix}_columns`} placeholder="Auto" type="number" />
+    </div>
+  </>;
+}
+
+function SelectField({ defaultValue, id, label, options }: { defaultValue: string; id: string; label: string; options: readonly (readonly [string, string])[] }) {
+  return <label className="grid min-w-0 content-start gap-1.5 text-sm font-bold tracking-tight" htmlFor={id}>{label}
+    <select className="min-h-11 w-full min-w-0 truncate rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={defaultValue} id={id} name={id}>
+      {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+    </select>
+  </label>;
 }
