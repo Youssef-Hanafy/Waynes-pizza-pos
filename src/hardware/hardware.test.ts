@@ -40,7 +40,7 @@ describe("hardware layer (build sheet §4, §5, §18)", () => {
   });
 
   it("never reports a print, a drawer kick or a card charge that did not happen", async () => {
-    await expect(new UnconfiguredPrinterProvider("Receipt printer").printReceipt()).resolves.toEqual({ ok: false, reason: "Receipt printer is not configured." });
+    await expect(new UnconfiguredPrinterProvider("Receipt printer").printReceipt()).resolves.toEqual({ ok: false, reason: "Receipt printer is not configured.", notSent: true });
     await expect(new UnconfiguredCashDrawerProvider().open()).rejects.toThrow(/not connected/);
     const payment = await new ManualExternalTerminalProvider().beginPayment({ orderId: "o", orderNumber: "W000123", amountCents: 3284 });
     expect(payment).toEqual({ state: "awaiting_manual_confirmation", amountCents: 3284, instructions: "Run $32.84 on the card terminal for order W000123." });
