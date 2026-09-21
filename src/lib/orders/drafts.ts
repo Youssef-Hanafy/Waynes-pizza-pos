@@ -49,6 +49,11 @@ export const posDraftSchema = z.object({
   manualValue: z.string(),
   manualReason: z.string(),
   paymentMethod: z.enum(["test_manual", "cash"]),
+  /** Server copy (Phase 6): the version last saved, and when. Never part of the ticket itself. */
+  syncedVersion: z.number().int().nullable().optional().default(null),
+  syncedAt: z.string().nullable().optional().default(null),
+  /** Submit failed for lack of a connection; resent automatically with the same key (§30). */
+  submitPending: z.boolean().optional().default(false),
 });
 export type PosDraft = z.infer<typeof posDraftSchema>;
 
@@ -86,6 +91,9 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     manualValue: "",
     manualReason: "",
     paymentMethod: "test_manual",
+    syncedVersion: null,
+    syncedAt: null,
+    submitPending: false,
     ...patch,
   };
 }
@@ -236,4 +244,30 @@ export function draftFromCall(input: {
     // Ready for Delivery the moment the cashier switches to it (§9).
     addressId: preferred?.id ?? "",
   };
+}
+
+/** Held drafts and the one on screen that another register should be able to see. */
+export function draftNeedsSync(draft: PosDraft): boolean {
+  if (!draftHasContent(draft)) return false;
+  return draft.syncedAt === null || Date.parse(draft.updatedAt) > Date.parse(draft.syncedAt);
+}
+
+/** Record a server save without touching updatedAt (which would trigger another save). */
+export function markSynced(state: DraftsState, id: string, version: number, syncedAt: string): DraftsState {
+  return { ...state, drafts: state.drafts.map((draft) => (draft.id === id ? { ...draft, syncedVersion: version, syncedAt } : draft)) };
+}
+
+/** A ticket taken over from another register becomes the one on screen here. */
+export function adoptDraft(state: DraftsState, draft: PosDraft, now = new Date().toISOString()): DraftsState {
+  const others = state.drafts.filter((candidate) => candidate.id !== draft.id);
+  const current = activeDraft(state);
+  const parked = current.id === draft.id ? others : (draftHasContent(current) ? others.map((candidate) => (candidate.id === current.id ? { ...candidate, held: true } : candidate)) : others.filter((candidate) => candidate.id !== current.id));
+  return { activeId: draft.id, drafts: [...parked, { ...draft, held: false, updatedAt: now }] };
+}
+
+/** The ticket body stored on the server: everything but this register's sync bookkeeping. */
+export function draftBody(draft: PosDraft) {
+  const { syncedVersion: _version, syncedAt: _syncedAt, submitPending: _pending, ...body } = draft;
+  void _version; void _syncedAt; void _pending;
+  return body;
 }

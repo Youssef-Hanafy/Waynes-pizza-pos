@@ -64,3 +64,28 @@ describe("ticket drafts (build sheet §13, §36, test 10, test 15)", () => {
     expect(draftToOrderPayload(draft).idempotency_key).toBe(draftToOrderPayload({ ...draft }).idempotency_key);
   });
 });
+
+describe("drafts shared between registers (Phase 6)", () => {
+  it("syncs only tickets with something on them, and only after they change", async () => {
+    const { draftNeedsSync, markSynced, blankDraft: blank } = await import("./drafts");
+    const empty = blank({ updatedAt: "2026-09-20T22:00:00.000Z" });
+    expect(draftNeedsSync(empty)).toBe(false);
+    const withItem = blank({ cart: [line], updatedAt: "2026-09-20T22:00:00.000Z" });
+    expect(draftNeedsSync(withItem)).toBe(true);
+    const synced = markSynced({ activeId: withItem.id, drafts: [withItem] }, withItem.id, 3, "2026-09-20T22:00:01.000Z").drafts[0]!;
+    expect(synced).toMatchObject({ syncedVersion: 3, updatedAt: withItem.updatedAt });
+    expect(draftNeedsSync(synced)).toBe(false);
+    expect(draftNeedsSync({ ...synced, updatedAt: "2026-09-20T22:00:05.000Z" })).toBe(true);
+  });
+
+  it("puts a taken-over ticket on screen without losing the one that was there", async () => {
+    const { adoptDraft, activeDraft: active, blankDraft: blank, draftBody } = await import("./drafts");
+    const mine = blank({ cart: [line] });
+    const theirs = blank({ cart: [line, line], firstName: "Rita" });
+    const state = adoptDraft({ activeId: mine.id, drafts: [mine] }, theirs);
+    expect(active(state).id).toBe(theirs.id);
+    expect(state.drafts.find((draft) => draft.id === mine.id)!.held).toBe(true);
+    expect(draftBody(theirs)).not.toHaveProperty("syncedVersion");
+    expect(draftBody(theirs)).not.toHaveProperty("submitPending");
+  });
+});

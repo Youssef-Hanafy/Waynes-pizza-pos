@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (input.raw && !decoded && typeof input.line_number !== "number") {
     // A record the unit sent that we could not read is worth knowing about, but
     // it is not the bridge's fault, so it is accepted rather than retried.
-    logger.error("phone.record_unreadable", { raw: input.raw.slice(0, 200) });
+    logger.error("phone.record_unreadable", { raw: printable(input.raw.slice(0, 200)) });
     return Response.json({ ok: false, reason: "unreadable" }, { status: 202 });
   }
 
@@ -48,7 +48,9 @@ export async function POST(request: Request) {
     direction: input.direction ?? decoded?.direction ?? "inbound",
     event: input.event ?? decoded?.event ?? "start",
     occurred_at: input.occurred_at ?? new Date().toISOString(),
-    raw_record: input.raw ?? "",
+    // Postgres text and jsonb cannot hold NUL bytes; the header's binary unit
+    // and serial fields may contain them.  Kept visible for diagnosis.
+    raw_record: printable(input.raw ?? ""),
   };
 
   // Only a ring on one of the store's lines belongs on the POS. An outbound call
@@ -60,4 +62,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "The call could not be recorded." }, { status: 500 });
   }
   return Response.json(data ?? { ok: true }, { headers: { "Cache-Control": "no-store" } });
+}
+
+/** Control bytes (the header's binary unit/serial fields) shown as \xNN. */
+function printable(value: string) {
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return code < 0x20 && char !== "\t" ? `\\x${code.toString(16).padStart(2, "0")}` : char;
+  }).join("");
 }

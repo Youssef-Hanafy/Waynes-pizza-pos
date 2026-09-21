@@ -1,0 +1,11 @@
+<!--
+  Wayne's POS — add these inside <manifest> in android/app/src/main/AndroidManifest.xml
+  after `npx cap add android` (see docs/ANDROID_APP_SETUP.md).
+-->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<!-- Lets the Wi-Fi driver deliver the caller ID box's UDP broadcasts. -->
+<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+<!-- Android 17 (API 37) local network protection: needed for UDP from the caller ID box and TCP to printers. -->
+<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />

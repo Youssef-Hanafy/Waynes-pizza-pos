@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
-import { draftLabel, draftToOrderPayload, type DraftAddress, type PosDraft } from "@/lib/orders/drafts";
+import { draftLabel, type DraftAddress, type PosDraft } from "@/lib/orders/drafts";
 import type { CartLine } from "@/lib/orders/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
-import { posCustomerSchema, posOrderCreatedSchema, type PosCustomer } from "@/lib/pos/schemas";
+import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
+import { draftSync, useSyncState } from "@/stores/draft-sync";
+import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { phoneActions } from "@/stores/phone-store";
 import { PosItemDialog } from "./item-dialog";
@@ -32,6 +34,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
   const held = drafts.filter((candidate) => candidate.id !== activeId);
+  const { remote } = useSyncState();
   const update = orderActions.update;
 
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -42,7 +45,17 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   const [customerBusy, setCustomerBusy] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<{ order_number: string; total_cents: number; duplicate: boolean } | null>(null);
+  const [created, setCreated] = useState<{ id: string; order_number: string; total_cents: number; duplicate: boolean } | null>(null);
+  const [printNote, setPrintNote] = useState("");
+
+  /** Through the printer layer only (§23): which printer, and how, is Admin → Hardware's business. */
+  async function print(kind: "receipt" | "kitchen") {
+    const runtime = getHardwareRuntime();
+    if (!runtime || !created) { setPrintNote("Printing is still starting up. Try again in a moment."); return; }
+    setPrintNote("Printing…");
+    const result = kind === "receipt" ? await runtime.receiptPrinter.printReceipt(created.id) : await runtime.kitchenPrinter.printKitchenTicket(created.id);
+    setPrintNote(result.ok ? (result.jobId === "print-dialog" ? "Sent to the print dialog." : "Sent to the printer.") : result.reason);
+  }
   const [confirmClear, setConfirmClear] = useState(false);
 
   const visibleMenu = useMemo(() => menu.map((category) => ({ ...category, items: category.items.filter((item) => item.name.toLowerCase().includes(itemSearch.trim().toLowerCase())) })).filter((category) => category.items.length), [itemSearch, menu]);
@@ -97,31 +110,26 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   async function submitOrder() {
     if (!cart.length) { setError("Add at least one item to the ticket."); return; }
     if (submitting) return;
-    const submitted = draft;
     setSubmitting(true); setError("");
-    try {
-      const response = await fetch("/api/pos/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draftToOrderPayload(submitted)), signal: AbortSignal.timeout(20_000) });
-      const body: unknown = await response.json().catch(() => null);
-      const parsed = posOrderCreatedSchema.safeParse(body);
-      if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The ticket could not be submitted.");
-      // Only now is the order real (§30): clear the ticket and the call it came from.
-      if (submitted.phoneCallKey) phoneActions.clearCompletedCall(submitted.phoneCallKey);
-      orderActions.remove(submitted.id);
-      setCreated(parsed.data);
-    } catch (submitError) {
-      const offline = submitError instanceof TypeError || (submitError instanceof DOMException && submitError.name === "TimeoutError") || (typeof navigator !== "undefined" && !navigator.onLine);
-      // The draft and its idempotency key are kept, so pressing Submit again
-      // can never create a second order.
-      setError(offline
-        ? "Not sent — the connection dropped. The ticket is saved on this register. Press Submit again when the connection is back."
-        : submitError instanceof Error ? submitError.message : "The ticket could not be submitted.");
-    } finally { setSubmitting(false); }
+    // Only a server answer counts as sent (§30). A dropped connection keeps the
+    // ticket and resends it, with the same idempotency key, when it is back.
+    const result = await draftSync.submit(draft.id);
+    setSubmitting(false);
+    if (result.ok) { setPrintNote(""); setCreated(result.order); return; }
+    setError(result.message);
+  }
+
+  async function takeOver(id: string) {
+    setError("");
+    const result = await draftSync.takeOver(id);
+    if (!result.ok) setError(result.message);
   }
 
   function clearTicket() {
     if (draftHasWork(draft) && !confirmClear) { setConfirmClear(true); return; }
     setConfirmClear(false);
     if (draft.phoneCallKey) void phoneActions.releaseCall(draft.phoneCallKey);
+    void draftSync.discard(draft);
     orderActions.clearActive(); setError(""); setCustomerResults([]);
   }
 
@@ -130,6 +138,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   if (created) return <div className="grid min-h-0 flex-1 place-items-center bg-wayne-cream-deep p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl">
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">{created.duplicate ? "Already submitted" : "Order submitted"}</p>
     <h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p>
+    <div className="mt-5 grid grid-cols-2 gap-2"><Button onClick={() => void print("receipt")} variant="secondary">Print receipt</Button><Button onClick={() => void print("kitchen")} variant="secondary">Print kitchen ticket</Button></div>
+    {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
     <p className="mt-4 rounded-xl bg-wayne-warn-soft p-4 font-bold">TEST / MANUAL boundary — no card was processed.</p>
     <Button className="mt-6 w-full text-lg" onClick={() => setCreated(null)}>{held.some(isWorthResuming) ? "Back to tickets" : "Start new ticket"}</Button>
     {held.filter(isWorthResuming).length ? <div className="mt-4 grid gap-2 text-left"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p>{held.filter(isWorthResuming).map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setCreated(null); }} variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div> : null}
@@ -139,7 +149,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
     {/* The ticket's context, always visible: which line, which caller (§9). */}
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-2">
       <p className="min-w-0 flex-1 truncate text-sm font-black uppercase tracking-[0.12em]"><span className={draft.source === "phone" ? "text-wayne-green" : ""}>{contextParts.join(" • ")}</span>{draft.phone && draft.source === "phone" ? <span className="ml-2 font-bold normal-case tracking-normal text-wayne-muted">{formatPhone(draft.phone)}</span> : null}</p>
-      {held.length ? <div className="flex flex-wrap gap-1.5">{held.map((candidate) => <button className="min-h-11 rounded-full border border-wayne-border bg-wayne-cream px-3 text-sm font-bold" key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setError(""); }} type="button">⏸ {draftLabel(candidate)}{candidate.cart.length ? ` · ${candidate.cart.length}` : ""}</button>)}</div> : null}
+      {remote.length ? <details className="relative"><summary className="flex min-h-11 cursor-pointer items-center rounded-full border border-dashed border-wayne-border-strong px-3 text-sm font-bold">Other registers ({remote.length})</summary><div className="absolute right-0 z-40 mt-1 grid w-80 gap-2 rounded-2xl border border-wayne-border bg-white p-3 shadow-xl">{remote.map((ticket) => <div className="rounded-xl border border-wayne-border p-2" key={ticket.id}><p className="text-sm font-bold">{ticket.label || "Ticket"}{ticket.item_count ? ` · ${ticket.item_count} item${ticket.item_count === 1 ? "" : "s"}` : ""}</p><p className="text-xs text-wayne-muted">{ticket.status === "held" ? "On hold" : "Open"} on {ticket.terminal || "another register"}{ticket.owner_name ? ` · ${ticket.owner_name}` : ""}</p><Button className="mt-2 w-full" onClick={() => void takeOver(ticket.id)} size="sm" variant="secondary">Take over here</Button></div>)}</div></details> : null}
+      {held.length ? <div className="flex flex-wrap gap-1.5">{held.map((candidate) => <button className="min-h-11 rounded-full border border-wayne-border bg-wayne-cream px-3 text-sm font-bold" key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setError(""); }} type="button">{candidate.submitPending ? "⟳ " : "⏸ "}{draftLabel(candidate)}{candidate.cart.length ? ` · ${candidate.cart.length}` : ""}{candidate.submitPending ? " · sending" : ""}</button>)}</div> : null}
       <Button disabled={!draftHasWork(draft)} onClick={() => { orderActions.hold(); setError(""); setCustomerResults([]); }} size="sm" variant="secondary">Hold ticket</Button>
     </div>
     <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[16.5rem_1fr_19.5rem] 2xl:grid-cols-[19rem_1fr_23rem]">
@@ -173,8 +184,9 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
         <div className="shrink-0 border-t border-wayne-border pt-3">
           <details className="rounded-xl border border-wayne-border p-2"><summary className="min-h-9 cursor-pointer text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">TEST / MANUAL</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>
           <div className="mt-3 space-y-1"><Total label="Subtotal" value={subtotal} />{previewDiscount ? <Total label="Manual discount" value={-previewDiscount} /> : null}{deliveryFee ? <Total label="Delivery fee" value={deliveryFee} /> : null}<Total label="Estimated tax" value={tax} /><Total emphasis label={draft.promoCode ? "Estimated total*" : "Total"} value={previewTotal} /></div>
-          {error ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-alert-soft p-2 text-sm font-bold text-wayne-alert">{error}</p> : null}
-          <Button className="mt-3 min-h-12 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? "Submitting…" : "Submit order"}</Button>
+          {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing Submit again is safe.</p> : null}
+          {error && !draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-alert-soft p-2 text-sm font-bold text-wayne-alert">{error}</p> : null}
+          <Button className="mt-3 min-h-12 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? "Submitting…" : draft.submitPending ? "Try sending now" : "Submit order"}</Button>
         </div>
       </aside>
     </main>

@@ -11,7 +11,11 @@ const printerSchema = z.object({
   protocol: z.string().max(40).optional().default(""),
   enabled: z.boolean().optional().default(false),
   routing_categories: z.array(z.string().max(80)).optional().default([]),
+  paper_width_mm: z.number().int().optional(),
 });
+
+/** How a printer is spoken to. Nothing is assumed until the owner picks one for a confirmed model (§2.7). */
+export const printerProtocolSchema = z.enum(["", "browser", "escpos"]);
 
 /** The store's hardware configuration (build sheet §28, §50, §64). */
 export const hardwareSettingsSchema = z.object({
@@ -63,14 +67,16 @@ export const hardwareSettingsFormSchema = z.object({
   receipt_printer: z.object({
     name: z.string().trim().max(80), model: z.string().trim().max(120),
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
-    port: z.number().int().min(1).max(65535).nullable(), protocol: z.string().trim().max(40), enabled: z.boolean(),
-  }),
+    port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
+    paper_width_mm: z.union([z.literal(58), z.literal(80)]),
+  }).refine((printer) => printer.protocol !== "escpos" || (printer.model && printer.ip && printer.port), { message: "ESC/POS needs the confirmed printer model, its IP address and port (usually 9100)." }),
   kitchen_printer: z.object({
     name: z.string().trim().max(80), model: z.string().trim().max(120),
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
-    port: z.number().int().min(1).max(65535).nullable(), protocol: z.string().trim().max(40), enabled: z.boolean(),
+    port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
+    paper_width_mm: z.union([z.literal(58), z.literal(80)]),
     routing_categories: z.array(z.string().trim().max(80)).max(40),
-  }),
+  }).refine((printer) => printer.protocol !== "escpos" || (printer.model && printer.ip && printer.port), { message: "ESC/POS needs the confirmed printer model, its IP address and port (usually 9100)." }),
   cash_drawer: z.object({ connection: z.enum(["none", "receipt_printer"]), model: z.string().trim().max(120) }),
 });
 export type HardwareSettingsForm = z.infer<typeof hardwareSettingsFormSchema>;

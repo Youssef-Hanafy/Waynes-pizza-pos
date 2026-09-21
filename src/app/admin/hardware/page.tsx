@@ -63,14 +63,14 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
 
       <Card className="p-6">
         <h2 className="text-2xl font-black">Printers</h2>
-        <p className="mt-1 text-sm text-wayne-muted">Enter each printer once its exact model is confirmed. No printer protocol is assumed before then. Kitchen tickets keep printing through the existing print queue.</p>
+        <p className="mt-1 text-sm text-wayne-muted">Enter each printer once its exact model is confirmed. No printer protocol is assumed before then. Kitchen tickets keep printing through the existing print queue. Until a receipt printer is set up, receipts use this device&apos;s print dialog. ESC/POS network printing works from the Wayne&apos;s POS Android app, which can reach the printer on the store network; a web browser cannot.</p>
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
           <fieldset className="grid gap-3 rounded-2xl border border-wayne-border p-4">
             <legend className="px-1 font-black">Receipt printer {receipt.enabled ? "" : "· Not configured"}</legend>
             <Input defaultValue={receipt.name ?? ""} label="Name" name="receipt_name" placeholder="Front receipt" />
             <Input defaultValue={receipt.model ?? ""} label="Model" name="receipt_model" placeholder="Exact model number" />
             <div className="grid grid-cols-[1fr_7rem] gap-3"><Input defaultValue={receipt.ip ?? ""} label="IP address" name="receipt_ip" /><Input defaultValue={receipt.port ?? ""} label="Port" max={65535} min={1} name="receipt_port" type="number" /></div>
-            <Input defaultValue={receipt.protocol ?? ""} label="Protocol" name="receipt_protocol" placeholder="Confirm from the model" />
+            <ProtocolFields current={receipt.protocol ?? ""} paper={receipt.paper_width_mm ?? 80} prefix="receipt" />
             <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={receipt.enabled ?? false} name="receipt_enabled" type="checkbox" />Enabled</label>
           </fieldset>
           <fieldset className="grid gap-3 rounded-2xl border border-wayne-border p-4">
@@ -78,7 +78,7 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
             <Input defaultValue={kitchen.name ?? ""} label="Name" name="kitchen_name" placeholder="Kitchen" />
             <Input defaultValue={kitchen.model ?? ""} label="Model" name="kitchen_model" placeholder="Exact model number" />
             <div className="grid grid-cols-[1fr_7rem] gap-3"><Input defaultValue={kitchen.ip ?? ""} label="IP address" name="kitchen_ip" /><Input defaultValue={kitchen.port ?? ""} label="Port" max={65535} min={1} name="kitchen_port" type="number" /></div>
-            <Input defaultValue={kitchen.protocol ?? ""} label="Protocol" name="kitchen_protocol" placeholder="Confirm from the model" />
+            <ProtocolFields current={kitchen.protocol ?? ""} paper={kitchen.paper_width_mm ?? 80} prefix="kitchen" />
             <label className="flex items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={kitchen.enabled ?? false} name="kitchen_enabled" type="checkbox" />Enabled</label>
             {menu.length ? <div><p className="text-sm font-bold">Categories that print in the kitchen</p><div className="mt-2 flex flex-wrap gap-2">{menu.map((category) => <label className="flex min-h-11 items-center gap-2 rounded-xl border border-wayne-border px-3 text-sm" key={category.id}><input defaultChecked={routed.has(category.name)} name="kitchen_categories" type="checkbox" value={category.name} />{category.name}</label>)}</div></div> : null}
           </fieldset>
@@ -107,4 +107,26 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
       <div><Button size="lg" type="submit">Save hardware settings</Button></div>
     </form>
   </main>;
+}
+
+/**
+ * How the POS speaks to a printer.  ESC/POS is only offered as a choice to
+ * make once the model is confirmed to support it — nothing is assumed (§2.7).
+ */
+function ProtocolFields({ current, paper, prefix }: { current: string; paper: number; prefix: string }) {
+  return <div className="grid grid-cols-[1fr_8rem] gap-3">
+    <label className="grid gap-1.5 text-sm font-bold" htmlFor={`${prefix}_protocol`}>How to print
+      <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={["", "browser", "escpos"].includes(current) ? current : ""} id={`${prefix}_protocol`} name={`${prefix}_protocol`}>
+        <option value="">Not chosen yet</option>
+        <option value="browser">This device&apos;s print dialog</option>
+        <option value="escpos">ESC/POS over the network (confirmed model, port usually 9100)</option>
+      </select>
+    </label>
+    <label className="grid gap-1.5 text-sm font-bold" htmlFor={`${prefix}_paper`}>Paper
+      <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={String(paper === 58 ? 58 : 80)} id={`${prefix}_paper`} name={`${prefix}_paper`}>
+        <option value="80">80 mm</option>
+        <option value="58">58 mm</option>
+      </select>
+    </label>
+  </div>;
 }

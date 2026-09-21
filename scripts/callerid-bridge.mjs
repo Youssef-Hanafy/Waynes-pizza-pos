@@ -48,7 +48,10 @@ socket.on("listening", () => {
 });
 
 socket.on("message", async (message, remote) => {
-  const raw = message.toString("latin1").replace(/\0/g, "").trim();
+  // latin1 keeps one character per byte, and NULs are left in: the header's
+  // unit/serial fields are fixed-width bytes, and the server reads the record
+  // from the 21st character exactly as CallerID.com's manual says to.
+  const raw = message.toString("latin1").trimEnd();
   if (!raw) return;
   console.log(`[callerid] ${remote.address}: ${raw}`);
   try {

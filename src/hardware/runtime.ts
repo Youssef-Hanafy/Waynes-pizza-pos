@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CallerIdProviderKind } from "@/lib/hardware/schemas";
 import { AndroidCallerIdProvider, CloudCallerIdProvider, SimulatedCallerIdProvider, type CallerIdProvider } from "./caller-id";
-import { UnconfiguredCashDrawerProvider, type CashDrawerProvider } from "./drawer/provider";
+import { PrinterDrawerProvider, UnconfiguredCashDrawerProvider, type CashDrawerProvider } from "./drawer/provider";
 import type { HardwareEventBus } from "./event-bus";
 import { ManualExternalTerminalProvider, type PaymentTerminalProvider } from "./payments/provider";
-import { UnconfiguredPrinterProvider, type PrinterProvider } from "./printers/provider";
+import { installNativeBridge } from "./native/bridge";
+import { createPrinterProvider, type PrinterConfig, type PrinterProvider } from "./printers/provider";
 import type { HardwareDevice, HardwareStatus } from "./types";
 
 export type HardwareRuntimeConfig = {
@@ -14,6 +15,10 @@ export type HardwareRuntimeConfig = {
   udpPort: number;
   bindAddress: string;
   deviceIp: string;
+  receiptPrinter: PrinterConfig;
+  kitchenPrinter: PrinterConfig;
+  /** "receipt_printer" when the drawer hangs off the receipt printer's kick port. */
+  drawerConnection: string;
 };
 
 /**
@@ -29,6 +34,9 @@ export type HardwareRuntimeConfig = {
  * or claimed on another register reach this one that way (§22).
  */
 export function createHardwareRuntime(config: HardwareRuntimeConfig, bus: HardwareEventBus, client: SupabaseClient | null) {
+  // Inside the Wayne's POS Android app this exposes the native caller ID and
+  // printer plugins; in a browser it does nothing.
+  installNativeBridge();
   const cloud = new CloudCallerIdProvider(client);
   const simulator = config.simulatorEnabled || config.callerIdProvider === "simulated"
     ? new SimulatedCallerIdProvider({ lineCount: config.lineCount })
@@ -38,9 +46,11 @@ export function createHardwareRuntime(config: HardwareRuntimeConfig, bus: Hardwa
     : null;
   const primary: CallerIdProvider = android ?? (config.callerIdProvider === "cloud" ? cloud : simulator ?? cloud);
 
-  const receiptPrinter: PrinterProvider = new UnconfiguredPrinterProvider("Receipt printer");
-  const kitchenPrinter: PrinterProvider = new UnconfiguredPrinterProvider("Kitchen printer");
-  const cashDrawer: CashDrawerProvider = new UnconfiguredCashDrawerProvider();
+  const receiptPrinter: PrinterProvider = createPrinterProvider("receipt", config.receiptPrinter);
+  const kitchenPrinter: PrinterProvider = createPrinterProvider("kitchen", config.kitchenPrinter);
+  const cashDrawer: CashDrawerProvider = config.drawerConnection === "receipt_printer"
+    ? new PrinterDrawerProvider(config.receiptPrinter)
+    : new UnconfiguredCashDrawerProvider();
   const paymentTerminal: PaymentTerminalProvider = new ManualExternalTerminalProvider();
 
   const callerProviders = [...new Set([primary, cloud, simulator].filter((provider): provider is CallerIdProvider => provider !== null))];

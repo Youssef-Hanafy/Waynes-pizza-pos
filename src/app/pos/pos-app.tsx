@@ -12,6 +12,8 @@ import { useHardwareState } from "@/stores/hardware-store";
 import { orderActions, useDrafts } from "@/stores/order-store";
 import { getTerminalLabel, phoneActions, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
+import { dismissNotice, useSyncState } from "@/stores/draft-sync";
+import { useDraftSync } from "@/stores/use-draft-sync";
 import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenOrdersPanel } from "./open-orders-panel";
@@ -52,6 +54,9 @@ export function PosApp(props: Props) {
   const heldCount = drafts.filter((draft) => draft.held).length;
 
   const runtimeReady = useHardware(hardware);
+  useDraftSync();
+  const { notices } = useSyncState();
+  const pendingCount = drafts.filter((draft) => draft.submitPending).length;
 
   /** startOrderFromCall (§32): claim it, carry the caller in, open the order screen. */
   const startPhoneOrder: StartPhoneOrder = async (call, customer, options = {}) => {
@@ -80,7 +85,8 @@ export function PosApp(props: Props) {
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
   const warning = !hardwareState.online
-    ? "No internet — tickets are saved on this register"
+    ? `No internet — tickets are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : ""}`
+    : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
     : callerStatus && ["error", "unavailable"].includes(callerStatus.state) ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
     : syncStatus && syncStatus.state === "disconnected" && runtimeReady ? "Live phone updates reconnecting" : "";
 
@@ -102,6 +108,7 @@ export function PosApp(props: Props) {
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
+    {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => setSection(tab.id)} type="button">{tab.label}</button>)}
     </nav>

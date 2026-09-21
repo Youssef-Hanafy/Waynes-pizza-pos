@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { PhoneLineNumber } from "@/hardware/types";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
@@ -24,6 +25,21 @@ export function HardwareLive({ settings }: { settings: HardwareSettings }) {
   const phone = usePhoneState();
   const last = phone.recent[0];
 
+  const [printMessage, setPrintMessage] = useState("");
+
+  async function testPrint(kind: "receipt" | "kitchen" | "drawer") {
+    const runtime = getHardwareRuntime();
+    if (!runtime) return;
+    setPrintMessage("Working…");
+    try {
+      if (kind === "drawer") { await runtime.cashDrawer.open(); setPrintMessage("Drawer pulse sent."); return; }
+      const result = await (kind === "receipt" ? runtime.receiptPrinter : runtime.kitchenPrinter).printTest();
+      setPrintMessage(result.ok ? (result.jobId === "print-dialog" ? "Test page sent to this device's print dialog." : `Test page sent to ${result.jobId ?? "the printer"}.`) : result.reason);
+    } catch (error) {
+      setPrintMessage(error instanceof Error ? error.message : "That did not work.");
+    }
+  }
+
   function test(line: PhoneLineNumber) {
     const presets = { 1: { phoneNumber: "5085551111", callerName: "John Test" }, 2: { phoneNumber: "7745552222", callerName: "Jane Test" } } as Record<number, { phoneNumber: string; callerName: string }>;
     getHardwareRuntime()?.simulator?.simulate({ line, ...(presets[line] ?? { phoneNumber: `508555${String(1000 + line).slice(-4)}`, callerName: `Line ${line} Test` }) });
@@ -40,7 +56,17 @@ export function HardwareLive({ settings }: { settings: HardwareSettings }) {
         })}
       </ul>
     </div>
-    <div>
+    <div className="lg:col-span-2 border-t border-wayne-border pt-4">
+      <h2 className="text-xl font-black">Printer test</h2>
+      <p className="mt-1 text-sm text-wayne-muted">Prints a test page through the same printer layer receipts use. Save settings first; the page uses the saved ones.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button disabled={!ready} onClick={() => void testPrint("receipt")} variant="secondary">Test receipt printer</Button>
+        <Button disabled={!ready} onClick={() => void testPrint("kitchen")} variant="secondary">Test kitchen printer</Button>
+        <Button disabled={!ready} onClick={() => void testPrint("drawer")} variant="secondary">Open cash drawer</Button>
+      </div>
+      {printMessage ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printMessage}</p> : null}
+    </div>
+    <div className="lg:row-start-1 lg:col-start-2">
       <h2 className="text-xl font-black">Caller ID test</h2>
       <p className="mt-1 text-sm text-wayne-muted">Provider: <strong>{settings.caller_id_provider.replace("_", " ")}</strong> · {settings.caller_line_count} lines · UDP {settings.caller_udp_port}</p>
       {settings.simulator_enabled ? <div className="mt-3 flex flex-wrap gap-2">{Array.from({ length: Math.min(settings.caller_line_count, 8) }, (_, index) => (index + 1) as PhoneLineNumber).map((line) => <Button disabled={!ready} key={line} onClick={() => test(line)} variant="secondary">Test Line {line}</Button>)}</div> : <p className="mt-3 text-sm font-bold">Test calls are switched off below.</p>}

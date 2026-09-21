@@ -50,6 +50,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         hasPermission(access, "content.manage") && ["/admin/settings", "Website"],
         hasPermission(access, "printing.manage") && ["/admin/printing", "Printing"],
         hasPermission(access, "hardware.manage") && ["/admin/hardware", "Hardware"],
+        hasPermission(access, "pilot.manage") && ["/admin/pilot", "Pilot"],
         hasPermission(access, "integrations.manage") && ["/admin/integrations", "Integration"],
         hasPermission(access, "staff.view") && ["/admin/staff", "Staff"],
         hasPermission(access, "audit.view") && ["/admin/audit", "Audit"],

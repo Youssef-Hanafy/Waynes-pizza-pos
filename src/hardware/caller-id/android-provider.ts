@@ -1,27 +1,13 @@
 import { isPhoneLineNumber, status, type HardwareStatus, type IncomingCallEvent } from "../types";
+import type { NativeCallerIdBridge } from "../native/bridge";
 import { CallListeners, type CallerIdProvider } from "./provider";
 
 /**
- * The contract the future Android shell must expose on `window` (§19, §52).
- * Nothing implements it yet — this file only fixes the shape so the native
- * plugin can be written against it without touching any POS screen.
- *
- * The native side owns the UDP socket on the configured port (default 3520),
- * parses CallerID.com's documented Ethernet format, and hands over the fields
- * below.  Parsing is deliberately NOT done here (§19: no invented parser).
+ * Caller ID from the Wayne's POS Android app (§19, §52).  The app's native
+ * plugin listens on the configured UDP port and src/hardware/native/bridge.ts
+ * turns each CallerID.com record into the call shape below; this provider
+ * only adapts it to the same IncomingCallEvent the simulator produces.
  */
-export type NativeCallerIdBridge = {
-  start(options: { port: number; bindAddress: string; deviceIp?: string }): Promise<void>;
-  stop(): Promise<void>;
-  status(): Promise<{ state: "listening" | "stopped" | "permission_denied" | "error"; detail?: string }>;
-  onCall(callback: (call: { id: string; line: number; phoneNumber: string; callerName?: string | null; occurredAt: string; deviceId?: string; raw?: string }) => void): () => void;
-};
-
-declare global {
-  interface Window {
-    WaynesNativeHardware?: { callerId?: NativeCallerIdBridge };
-  }
-}
 
 export class AndroidCallerIdProvider implements CallerIdProvider {
   readonly kind = "android_native" as const;
@@ -30,7 +16,7 @@ export class AndroidCallerIdProvider implements CallerIdProvider {
 
   constructor(private readonly options: { port: number; bindAddress: string; deviceIp?: string }) {}
 
-  private bridge() {
+  private bridge(): NativeCallerIdBridge | undefined {
     return typeof window === "undefined" ? undefined : window.WaynesNativeHardware?.callerId;
   }
 

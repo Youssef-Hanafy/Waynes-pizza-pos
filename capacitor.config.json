@@ -1,0 +1,13 @@
+{
+  "appId": "com.waynespizza.pos",
+  "appName": "Wayne's POS",
+  "webDir": "native/android/offline",
+  "server": {
+    "url": "https://waynespizzaofworcester.com/pos",
+    "androidScheme": "https",
+    "allowNavigation": ["waynespizzaofworcester.com", "*.supabase.co"]
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

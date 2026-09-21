@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { hardwareEventBus } from "@/hardware/event-bus";
+import { printerConfigFrom } from "@/hardware/printers/provider";
 import { createHardwareRuntime } from "@/hardware/runtime";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -22,11 +23,19 @@ export function useHardware(hardware: HardwareSettings, options: { drafts?: bool
     caller_id_provider: providerKind, simulator_enabled: simulatorEnabled, caller_line_count: lineCount,
     caller_udp_port: udpPort, caller_bind_address: bindAddress, caller_device_ip: deviceIp, call_expire_minutes: expireMinutes,
   } = hardware;
+  // Printer and drawer settings are compared as text so a background refresh
+  // that returns the same settings does not restart anything.
+  const printerKey = JSON.stringify([hardware.receipt_printer, hardware.kitchen_printers[0] ?? {}, hardware.cash_drawer]);
 
   useEffect(() => {
     if (withDrafts) loadSavedDrafts();
     phoneActions.configure(lineCount, expireMinutes);
-    const runtime = createHardwareRuntime({ callerIdProvider: providerKind, simulatorEnabled, lineCount, udpPort, bindAddress, deviceIp }, hardwareEventBus, createBrowserSupabaseClient());
+    const [receipt, kitchen, drawer] = JSON.parse(printerKey) as [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>];
+    const runtime = createHardwareRuntime({
+      callerIdProvider: providerKind, simulatorEnabled, lineCount, udpPort, bindAddress, deviceIp,
+      receiptPrinter: printerConfigFrom(receipt), kitchenPrinter: printerConfigFrom(kitchen),
+      drawerConnection: typeof drawer.connection === "string" ? drawer.connection : "none",
+    }, hardwareEventBus, createBrowserSupabaseClient());
     setHardwareRuntime(runtime);
     const offPhone = connectPhoneStore(hardwareEventBus);
     const offHardware = connectHardwareStore(hardwareEventBus);
@@ -54,7 +63,7 @@ export function useHardware(hardware: HardwareSettings, options: { drafts?: bool
       void runtime.stop();
       setHardwareRuntime(null);
     };
-  }, [providerKind, simulatorEnabled, lineCount, udpPort, bindAddress, deviceIp, expireMinutes, withDrafts]);
+  }, [providerKind, simulatorEnabled, lineCount, udpPort, bindAddress, deviceIp, expireMinutes, withDrafts, printerKey]);
 
   return ready;
 }

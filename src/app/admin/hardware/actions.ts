@@ -32,10 +32,12 @@ export async function saveHardwareSettings(form: FormData) {
     receipt_printer: {
       name: text(form, "receipt_name"), model: text(form, "receipt_model"), ip: text(form, "receipt_ip"),
       port: port(form, "receipt_port"), protocol: text(form, "receipt_protocol"), enabled: form.get("receipt_enabled") === "on",
+      paper_width_mm: Number(text(form, "receipt_paper") || 80),
     },
     kitchen_printer: {
       name: text(form, "kitchen_name"), model: text(form, "kitchen_model"), ip: text(form, "kitchen_ip"),
       port: port(form, "kitchen_port"), protocol: text(form, "kitchen_protocol"), enabled: form.get("kitchen_enabled") === "on",
+      paper_width_mm: Number(text(form, "kitchen_paper") || 80),
       routing_categories: form.getAll("kitchen_categories").map(String),
     },
     cash_drawer: { connection: text(form, "drawer_connection") || "none", model: text(form, "drawer_model") },

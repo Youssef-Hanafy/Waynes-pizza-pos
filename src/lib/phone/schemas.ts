@@ -69,10 +69,16 @@ export type PhoneLine = z.infer<typeof phoneLineSchema>;
 /**
  * A Whozz Calling? record, in either of the two shapes the unit emits.
  *
- * Ethernet (UDP, 83 bytes):
- *   ^^<U>nnnnnn<S>nnnnnn$01 I S 0000 G A2 12/17 04:54 PM 5085551212 SMITH JOHN
+ * Ethernet (UDP, 83 bytes) — verbatim from CallerID.com's Ethernet Link manual:
+ *   ^^<U>nnnnnn<S>nnnnnn$01 I E 0000 G A2 12/17 04:54 PM 770-263-7111 CALLERID.COM___
+ *   ^^<U>xxxxxx<S>xxxxxx$03 I S 0000 G A0 03/26 02:47 PM 555-867-5309 JOHN DOE
  * Serial:
  *   the same record from the `$` onward.
+ *
+ * "Full-featured" units also send 52-character detail records (R ring,
+ * F off-hook, N on-hook).  Wayne's Basic unit reports inbound caller ID only;
+ * a detail record does not match below and is returned as null, which the
+ * ingest route logs and ignores rather than popping a card.
  *
  * The fields after `$` are: line, direction (I/O), start/end (S/E), duration,
  * checksum, ring count, date, time, number, name.  Parsing is by token rather
@@ -87,17 +93,29 @@ export function parseWhozzCallingRecord(raw: string): {
   caller_name: string;
   unit_number: string;
 } | null {
-  const text = raw.replace(/\0/g, "").trim();
+  // Only trailing whitespace is trimmed before the header is read: the header's
+  // unit and serial fields may be raw bytes, NULs included.
+  const text = raw.replace(/^[\r\n ]+/, "").trimEnd();
   if (!text) return null;
 
-  // Strip the Ethernet Link header (^^<U>unit<S>serial) if it is present, and
-  // keep the unit number: a store with two boxes needs to know which rang.
+  // Strip the Ethernet Link header.  CallerID.com's Ethernet Link manual
+  // (EL_Manual.pdf) says every packet starts "^^<U>nnnnnn<S>nnnnnn$" — 21
+  // characters — and warns that finding the first "$" is unreliable because
+  // the unit and serial fields can contain one; it says to start reading after
+  // the 21st character.  The unit number is kept when it reads as digits, so
+  // a store with two boxes can tell which one rang.
   let unitNumber = "";
-  const header = /\^\^<U>(\d{1,6})<S>(\d{1,6})\$/.exec(text);
-  if (header) unitNumber = header[1]!.replace(/^0+(?=\d)/, "");
-
-  const dollar = text.indexOf("$");
-  const body = dollar >= 0 ? text.slice(dollar + 1) : text;
+  let body: string;
+  if (text.startsWith("^^<U>") && text.length > 21 && text.charAt(20) === "$") {
+    const unit = /^\^\^<U>(\d{6})<S>/.exec(text);
+    if (unit) unitNumber = unit[1]!.replace(/^0+(?=\d)/, "");
+    body = text.slice(21);
+  } else {
+    // Serial / already-stripped records: the manual's "$01 I S ..." form.
+    const dollar = text.indexOf("$");
+    body = dollar >= 0 ? text.slice(dollar + 1) : text;
+  }
+  body = body.replace(/\0/g, "").trim();
 
   const match =
     /^\s*(\d{1,2})\s+([IO])\s+([SE-])\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})\s*([AP]M)?\s+(\S+)\s*(.*)$/i.exec(
