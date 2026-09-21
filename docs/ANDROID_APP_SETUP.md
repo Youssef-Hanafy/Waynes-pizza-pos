@@ -1,56 +1,51 @@
-# Wayne's POS Android app — setup (build sheet Phase 8)
+# Wayne's POS Android app
 
-The app is a thin shell around the website POS. It adds two native plugins and nothing else:
+The app is a full-screen window onto the POS website (`https://waynes-pizza-pos.vercel.app/pos`) plus the two things a web browser can't do:
 
-| Plugin | Does | Why a browser can't |
+| Ability | Does | Code |
 | --- | --- | --- |
-| `WaynesCallerId` | Listens for the CallerID.com box's UDP broadcasts (port 3520 by default) and passes each packet to the POS untouched | Browsers can't open UDP sockets |
-| `WaynesPrinter` | Sends bytes the POS already encoded to a network printer's IP:port | Browsers can't open raw TCP sockets |
+| Caller ID | Listens for the CallerID.com box's UDP broadcasts (port 3520) and passes each packet, untouched, to the POS | `CallerIdListener.java` |
+| Printing | Sends receipts and kitchen tickets (already encoded by the POS) straight to the printers' IP:9100, and pulses the cash drawer | `NativeBridge.java` |
 
-Everything else stays in the website: the screens, the stores, the CallerID.com parser (checked against the official Ethernet Link manual), printing layouts, orders, customers. The native code does not change any of it (§62).
+Everything else stays in the website: screens, the caller ID parser, receipt layouts, orders, the print station. **Updating the POS never needs a new app.** Only changes to these two abilities do.
 
-Source files in this repo:
+The page reaches the app through `window.WaynesAndroid`. The web side of that contract is `src/hardware/native/bridge.ts`. Only the POS site itself can use it; any other page loaded in the app is ignored. Printers must have store-network addresses (10.x, 172.16–31.x, 192.168.x).
 
 ```
-capacitor.config.json                               app id, name, and the POS URL the app opens
-native/android/java/com/waynespizza/pos/*.kt        MainActivity + the two plugins
-native/android/AndroidManifest.additions.xml        permissions to paste into the manifest
-native/android/offline/index.html                   shown only if the POS can't be reached
-src/hardware/native/bridge.ts                       plugins → window.WaynesNativeHardware (web side)
+android/                                     open THIS folder in Android Studio
+  app/build.gradle.kts                       app id com.waynespizza.pos, POS_URL, versions
+  app/src/main/AndroidManifest.xml           permissions (internet, Wi-Fi multicast, local network)
+  app/src/main/java/com/waynespizza/pos/
+    MainActivity.java                        the WebView, back button, offline screen, local network permission
+    NativeBridge.java                        window.WaynesAndroid: printer sends, caller ID start/stop/status
+    CallerIdListener.java                    UDP listener
 ```
 
-## Build it (on the Mac)
+It's plain Android with no extra libraries: Java, Android plugin 9.4.1, Gradle 9.6, compile/target SDK 37 (Android 17), min SDK 26 (Android 8). It was built from the same setup Android Studio Quail 4 generates.
 
-The Android SDK and Capacitor packages couldn't be downloaded in the Claude workspace, so the app is built on your Mac. None of this has been compiled yet. Expect to fix small compile errors the first time.
+## Build it
 
-1. Install **Android Studio** (it includes the Android SDK and a JDK).
-2. In the repo:
-   ```bash
-   npm install @capacitor/core @capacitor/android
-   npm install -D @capacitor/cli
-   npx cap add android
-   ```
-3. Copy the three Kotlin files into the generated project, replacing its `MainActivity`:
-   ```bash
-   mkdir -p android/app/src/main/java/com/waynespizza/pos
-   cp native/android/java/com/waynespizza/pos/*.kt android/app/src/main/java/com/waynespizza/pos/
-   ```
-   Delete any generated `MainActivity.java` so there is only one.
-4. Open `android/app/src/main/AndroidManifest.xml` and paste the lines from
-   `native/android/AndroidManifest.additions.xml` inside `<manifest>`.
-5. `npx cap sync android`, then `npx cap open android`. In Android Studio, **Build → Generate Signed App Bundle / APK → APK**. Create a keystore the first time and **keep it safe**: every future update must be signed with the same key.
-6. Install `WaynesPOS.apk` on the tablet (USB, or copy it over and open it). Allow installing from this source when Android asks (§61).
+1. Android Studio → **File → Open** → choose `waynes-pizza-pos/android` (the `android` folder, not the repo root). Let the Gradle sync finish.
+2. **Build → Generate App Bundles or APKs → Generate APKs.** The result is `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-## Turn it on
+A debug APK is signed with the debug key on this Mac. It installs fine on the store tablet, and later builds from **this same Mac** install over it as updates. For a permanent key (to build updates from any computer), use **Build → Generate Signed App Bundle or APK → APK**, create a keystore, and **keep the keystore file and password safe**. Every later update must be signed with it.
 
-1. Tablet on Wayne's **POS Wi-Fi**, not a guest network (§56).
-2. Open the app and sign in. When Android asks for **Nearby devices / local network**, tap **Allow**. Android 17 needs this (`ACCESS_LOCAL_NETWORK`) to receive the caller ID broadcasts and reach printers. If it's denied, Admin → Hardware shows *Local network permission unavailable* (§63).
-3. **Admin → Hardware → Caller ID provider → Android app**, check the UDP port (3520), save.
-4. Call Line 1 and Line 2 from a cell phone. Tick the results on **Admin → Pilot**.
+## Put it on the tablet
+
+1. Copy `app-debug.apk` to the tablet (USB cable, Google Drive, or email it to yourself) and open it.
+2. Android asks to allow installing from that source (Files, Drive, Chrome…): allow it, then **Install**.
+3. Open **Wayne's POS** and sign in with the register's staff account.
+4. When Android 17 asks about **devices on your local network / nearby devices**, tap **Allow**. Without it, caller ID shows *Local network permission unavailable* and printing waits. To fix later: Settings → Apps → Wayne's POS → Permissions.
+
+## Turn things on
+
+* **Printing:** POS → **More → Print station** → *This register is the print station* (one register only). Admin → Hardware → *Test receipt printer / Test kitchen printer / Open cash drawer* must be pressed **from this app**. See `docs/PRINTER_SETUP.md`.
+* **Caller ID:** Admin → Hardware → *Caller ID provider* → **Android app**, UDP port 3520, save. Call Line 1 and Line 2 from a cell phone and tick the results on Admin → Pilot.
 
 ## Notes
 
-* The app opens `https://waynespizzaofworcester.com/pos` (see `capacitor.config.json`). To test against a preview deploy, change `server.url`, then run `npx cap sync android`.
+* Tablet on Wayne's **store network** (addresses starting 10.10.10.), not a guest Wi-Fi. The printers and caller ID box are only reachable there.
+* The screen stays on while the app is open. For a locked-down register, use Android's **App pinning** (Settings → Security → App pinning).
+* If the POS can't be reached, the app shows *Can't reach the POS* and retries every 10 seconds.
+* To point the app at a different address (e.g. waynespizzaofworcester.com once it serves the POS), change `POS_URL` in `android/app/build.gradle.kts` and rebuild.
 * Don't change the caller ID box's DIP switches or settings while Thrive still uses it (§2.1). Both systems can listen to the same broadcast.
-* Kiosk / full-screen: use Android's *App pinning* (Settings → Security → App pinning) for now. A dedicated device-owner kiosk setup can come later if Wayne's wants it.
-* `window.WaynesNativeHardware` is the whole contract. If the native layer is ever rewritten (a different shell, or a newer Capacitor), keep that shape and nothing in the POS changes.

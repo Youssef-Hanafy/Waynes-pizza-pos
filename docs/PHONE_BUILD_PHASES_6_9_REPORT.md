@@ -27,15 +27,14 @@ The sheet ends at Phase 9. Phase 6 is fully built. Phases 7–9 are prepared as 
 
 **Still needed from you:** the two printers' IP addresses (see PRINTER_SETUP.md §1).
 
-## Phase 8: Native Android app (prepared, build on the Mac)
+## Phase 8: Native Android app (built)
 
-* `capacitor.config.json`, `native/android/…`: the shell (`MainActivity.kt`, screen kept on) and two plugins:
-  * **`WaynesCallerIdPlugin.kt`**: UDP listener on the configured port (3520). Holds a Wi-Fi multicast lock and requests Android 17's `ACCESS_LOCAL_NETWORK` permission; a denial shows as *Local network permission unavailable*. It forwards each packet untouched.
-  * **`WaynesPrinterPlugin.kt`**: sends already-encoded bytes to a printer's IP:port with a timeout.
-* `src/hardware/native/bridge.ts` connects the plugins to the existing `AndroidCallerIdProvider` and printer providers. The phone screen and stores are unchanged (§62).
-* **Parser checked against CallerID.com's official Ethernet Link manual.** Records are read from the 21st character, as the manual says, not from the first `$`, which it warns is unreliable. The manual's own example records are now unit tests. Detail records (ring / off-hook / on-hook) are ignored. The store bridge no longer strips bytes out of the header.
+* **`android/`**: a plain Android app (Java, no extra libraries) that shows the POS full screen and adds caller ID (UDP 3520) and network printing (TCP 9100) through `window.WaynesAndroid`. It replaced the earlier Capacitor plan, which needed npm packages that couldn't be downloaded.
+* First built with Android Studio Quail 4 on Youssef's Mac (AGP 9.4.1, Gradle 9.6, target Android 17). Android 17's local network permission is requested at start.
+* `src/hardware/native/bridge.ts` adapts the app to the existing caller ID and printer providers. The phone screen and stores are unchanged (§62).
+* **Parser checked against CallerID.com's official Ethernet Link manual.** Records are read from the 21st character, as the manual says, not from the first `$`, which it warns is unreliable. The manual's own example records are unit tests. Detail records (ring / off-hook / on-hook) are ignored.
 * Repeated packets keep one call id. A call-back after the box reports the call ended gets a new one (§17).
-* Step-by-step build and install: **`docs/ANDROID_APP_SETUP.md`**. The Kotlin hasn't been compiled here (no Android SDK or Capacitor packages available), so expect small fixes the first time.
+* Build, install and setup: **`docs/ANDROID_APP_SETUP.md`**.
 
 ## Phase 9: Store pilot (prepared)
 

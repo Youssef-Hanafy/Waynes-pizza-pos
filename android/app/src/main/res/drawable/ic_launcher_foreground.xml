@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A pizza slice on Wayne's green, drawn inside the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#F2C14E" android:pathData="M54,30 L77,70 Q54,78 31,70 Z" />
+    <path android:fillColor="#B7791F" android:pathData="M31,70 Q54,78 77,70 L79,75 Q54,84 29,75 Z" />
+    <path android:fillColor="#C0392B" android:pathData="M50,50 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+    <path android:fillColor="#C0392B" android:pathData="M42,63 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+    <path android:fillColor="#C0392B" android:pathData="M57,64 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+</vector>

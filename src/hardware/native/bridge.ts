@@ -2,15 +2,16 @@ import { parseWhozzCallingRecord } from "@/lib/phone/schemas";
 
 /**
  * The contract between the POS and the Wayne's POS Android app (build sheet
- * §19, §52, §59, §62).  The app adds two small native plugins and nothing
- * else; every screen, store and business rule stays in this web app.
+ * §19, §52, §59, §62).  The app (android/ in this repo) is a full-screen
+ * WebView of this website plus two native abilities, exposed to the page as
+ * window.WaynesAndroid; every screen, store and business rule stays here.
  *
- *   WaynesCallerId  (native)  UDP socket on the configured port → raw packet text
- *   WaynesPrinter   (native)  bytes → TCP socket at the printer's IP:port
+ *   caller ID  (native)  UDP socket on the configured port → raw packet text
+ *   printer    (native)  bytes → TCP socket at the printer's IP:port
  *
- * installNativeBridge() adapts those plugins to window.WaynesNativeHardware,
- * which the Android caller ID provider and the network printer provider use.
- * In an ordinary browser the plugins are absent and nothing is installed.
+ * installNativeBridge() adapts those to window.WaynesNativeHardware, which the
+ * Android caller ID provider and the network printer provider use.  In an
+ * ordinary browser window.WaynesAndroid is absent and nothing is installed.
  *
  * CallerID.com records are parsed HERE, in one place, with the parser checked
  * against the official Ethernet Link manual (see parseWhozzCallingRecord) — the
@@ -30,21 +31,26 @@ export type NativePrinterBridge = {
   send(options: { host: string; port: number; data: string; timeoutMs?: number }): Promise<void>;
 };
 
+/** What the Android app puts on the page (android/app/src/main/java/com/waynespizza/pos/NativeBridge.java). */
+export type WaynesAndroidInterface = {
+  info(): string;
+  printerSend(callId: string, host: string, port: number, base64: string, timeoutMs: number): void;
+  callerIdStart(callId: string, port: number, bindAddress: string, deviceIp: string): void;
+  callerIdStop(callId: string): void;
+  callerIdStatus(): string;
+};
+
 declare global {
   interface Window {
     WaynesNativeHardware?: { callerId?: NativeCallerIdBridge; printer?: NativePrinterBridge };
-    Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, unknown> };
+    WaynesAndroid?: WaynesAndroidInterface;
+    /** The app calls these back from native threads. */
+    __waynesNativeResult?: (callId: string, ok: boolean, code: string, message: string) => void;
+    __waynesNativePacket?: (text: string, from: string, receivedAt: number) => void;
   }
 }
 
-type Listener = { remove: () => Promise<void> | void };
-type CapacitorCallerIdPlugin = {
-  start(options: { port: number; bindAddress: string; deviceIp?: string }): Promise<void>;
-  stop(): Promise<void>;
-  status(): Promise<{ state: "listening" | "stopped" | "permission_denied" | "error"; detail?: string }>;
-  addListener(event: "packet", callback: (packet: { text: string; from: string; receivedAt: number }) => void): Promise<Listener> | Listener;
-};
-type CapacitorPrinterPlugin = { send(options: { host: string; port: number; data: string; timeoutMs?: number }): Promise<void> };
+type NativeError = Error & { code?: string };
 
 /**
  * Turns raw packets into calls, deduplicating the way the build sheet asks
@@ -77,31 +83,82 @@ export function createPacketInterpreter() {
   };
 }
 
-export function installNativeBridge(): boolean {
-  if (typeof window === "undefined" || !window.Capacitor?.isNativePlatform?.()) return false;
-  const plugins = window.Capacitor.Plugins ?? {};
-  const callerPlugin = plugins.WaynesCallerId as CapacitorCallerIdPlugin | undefined;
-  const printerPlugin = plugins.WaynesPrinter as CapacitorPrinterPlugin | undefined;
-  const hardware: NonNullable<Window["WaynesNativeHardware"]> = {};
+/**
+ * Adapts window.WaynesAndroid (synchronous calls, answers delivered later
+ * through window.__waynesNativeResult) to promise-based bridges.
+ */
+export function createAndroidHardware(android: WaynesAndroidInterface, target: Window) {
+  let sequence = 0;
+  const pending = new Map<string, { resolve: () => void; reject: (error: NativeError) => void }>();
+  const packetListeners = new Set<(text: string, from: string, receivedAt: number) => void>();
+  target.__waynesNativeResult = (callId, ok, code, message) => {
+    const waiting = pending.get(callId);
+    if (!waiting) return;
+    pending.delete(callId);
+    if (ok) waiting.resolve();
+    else waiting.reject(Object.assign(new Error(message || "The device did not answer."), { code }));
+  };
+  target.__waynesNativePacket = (text, from, receivedAt) => {
+    for (const listener of [...packetListeners]) listener(text, from, receivedAt);
+  };
+  const call = (start: (callId: string) => void, timeoutMs: number) => new Promise<void>((resolve, reject) => {
+    sequence += 1;
+    const callId = `c${Date.now().toString(36)}${sequence}`;
+    const timer = setTimeout(() => {
+      if (!pending.delete(callId)) return;
+      // The app never answered: treat the outcome as unknown, not as "not sent".
+      reject(Object.assign(new Error("The Wayne's POS app did not answer in time."), { code: "TIMEOUT" }));
+    }, timeoutMs);
+    pending.set(callId, {
+      resolve: () => { clearTimeout(timer); resolve(); },
+      reject: (error) => { clearTimeout(timer); reject(error); },
+    });
+    try {
+      start(callId);
+    } catch (error) {
+      pending.delete(callId);
+      clearTimeout(timer);
+      reject(Object.assign(new Error(error instanceof Error ? error.message : "The app refused the request."), { code: "NOT_CONNECTED" }));
+    }
+  });
 
-  if (callerPlugin) {
-    const interpret = createPacketInterpreter();
-    hardware.callerId = {
-      start: (options) => callerPlugin.start(options),
-      stop: () => callerPlugin.stop(),
-      status: () => callerPlugin.status(),
-      onCall(callback) {
-        let handle: Listener | null = null;
-        let cancelled = false;
-        void Promise.resolve(callerPlugin.addListener("packet", (packet) => {
-          const call = interpret(packet.text, packet.from, packet.receivedAt);
-          if (call) callback(call);
-        })).then((listener) => { if (cancelled) void listener.remove(); else handle = listener; });
-        return () => { cancelled = true; if (handle) void handle.remove(); };
+  const interpret = createPacketInterpreter();
+  const hardware: NonNullable<Window["WaynesNativeHardware"]> = {
+    printer: {
+      send: ({ host, port, data, timeoutMs = 8000 }) => call((id) => android.printerSend(id, host, port, data, timeoutMs), timeoutMs + 5000),
+    },
+    callerId: {
+      start: ({ port, bindAddress, deviceIp }) => call((id) => android.callerIdStart(id, port, bindAddress, deviceIp ?? ""), 60_000),
+      stop: () => call((id) => android.callerIdStop(id), 10_000),
+      async status() {
+        try {
+          const parsed = JSON.parse(android.callerIdStatus()) as { state?: string; detail?: string };
+          const state = parsed.state === "listening" || parsed.state === "permission_denied" || parsed.state === "error" ? parsed.state : "stopped";
+          return { state, detail: parsed.detail };
+        } catch {
+          return { state: "error" as const, detail: "The app's caller ID status could not be read." };
+        }
       },
-    };
+      onCall(callback) {
+        const listener = (text: string, from: string, receivedAt: number) => {
+          const found = interpret(text, from, receivedAt);
+          if (found) callback(found);
+        };
+        packetListeners.add(listener);
+        return () => { packetListeners.delete(listener); };
+      },
+    },
+  };
+  return hardware;
+}
+
+let installed = false;
+
+export function installNativeBridge(): boolean {
+  if (typeof window === "undefined" || !window.WaynesAndroid) return false;
+  if (!installed || !window.WaynesNativeHardware) {
+    window.WaynesNativeHardware = createAndroidHardware(window.WaynesAndroid, window);
+    installed = true;
   }
-  if (printerPlugin) hardware.printer = { send: (options) => printerPlugin.send(options) };
-  window.WaynesNativeHardware = hardware;
   return true;
 }
