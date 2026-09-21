@@ -17,8 +17,10 @@ Both are already filled in under **Admin → Hardware**, switched **off**, becau
 
 Thrive still prints to these printers, so **only read the addresses. Don't change them.**
 
-* **TM-T20III (front):** with the printer on and idle, press the small button on the back next to the network port once. It prints a status sheet. The IP address is on it. If nothing prints: turn the printer off, hold **FEED**, turn it on, and let go when it starts printing (self-test).
-* **TM-U220B (kitchen):** press the small push button on the **UB-E04 card** on the back (a short press). It prints the network status sheet with the IP address.
+The button on both printers is a **small hole on the back, next to where the network (blue) cable plugs in**, pressed with a pen tip or paperclip. With the printer **already on and idle**, hold it for **3 seconds or more**. Never hold it while switching the printer on: on the kitchen printer's UB-E04 card, that resets the network settings to factory defaults.
+
+* **TM-T20III (front):** with the roll paper cover closed, hold the *status sheet* button next to the network port for 3+ seconds. It prints the network status sheet with the IP address.
+* **TM-U220B (kitchen):** the button is on the **UB-E04 card** plate (the one with the network port and two small lights). Hold it for 3+ seconds. It prints the status sheet with the IP address.
 * Or look in the router's DHCP leases for Epson devices. The kitchen card's MAC address is `50:57:9C:58:F4:CE`.
 * If a sheet shows `192.168.192.168`, the printer didn't get an address from the router (Epson's factory default). Tell Youssef before going further.
 
