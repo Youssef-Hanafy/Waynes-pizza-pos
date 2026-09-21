@@ -12,6 +12,8 @@ import { useHardwareState } from "@/stores/hardware-store";
 import { orderActions, useDrafts } from "@/stores/order-store";
 import { getTerminalLabel, phoneActions, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
+import { setPrintStationDevice, usePrintStation, type StationLane } from "@/stores/print-station";
+import { usePrintStationRunner } from "@/stores/use-print-station";
 import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
 import { CustomersScreen } from "./customers-screen";
@@ -54,6 +56,7 @@ export function PosApp(props: Props) {
   const heldCount = drafts.filter((draft) => draft.held).length;
 
   const runtimeReady = useHardware(hardware);
+  const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
   const { notices } = useSyncState();
   const pendingCount = drafts.filter((draft) => draft.submitPending).length;
@@ -88,7 +91,8 @@ export function PosApp(props: Props) {
     ? `No internet — tickets are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : ""}`
     : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
     : callerStatus && ["error", "unavailable"].includes(callerStatus.state) ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
-    : syncStatus && syncStatus.state === "disconnected" && runtimeReady ? "Live phone updates reconnecting" : "";
+    : syncStatus && syncStatus.state === "disconnected" && runtimeReady ? "Live phone updates reconnecting"
+    : printStationWarning(printStation);
 
   const tabs: { id: Section; label: string }[] = [
     { id: "order", label: heldCount ? `New Order · ${heldCount} held` : "New Order" },
@@ -120,6 +124,34 @@ export function PosApp(props: Props) {
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
+}
+
+const laneNames: Record<StationLane, string> = { kitchen: "Kitchen printer", receipt: "Receipt printer" };
+
+/** The print station register shouts when a printer stops answering: tickets are waiting. */
+function printStationWarning(station: ReturnType<typeof usePrintStation>) {
+  if (!station.enabled) return "";
+  for (const name of ["kitchen", "receipt"] as const) {
+    const lane = station.lanes[name];
+    if (lane.state === "waiting_printer" || lane.state === "error") return `${laneNames[name]}: ${lane.detail}`;
+  }
+  return "";
+}
+
+function PrintStationSection() {
+  const station = usePrintStation();
+  return <section className="rounded-3xl bg-white p-5 shadow-sm">
+    <h2 className="text-xl font-black">Print station</h2>
+    <p className="mt-1 text-sm text-wayne-muted">Switch this on for <strong>one</strong> register only: the Wayne&apos;s POS app at the counter. It prints a kitchen ticket for every order and the order slip + tip &amp; signature slip for every online order, as they come in. Keep that register on and signed in during opening hours.</p>
+    <label className="mt-3 flex min-h-11 items-center gap-3 text-base font-black"><input checked={station.enabled} className="h-6 w-6" onChange={(event) => setPrintStationDevice(event.target.checked)} type="checkbox" />This register is the print station</label>
+    {station.enabled ? <ul className="mt-2 divide-y divide-wayne-border">
+      {(["kitchen", "receipt"] as const).map((name) => {
+        const lane = station.lanes[name];
+        const label = { off: "Off", ready: "✓ Ready", printing: "✓ Printing", waiting_printer: "⚠ Waiting for printer", error: "⚠ Problem" }[lane.state];
+        return <li className="flex flex-wrap justify-between gap-3 py-2" key={name}><span className="font-bold">{laneNames[name]}</span><span className="text-right text-sm"><strong>{label}</strong>{lane.printed ? ` · ${lane.printed} printed` : ""}{lane.detail ? <span className="block text-wayne-muted">{lane.detail}</span> : null}</span></li>;
+      })}
+    </ul> : null}
+  </section>;
 }
 
 const deviceNames: Record<string, string> = {
@@ -158,6 +190,7 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
         <p className="mt-3 text-sm text-wayne-muted">Caller ID provider: <strong>{hardware.caller_id_provider === "simulated" ? "Simulated" : hardware.caller_id_provider === "cloud" ? "Store bridge (cloud)" : "Android app"}</strong> · {hardware.caller_line_count} lines</p>
         {canManageHardware ? <Button asChild className="mt-3" variant="secondary"><Link href="/admin/hardware">Admin → Hardware</Link></Button> : null}
       </section>
+      <PrintStationSection />
       {hardware.simulator_enabled ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Test calls</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Rings a line through the same path the real caller ID box will use.</p><SimulatorPanel lineCount={hardware.caller_line_count} /></section> : null}
     </div>
   </div>;

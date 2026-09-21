@@ -36,7 +36,7 @@ export const printDocumentSchema = z.object({
 export type PrintDocument = z.infer<typeof printDocumentSchema>;
 
 export type PrintLine =
-  | { kind: "text"; text: string; align?: "left" | "center" | "right"; bold?: boolean; large?: boolean }
+  | { kind: "text"; text: string; align?: "left" | "center" | "right"; bold?: boolean; large?: boolean; highlight?: boolean }
   | { kind: "pair"; left: string; right: string; bold?: boolean; large?: boolean }
   | { kind: "rule" }
   | { kind: "feed"; lines: number };
@@ -80,9 +80,9 @@ function itemLines(item: PrintDocument["items"][number], withPrice: boolean): Pr
   for (const modifier of item.modifiers) {
     // "NO <option>" lines are the ones a cook must not miss.
     const removed = modifier.name.toUpperCase().startsWith("NO ");
-    lines.push({ kind: "text", text: `   ${removed ? modifier.name.toUpperCase() : `+ ${modifier.name}`}${modifier.quantity > 1 ? ` ×${modifier.quantity}` : ""}`, bold: removed });
+    lines.push({ kind: "text", text: `   ${removed ? modifier.name.toUpperCase() : `+ ${modifier.name}`}${modifier.quantity > 1 ? ` ×${modifier.quantity}` : ""}`, bold: removed, highlight: removed });
   }
-  if (item.instructions) lines.push({ kind: "text", text: `   Note: ${item.instructions}`, bold: true });
+  if (item.instructions) lines.push({ kind: "text", text: `   Note: ${item.instructions}`, bold: true, highlight: true });
   return lines;
 }
 
@@ -114,6 +114,62 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
   return { title: `Receipt ${order.order_number}`, lines };
 }
 
+/**
+ * Online order slip (receipt printer): the full receipt under a banner that
+ * can't be mistaken for a register receipt.  It goes in the bag / to the driver.
+ */
+export function buildOnlineOrderSlip(doc: PrintDocument): PrintLayout {
+  const receipt = buildReceipt(doc);
+  return {
+    title: `Online order ${doc.order.order_number}`,
+    lines: [
+      { kind: "text", text: "*** ONLINE ORDER ***", align: "center", bold: true, large: true },
+      { kind: "feed", lines: 1 },
+      ...receipt.lines,
+    ],
+  };
+}
+
+/**
+ * Tip & signature slip (receipt printer): the copy the customer or driver
+ * signs, with blank Tip and Total lines — what Wayne's printer produces for
+ * every online order today.  A tip already added online is shown, and the
+ * blank line is then for anything extra.
+ */
+export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
+  const store = doc.store;
+  const order = doc.order;
+  const lines: PrintLine[] = [
+    { kind: "text", text: store.name, align: "center", bold: true, large: true },
+    { kind: "text", text: store.address_line1, align: "center" },
+    { kind: "text", text: `${store.city}, ${store.state} ${store.postal_code}`, align: "center" },
+    { kind: "rule" },
+    { kind: "text", text: "TIP & SIGNATURE - STORE COPY", align: "center", bold: true },
+    ...heading(doc),
+    { kind: "rule" },
+    { kind: "pair", left: "Subtotal", right: money(order.subtotal_cents) },
+  ];
+  if (order.discount_cents) lines.push({ kind: "pair", left: "Discount", right: money(-order.discount_cents) });
+  if (order.delivery_fee_cents) lines.push({ kind: "pair", left: "Delivery fee", right: money(order.delivery_fee_cents) });
+  lines.push({ kind: "pair", left: "Tax", right: money(order.tax_cents) });
+  if (order.tip_cents) lines.push({ kind: "pair", left: "Tip added online", right: money(order.tip_cents) });
+  lines.push(
+    { kind: "pair", left: "AMOUNT", right: money(order.total_cents), bold: true, large: true },
+    { kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type), align: "center", bold: true },
+    { kind: "feed", lines: 2 },
+    { kind: "pair", left: order.tip_cents ? "Extra tip:" : "Tip:", right: "______________", bold: true },
+    { kind: "feed", lines: 2 },
+    { kind: "pair", left: "Total:", right: "______________", bold: true },
+    { kind: "feed", lines: 3 },
+    { kind: "text", text: "X______________________________" },
+    { kind: "text", text: order.customer_name || "Signature", align: "center" },
+    { kind: "feed", lines: 1 },
+    { kind: "text", text: "I agree to pay the above total amount.", align: "center" },
+    { kind: "feed", lines: 3 },
+  );
+  return { title: `Tip & signature ${order.order_number}`, lines };
+}
+
 function paymentLine(method: string, status: string, fulfillment: string) {
   if (status === "paid") return method === "cash" ? "PAID — CASH" : "PAID";
   if (method === "test_manual") return "TEST / MANUAL — NOT PAID";
@@ -141,14 +197,20 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
       ...heading(doc),
       { kind: "rule" },
       ...items.flatMap((item) => [...itemLines(item, false), { kind: "feed" as const, lines: 1 }]),
-      ...(doc.order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${doc.order.special_instructions}`, bold: true }] : []),
+      ...(doc.order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${doc.order.special_instructions}`, bold: true, highlight: true }] : []),
       { kind: "feed", lines: 3 },
     ],
   };
 }
 
 /** A fixed test page for Admin → Hardware → Test print. */
-export function buildTestPage(printerName: string, now = new Date()): PrintLayout {
+function ruler(columns: number) {
+  let text = "";
+  for (let index = 1; index <= columns; index += 1) text += index % 10 === 0 ? String((index / 10) % 10) : index % 5 === 0 ? "+" : "-";
+  return text;
+}
+
+export function buildTestPage(printerName: string, now = new Date(), columns = 42): PrintLayout {
   return {
     title: "Test print",
     lines: [
@@ -162,6 +224,10 @@ export function buildTestPage(printerName: string, now = new Date()): PrintLayou
       { kind: "text", text: "Right", align: "right" },
       { kind: "text", text: "Bold line", bold: true },
       { kind: "text", text: "LARGE LINE", large: true },
+      { kind: "text", text: "NO ONIONS (red with a black/red ribbon)", bold: true, highlight: true },
+      { kind: "rule" },
+      { kind: "text", text: "Line width ruler (should fill one line):" },
+      { kind: "text", text: ruler(columns) },
       { kind: "rule" },
       { kind: "text", text: "If every line above is readable, the printer is set up.", align: "center" },
       { kind: "feed", lines: 3 },

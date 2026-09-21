@@ -65,7 +65,8 @@ export type HardwareEvent =
 
 export type PrintResult =
   | { ok: true; jobId?: string }
-  | { ok: false; reason: string };
+  /** notSent: certain that nothing reached the printer (safe to retry without a duplicate). */
+  | { ok: false; reason: string; notSent?: boolean };
 
 export type PaymentRequest = { orderId: string; orderNumber: string; amountCents: number };
 

@@ -6,6 +6,8 @@ export type PrinterJob = {
   payload: Record<string, unknown>;
   attempts: number;
   lease_token: string;
+  /** When the job was queued (the print station holds back anything too old). */
+  created_at?: string;
 };
 
 export type PrinterReceipt = { receiptId?: string };

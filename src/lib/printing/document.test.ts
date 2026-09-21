@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { encodeDrawerKick, encodeEscPos } from "@/hardware/printers/escpos";
 import { renderLayoutHtml } from "@/hardware/printers/render-html";
-import { buildKitchenTicket, buildReceipt, buildTestPage, layoutToText, routeToKitchen, type PrintDocument } from "./document";
+import { columnsFor, printerModel } from "@/hardware/printers/models";
+import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, layoutToText, routeToKitchen, type PrintDocument } from "./document";
 
 const doc: PrintDocument = {
   store: { name: "Wayne's Pizza", address_line1: "93 West Boylston St", address_line2: "", city: "Worcester", state: "MA", postal_code: "01606", phone: "5085551000", timezone: "America/New_York" },
@@ -60,5 +61,47 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("keeps long lines inside the paper", () => {
     const lines = layoutToText({ title: "t", lines: [{ kind: "text", text: "A very long delivery instruction that goes on and on past the edge of the paper" }] }, 32);
     expect(lines.every((line) => line.length <= 32)).toBe(true);
+  });
+
+  it("prints online orders as a bannered slip and a tip & signature slip", () => {
+    const online = { ...doc, order: { ...doc.order, source: "online", payment_method: "card", payment_status: "paid", tip_cents: 300, total_cents: 3699 } };
+    const slip = layoutToText(buildOnlineOrderSlip(online), 48).join("\n");
+    expect(slip).toContain("*** ONLINE ORDER ***");
+    expect(slip).toContain("DELIVERY · ONLINE");
+    expect(slip).toMatch(/TOTAL\s+\$36\.99/);
+    const tip = layoutToText(buildTipSignatureSlip(online), 48);
+    const text = tip.join("\n");
+    expect(text).toContain("TIP & SIGNATURE - STORE COPY");
+    expect(text).toMatch(/Tip added online\s+\$3\.00/);
+    expect(text).toMatch(/Extra tip:\s+_+/);
+    expect(text).toMatch(/Total:\s+_+/);
+    expect(text).toContain("X____");
+    expect(text).toContain("PAID");
+    expect(tip.every((line) => line.length <= 48)).toBe(true);
+    const noTip = layoutToText(buildTipSignatureSlip({ ...online, order: { ...online.order, tip_cents: 0 } }), 48).join("\n");
+    expect(noTip).toMatch(/\nTip:\s+_+/);
+  });
+
+  it("knows Wayne's two Epson printers", () => {
+    const thermal = printerModel("epson-tm-t20iii");
+    const impact = printerModel("epson-tm-u220b");
+    expect(columnsFor(thermal, 80, null)).toBe(48);
+    expect(columnsFor(impact, 76, null)).toBe(40);
+    expect(columnsFor(impact, 76, 42)).toBe(42);
+    expect(columnsFor(printerModel("unknown"), 58, null)).toBe(32);
+    const test = layoutToText(buildTestPage("Kitchen", new Date(), 40), 40);
+    expect(test).toContain("----+----1----+----2----+----3----+----4");
+  });
+
+  it("cuts the TM-U220B after feeding past its cutter, and prints NO lines in red with a two-colour ribbon", () => {
+    const layout = buildKitchenTicket(doc)!;
+    const impact = Array.from(encodeEscPos(layout, { columns: 40, cut: "feed_then_cut", feedBeforeCut: 4, red: true }));
+    expect(impact.slice(-6)).toEqual([0x1b, 0x64, 4, 0x1d, 0x56, 1]);
+    const text = String.fromCharCode(...impact);
+    const noLine = text.indexOf("NO ONIONS");
+    expect(text.lastIndexOf("\x1br\x01", noLine)).toBeGreaterThan(text.lastIndexOf("\x1br\x00", noLine));
+    const black = Array.from(encodeEscPos(layout, { columns: 40, cut: "feed_then_cut" }));
+    expect(String.fromCharCode(...black)).not.toContain("\x1br\x01");
+    expect(Array.from(encodeEscPos(layout, { cut: "none" })).slice(-3)).not.toEqual([0x1d, 0x56, 1]);
   });
 });

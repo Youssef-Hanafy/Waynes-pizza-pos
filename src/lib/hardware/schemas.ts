@@ -12,6 +12,11 @@ const printerSchema = z.object({
   enabled: z.boolean().optional().default(false),
   routing_categories: z.array(z.string().max(80)).optional().default([]),
   paper_width_mm: z.number().int().optional(),
+  model_key: z.string().max(40).optional(),
+  columns: z.number().int().nullable().optional(),
+  two_color: z.boolean().optional(),
+  online_order_slips: z.boolean().optional(),
+  tip_slip: z.string().max(10).optional(),
 });
 
 /** How a printer is spoken to. Nothing is assumed until the owner picks one for a confirmed model (§2.7). */
@@ -54,6 +59,17 @@ export const defaultHardwareSettings: HardwareSettings = {
 
 const ipLike = /^$|^(\d{1,3}\.){3}\d{1,3}$/;
 
+export const printerModelKeySchema = z.enum(["epson-tm-t20iii", "epson-tm-u220b", "generic"]);
+const paperWidthSchema = z.union([z.literal(58), z.literal(76), z.literal(80)]);
+/** Characters per line; blank = the model's default. */
+const columnsSchema = z.number().int().min(24, "At least 24 characters per line.").max(64, "At most 64 characters per line.").nullable();
+
+/** A printer can be saved half set up (no IP yet); it just can't be switched on until it has an address. */
+function networkReady(printer: { protocol: string; enabled: boolean; ip: string; port: number | null }) {
+  return !(printer.enabled && printer.protocol === "escpos") || Boolean(printer.ip && printer.port);
+}
+const networkMessage = (which: string) => `To turn the ${which} printer on, enter its IP address and port (9100 for Epson).`;
+
 /** What the owner can change on Admin → Hardware. Validated before the database sees it. */
 export const hardwareSettingsFormSchema = z.object({
   caller_id_provider: callerIdProviderSchema,
@@ -65,18 +81,19 @@ export const hardwareSettingsFormSchema = z.object({
   call_expire_minutes: z.coerce.number().int().min(1, "At least one minute.").max(240, "At most four hours."),
   simulator_enabled: z.boolean(),
   receipt_printer: z.object({
-    name: z.string().trim().max(80), model: z.string().trim().max(120),
+    name: z.string().trim().max(80), model: z.string().trim().max(120), model_key: printerModelKeySchema,
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
     port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
-    paper_width_mm: z.union([z.literal(58), z.literal(80)]),
-  }).refine((printer) => printer.protocol !== "escpos" || (printer.model && printer.ip && printer.port), { message: "ESC/POS needs the confirmed printer model, its IP address and port (usually 9100)." }),
+    paper_width_mm: paperWidthSchema, columns: columnsSchema,
+    online_order_slips: z.boolean(), tip_slip: z.enum(["always", "card", "never"]),
+  }).refine(networkReady, { message: networkMessage("receipt") }),
   kitchen_printer: z.object({
-    name: z.string().trim().max(80), model: z.string().trim().max(120),
+    name: z.string().trim().max(80), model: z.string().trim().max(120), model_key: printerModelKeySchema,
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
     port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
-    paper_width_mm: z.union([z.literal(58), z.literal(80)]),
+    paper_width_mm: paperWidthSchema, columns: columnsSchema, two_color: z.boolean(),
     routing_categories: z.array(z.string().trim().max(80)).max(40),
-  }).refine((printer) => printer.protocol !== "escpos" || (printer.model && printer.ip && printer.port), { message: "ESC/POS needs the confirmed printer model, its IP address and port (usually 9100)." }),
+  }).refine(networkReady, { message: networkMessage("kitchen") }),
   cash_drawer: z.object({ connection: z.enum(["none", "receipt_printer"]), model: z.string().trim().max(120) }),
 });
 export type HardwareSettingsForm = z.infer<typeof hardwareSettingsFormSchema>;

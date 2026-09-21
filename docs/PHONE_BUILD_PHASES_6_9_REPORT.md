@@ -23,7 +23,9 @@ The sheet ends at Phase 9. Phase 6 is fully built. Phases 7–9 are prepared as 
 * **Failures are reported, never hidden.** No provider claims a print that didn't happen. The print dialog only reports that it opened.
 * Kitchen tickets keep printing through the existing print queue in the meantime.
 
-**Needed from you:** exact receipt and kitchen printer models, how each connects (Ethernet/USB), IP addresses, and paper width. Then choose the protocol in Admin → Hardware and tick *Printing* on the pilot page.
+**Update: printers confirmed from photos.** Front: Epson TM-T20III L (thermal, Ethernet, cash drawer on its DK port). It prints receipts, every online order slip, and the tip & signature slip. Kitchen: Epson TM-U220B with a UB-E04 Ethernet card (impact). It prints kitchen tickets only. Both are ESC/POS on port 9100 and are pre-filled in Admin → Hardware, switched off until their IPs are entered. Automatic printing runs on the one register switched to **Print station**. Setup steps: **`docs/PRINTER_SETUP.md`**. Migrations `20260923080000_store_printers_print_station.sql` and `20260923090000_print_station_release.sql` (applied to live).
+
+**Still needed from you:** the two printers' IP addresses (see PRINTER_SETUP.md §1).
 
 ## Phase 8: Native Android app (prepared, build on the Mac)
 

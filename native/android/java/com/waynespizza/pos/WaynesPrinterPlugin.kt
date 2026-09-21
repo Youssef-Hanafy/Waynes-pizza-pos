@@ -36,18 +36,28 @@ class WaynesPrinterPlugin : Plugin() {
             return
         }
         worker.execute {
+            val socket = Socket()
             try {
-                Socket().use { socket ->
+                try {
                     socket.connect(InetSocketAddress(host, port), timeout)
+                } catch (error: Exception) {
+                    // Nothing was sent: the web app may safely retry this print.
+                    call.reject("Printer $host:$port is not answering (${error.message ?: "no connection"}). Check it is on and plugged into the network.", "NOT_CONNECTED")
+                    return@execute
+                }
+                try {
                     socket.soTimeout = timeout
                     socket.getOutputStream().apply {
                         write(Base64.decode(data, Base64.DEFAULT))
                         flush()
                     }
+                    call.resolve()
+                } catch (error: Exception) {
+                    // The connection opened, so part of the job may have printed.
+                    call.reject("Printer $host:$port stopped mid-print: ${error.message ?: "unknown error"}. Check the paper before reprinting.", "SEND_INTERRUPTED")
                 }
-                call.resolve()
-            } catch (error: Exception) {
-                call.reject("Printer $host:$port did not answer: ${error.message ?: "unknown error"}")
+            } finally {
+                try { socket.close() } catch (_: Exception) {}
             }
         }
     }

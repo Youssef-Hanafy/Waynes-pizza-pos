@@ -1,6 +1,7 @@
-import { buildKitchenTicket, buildReceipt, buildTestPage, printDocumentSchema, type PrintDocument, type PrintLayout } from "@/lib/printing/document";
+import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, printDocumentSchema, type PrintDocument, type PrintLayout } from "@/lib/printing/document";
 import { status, type HardwareStatus, type PrintResult } from "../types";
 import { encodeEscPos } from "./escpos";
+import { columnsFor, printerModel } from "./models";
 import { renderLayoutHtml } from "./render-html";
 
 /**
@@ -17,6 +18,10 @@ export interface PrinterProvider {
   printReceipt(orderId: string): Promise<PrintResult>;
   printKitchenTicket(orderId: string): Promise<PrintResult>;
   printTest(): Promise<PrintResult>;
+  /** Online order: the order slip, then (if asked) the tip & signature slip. */
+  printOnlineOrder(orderId: string, options: { tipSlip: boolean }): Promise<PrintResult>;
+  /** Any layout, already built (the print station uses this). */
+  printLayout(layout: PrintLayout): Promise<PrintResult>;
 }
 
 /** One printer as saved in Admin → Hardware. */
@@ -30,6 +35,15 @@ export type PrinterConfig = {
   enabled: boolean;
   paperWidthMm: number;
   routingCategories: string[];
+  /** A key from ./models ("epson-tm-t20iii", "epson-tm-u220b", "generic"). */
+  modelKey: string;
+  /** Characters per line if the owner overrode the model's default. */
+  columns: number | null;
+  /** A black/red ribbon is fitted (impact printers). */
+  twoColor: boolean;
+  /** Receipt printer: what prints for every online order. */
+  onlineOrderSlips: boolean;
+  tipSlip: "always" | "card" | "never";
 };
 
 export function nativePrinter() {
@@ -50,8 +64,20 @@ function toBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+/**
+ * The bytes may have reached the printer (the connection opened, then broke).
+ * Anything else that fails — loading the order, no address, the printer
+ * refusing the connection — is certain not to have printed.
+ */
+export class PrintOutcomeUnknownError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PrintOutcomeUnknownError";
+  }
+}
+
 function failure(error: unknown, fallback: string): PrintResult {
-  return { ok: false, reason: error instanceof Error ? error.message : fallback };
+  return { ok: false, reason: error instanceof Error ? error.message : fallback, notSent: !(error instanceof PrintOutcomeUnknownError) };
 }
 
 abstract class LayoutPrinter implements PrinterProvider {
@@ -66,13 +92,32 @@ abstract class LayoutPrinter implements PrinterProvider {
   async printKitchenTicket(orderId: string) {
     try {
       const ticket = buildKitchenTicket(await fetchPrintDocument(orderId), this.config.routingCategories);
-      if (!ticket) return { ok: false as const, reason: "Nothing on this order is routed to the kitchen printer." };
+      if (!ticket) return { ok: false as const, reason: "Nothing on this order is routed to the kitchen printer.", notSent: true };
       return await this.output(ticket);
     } catch (error) { return failure(error, "The kitchen ticket could not be printed."); }
   }
 
   async printTest() {
-    try { return await this.output(buildTestPage(this.config.name || this.label)); } catch (error) { return failure(error, "The test page could not be printed."); }
+    try { return await this.output(buildTestPage(this.config.name || this.label, new Date(), this.columns())); } catch (error) { return failure(error, "The test page could not be printed."); }
+  }
+
+  async printOnlineOrder(orderId: string, options: { tipSlip: boolean }) {
+    try {
+      const doc = await fetchPrintDocument(orderId);
+      const slip = await this.output(buildOnlineOrderSlip(doc));
+      if (!slip.ok || !options.tipSlip) return slip;
+      const tip = await this.output(buildTipSignatureSlip(doc));
+      // The order slip is already out: never report this as safe to reprint.
+      return tip.ok ? tip : { ok: false, reason: `Order slip printed, tip & signature slip did not: ${tip.reason}`, notSent: false };
+    } catch (error) { return failure(error, "The online order could not be printed."); }
+  }
+
+  async printLayout(layout: PrintLayout) {
+    try { return await this.output(layout); } catch (error) { return failure(error, "It could not be printed."); }
+  }
+
+  protected columns() {
+    return columnsFor(printerModel(this.config.modelKey), this.config.paperWidthMm, this.config.columns);
   }
 }
 
@@ -86,7 +131,7 @@ export class BrowserPrintProvider extends LayoutPrinter {
   }
 
   protected async output(layout: PrintLayout): Promise<PrintResult> {
-    if (typeof document === "undefined") return { ok: false, reason: "Printing needs a screen." };
+    if (typeof document === "undefined") return { ok: false, reason: "Printing needs a screen.", notSent: true };
     const frame = document.createElement("iframe");
     frame.setAttribute("aria-hidden", "true");
     frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
@@ -112,15 +157,26 @@ export class NativeEscPosPrinterProvider extends LayoutPrinter {
   async getStatus() {
     if (!this.config.ip || !this.config.port) return status("not_configured", "Not configured", `${this.label}: enter its IP address and port.`);
     if (!nativePrinter()) return status("unavailable", "Needs the app", `${this.label} at ${this.config.ip}:${this.config.port} is reached by the Wayne's POS Android app; a browser cannot open a printer socket.`);
-    return status("connected", "Ready", `${this.config.model || "ESC/POS"} at ${this.config.ip}:${this.config.port}`);
+    return status("connected", "Ready", `${this.config.model || printerModel(this.config.modelKey).label} at ${this.config.ip}:${this.config.port}`);
   }
 
   protected async output(layout: PrintLayout): Promise<PrintResult> {
     const bridge = nativePrinter();
-    if (!bridge) return { ok: false, reason: `${this.label} can only be reached from the Wayne's POS Android app.` };
-    if (!this.config.ip || !this.config.port) return { ok: false, reason: `${this.label} has no IP address or port.` };
-    const columns = this.config.paperWidthMm <= 58 ? 32 : 42;
-    await bridge.send({ host: this.config.ip, port: this.config.port, data: toBase64(encodeEscPos(layout, { columns })), timeoutMs: 8000 });
+    if (!bridge) return { ok: false, reason: `${this.label} can only be reached from the Wayne's POS Android app.`, notSent: true };
+    if (!this.config.ip || !this.config.port) return { ok: false, reason: `${this.label} has no IP address or port.`, notSent: true };
+    const model = printerModel(this.config.modelKey);
+    const data = toBase64(encodeEscPos(layout, {
+      columns: this.columns(), cut: model.cut, feedBeforeCut: model.feedBeforeCut, red: model.supportsRed && this.config.twoColor,
+    }));
+    // Impact printers are slow; the socket only has to accept the bytes, but give it room.
+    try {
+      await bridge.send({ host: this.config.ip, port: this.config.port, data, timeoutMs: model.kind === "impact" ? 15_000 : 8000 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${this.label} did not answer.`;
+      // The app says NOT_CONNECTED only when the connection never opened.
+      if ((error as { code?: unknown } | null)?.code === "NOT_CONNECTED") throw new Error(message);
+      throw new PrintOutcomeUnknownError(message);
+    }
     return { ok: true, jobId: `${this.config.ip}:${this.config.port}` };
   }
 }
@@ -140,6 +196,8 @@ export class FallbackPrinterProvider implements PrinterProvider {
   async printReceipt(orderId: string) { return (await this.pick()).printReceipt(orderId); }
   async printKitchenTicket(orderId: string) { return (await this.pick()).printKitchenTicket(orderId); }
   async printTest() { return (await this.pick()).printTest(); }
+  async printOnlineOrder(orderId: string, options: { tipSlip: boolean }) { return (await this.pick()).printOnlineOrder(orderId, options); }
+  async printLayout(layout: PrintLayout) { return (await this.pick()).printLayout(layout); }
 }
 
 /** The honest default: says it is not configured, and never claims a print. */
@@ -150,17 +208,15 @@ export class UnconfiguredPrinterProvider implements PrinterProvider {
     return status("not_configured", "Not configured", this.detail ?? `${this.label}: model and address not entered yet.`);
   }
 
-  async printReceipt(): Promise<PrintResult> {
-    return { ok: false, reason: `${this.label} is not configured.` };
+  private refuse(): PrintResult {
+    return { ok: false, reason: `${this.label} is not configured.`, notSent: true };
   }
 
-  async printKitchenTicket(): Promise<PrintResult> {
-    return { ok: false, reason: `${this.label} is not configured.` };
-  }
-
-  async printTest(): Promise<PrintResult> {
-    return { ok: false, reason: `${this.label} is not configured.` };
-  }
+  async printReceipt() { return this.refuse(); }
+  async printKitchenTicket() { return this.refuse(); }
+  async printTest() { return this.refuse(); }
+  async printOnlineOrder() { return this.refuse(); }
+  async printLayout() { return this.refuse(); }
 }
 
 /**
@@ -187,9 +243,16 @@ export function printerConfigFrom(raw: Record<string, unknown> | undefined): Pri
   const text = (key: string) => (typeof value[key] === "string" ? String(value[key]) : "");
   const port = typeof value.port === "number" && value.port > 0 && value.port <= 65535 ? value.port : null;
   const width = Number(value.paper_width_mm);
+  const columns = Number(value.columns);
+  const tipSlip = text("tip_slip");
   return {
     name: text("name"), model: text("model"), ip: text("ip"), port, protocol: text("protocol"),
-    enabled: value.enabled === true, paperWidthMm: width === 58 ? 58 : 80,
+    enabled: value.enabled === true, paperWidthMm: width === 58 ? 58 : width === 76 ? 76 : 80,
     routingCategories: Array.isArray(value.routing_categories) ? value.routing_categories.filter((entry): entry is string => typeof entry === "string") : [],
+    modelKey: printerModel(text("model_key")).key,
+    columns: Number.isInteger(columns) && columns >= 24 && columns <= 64 ? columns : null,
+    twoColor: value.two_color === true,
+    onlineOrderSlips: value.online_order_slips !== false,
+    tipSlip: tipSlip === "card" || tipSlip === "never" ? tipSlip : "always",
   };
 }

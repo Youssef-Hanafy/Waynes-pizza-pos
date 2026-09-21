@@ -12,6 +12,11 @@ function text(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
 }
 
+function columns(form: FormData, name: string) {
+  const value = text(form, name);
+  return value ? Number(value) : null;
+}
+
 function port(form: FormData, name: string) {
   const value = text(form, name);
   return value ? Number(value) : null;
@@ -30,14 +35,15 @@ export async function saveHardwareSettings(form: FormData) {
     call_expire_minutes: text(form, "call_expire_minutes"),
     simulator_enabled: form.get("simulator_enabled") === "on",
     receipt_printer: {
-      name: text(form, "receipt_name"), model: text(form, "receipt_model"), ip: text(form, "receipt_ip"),
+      name: text(form, "receipt_name"), model: text(form, "receipt_model"), model_key: text(form, "receipt_model_key") || "generic", ip: text(form, "receipt_ip"),
       port: port(form, "receipt_port"), protocol: text(form, "receipt_protocol"), enabled: form.get("receipt_enabled") === "on",
-      paper_width_mm: Number(text(form, "receipt_paper") || 80),
+      paper_width_mm: Number(text(form, "receipt_paper") || 80), columns: columns(form, "receipt_columns"),
+      online_order_slips: form.get("receipt_online_slips") === "on", tip_slip: text(form, "receipt_tip_slip") || "always",
     },
     kitchen_printer: {
-      name: text(form, "kitchen_name"), model: text(form, "kitchen_model"), ip: text(form, "kitchen_ip"),
+      name: text(form, "kitchen_name"), model: text(form, "kitchen_model"), model_key: text(form, "kitchen_model_key") || "generic", ip: text(form, "kitchen_ip"),
       port: port(form, "kitchen_port"), protocol: text(form, "kitchen_protocol"), enabled: form.get("kitchen_enabled") === "on",
-      paper_width_mm: Number(text(form, "kitchen_paper") || 80),
+      paper_width_mm: Number(text(form, "kitchen_paper") || 76), columns: columns(form, "kitchen_columns"), two_color: form.get("kitchen_two_color") === "on",
       routing_categories: form.getAll("kitchen_categories").map(String),
     },
     cash_drawer: { connection: text(form, "drawer_connection") || "none", model: text(form, "drawer_model") },
