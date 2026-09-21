@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { posCustomerSchema } from "@/lib/pos/schemas";
 
 /**
  * Caller ID for a pizza shop is a box, not an API.
@@ -116,3 +117,98 @@ export function parseWhozzCallingRecord(raw: string): {
     unit_number: unitNumber,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Phone-line build: caller events with status and claims (§15, §22, §32).
+// ---------------------------------------------------------------------------
+
+export const callStatusSchema = z.enum(["incoming", "selected", "order_started", "dismissed", "expired", "completed"]);
+export type CallStatus = z.infer<typeof callStatusSchema>;
+
+/** One ring as the server records it, with every customer its number matches. */
+export const phoneCallSchema = z.object({
+  id: z.uuid(),
+  event_key: z.string(),
+  line_number: z.number().int(),
+  device_id: z.string().optional().default(""),
+  caller_number: z.string().nullable(),
+  caller_number_raw: z.string(),
+  caller_name: z.string(),
+  started_at: z.string(),
+  surfaced_at: z.string().optional(),
+  ended_at: z.string().nullable(),
+  status: callStatusSchema,
+  simulated: z.boolean(),
+  customer_id: z.uuid().nullable(),
+  claimed_by_id: z.uuid().nullable(),
+  claimed_by_name: z.string().nullable(),
+  claimed_terminal: z.string(),
+  claimed_at: z.string().nullable(),
+  order_id: z.uuid().nullable(),
+  order_number: z.string().nullable(),
+  matches: z.array(posCustomerSchema),
+});
+export type PhoneCall = z.infer<typeof phoneCallSchema>;
+
+export const recentCallSchema = z.object({
+  id: z.uuid(),
+  event_key: z.string(),
+  line_number: z.number().int(),
+  caller_number: z.string().nullable(),
+  caller_number_raw: z.string(),
+  caller_name: z.string(),
+  started_at: z.string(),
+  status: callStatusSchema,
+  simulated: z.boolean(),
+  customer_name: z.string().nullable(),
+  order_id: z.uuid().nullable(),
+  order_number: z.string().nullable(),
+});
+export type RecentCall = z.infer<typeof recentCallSchema>;
+
+export const phoneBoardSchema = z.object({
+  expire_minutes: z.number().int(),
+  server_time: z.string(),
+  lines: z.array(z.object({
+    line_number: z.number().int(),
+    label: z.string(),
+    phone_number: z.string(),
+    call: phoneCallSchema.nullable(),
+  })),
+  recent: z.array(recentCallSchema),
+});
+export type PhoneBoard = z.infer<typeof phoneBoardSchema>;
+
+/** What an in-store provider (simulator now, Android later) reports. */
+export const posCallReportSchema = z.object({
+  event_key: z.string().trim().min(8).max(120),
+  line_number: z.number().int().min(1).max(8),
+  caller_number: z.string().trim().max(40),
+  caller_name: z.string().trim().max(80).optional().default(""),
+  device_id: z.string().trim().max(80).optional().default(""),
+  occurred_at: z.iso.datetime({ offset: true }).optional(),
+  raw_record: z.string().max(400).optional().default(""),
+  source: z.enum(["simulated", "android_native"]),
+});
+export type PosCallReport = z.input<typeof posCallReportSchema>;
+
+export const posCallRecordedSchema = z.object({
+  ok: z.boolean(),
+  duplicate: z.boolean().optional().default(false),
+  call_id: z.uuid().nullable().optional(),
+  call: phoneCallSchema.optional(),
+});
+
+export const callActionSchema = z.object({
+  action: z.enum(["claim", "release", "start_order", "dismiss", "expire", "reopen", "complete"]),
+  terminal: z.string().trim().max(60).optional().default(""),
+  force: z.boolean().optional().default(false),
+});
+export type CallAction = z.input<typeof callActionSchema>["action"];
+
+export const callActionResultSchema = z.object({
+  ok: z.boolean(),
+  reason: z.enum(["claimed", "closed"]).optional(),
+  call: phoneCallSchema,
+});
+export type CallActionResult = z.infer<typeof callActionResultSchema>;

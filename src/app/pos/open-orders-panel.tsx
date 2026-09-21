@@ -12,8 +12,12 @@ type Terminal = z.infer<typeof terminalSchema>;
 
 const labels: Record<string, string> = { placed: "New", accepted: "Accepted", in_kitchen: "Cooking", ready: "Ready", out_for_delivery: "Out for delivery" };
 
-/** Counter view of today's open orders so staff can hand food off and close tickets. */
-export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
+/**
+ * Counter view of today's open orders so staff can hand food off and close tickets.
+ * `inline` draws the list straight into a POS section (Orders, Delivery) instead
+ * of behind the header button; `fulfillment` narrows it to pickup or delivery.
+ */
+export function OpenOrdersPanel({ timeZone, inline = false, fulfillment }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery" }) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [error, setError] = useState("");
@@ -154,21 +158,20 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
     }
   }
 
-  const readyCount = orders.filter((order) => order.status === "ready").length;
+  const shown = fulfillment ? orders.filter((order) => order.fulfillment_type === fulfillment) : orders;
+  const readyCount = shown.filter((order) => order.status === "ready").length;
   const time = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
-  return <>
-    <Button onClick={() => setOpen(true)} variant="secondary">Open orders ({orders.length}){readyCount ? ` · ${readyCount} ready` : ""}</Button>
-    {open ? <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog" aria-label="Open orders">
-      <section className="h-full w-full max-w-xl overflow-y-auto bg-white p-5 text-wayne-ink shadow-2xl">
-        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">Open orders</h2><p className="text-sm text-wayne-muted">Today&apos;s tickets that are not yet picked up or delivered. Updates every 10 seconds.</p></div><Button onClick={() => setOpen(false)} variant="secondary">Close</Button></div>
+  const title = fulfillment === "delivery" ? "Deliveries" : "Open orders";
+  const body = <>
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">{title}</h2><p className="text-sm text-wayne-muted">{fulfillment === "delivery" ? "Today\u2019s delivery tickets that are not yet delivered." : "Today\u2019s tickets that are not yet picked up or delivered."} Updates every 10 seconds.</p></div>{inline ? null : <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>}</div>
         {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
         {terminals.length > 1 ? <label className="mt-4 grid gap-2 text-sm font-bold">Card reader
           <select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>
             {terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}
           </select>
         </label> : null}
-        <ul className="mt-5 grid gap-3">{orders.map((order) => {
+        <ul className={`mt-5 grid gap-3 ${inline ? "xl:grid-cols-2" : ""}`}>{shown.map((order) => {
           const handOff = nextHandOff(order.status, order.fulfillment_type);
           return <li className={`rounded-xl border p-4 ${order.status === "ready" ? "border-wayne-ok/40 bg-wayne-ok-soft" : "border-wayne-border"}`} key={order.id}>
             <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-xl">{order.order_number}</strong><p className="font-bold">{order.customer_name}</p><p className="text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · placed {time(order.placed_at)}{order.promised_at ? ` · promised ${time(order.promised_at)}` : ""}</p></div><div className="text-right"><span className="rounded-full bg-white px-3 py-1 text-sm font-black">{labels[order.status] ?? order.status}</span><p className="mt-2 font-black">{formatCents(order.total_cents)}</p><p className="text-xs capitalize text-wayne-muted">{order.payment_method.replace("_", " ")} · {order.payment_status}</p></div></div>
@@ -192,9 +195,15 @@ export function OpenOrdersPanel({ timeZone }: { timeZone: string }) {
             </div> : null}
           </li>;
         })}</ul>
-        {!orders.length && !error ? <p className="mt-6 rounded-xl border border-dashed border-wayne-border p-8 text-center text-wayne-muted">No open orders right now.</p> : null}
+        {!shown.length && !error ? <p className="mt-6 rounded-xl border border-dashed border-wayne-border p-8 text-center text-wayne-muted">{fulfillment === "delivery" ? "No deliveries out right now." : "No open orders right now."}</p> : null}
         <p className="mt-6 text-xs text-wayne-muted">Cancelling an order needs a manager: open it in Admin → Orders and use Cancel with a reason.</p>
-      </section>
+  </>;
+
+  if (inline) return <section className="text-wayne-ink">{body}</section>;
+  return <>
+    <Button onClick={() => setOpen(true)} variant="secondary">Open orders ({orders.length}){readyCount ? ` · ${readyCount} ready` : ""}</Button>
+    {open ? <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog" aria-label="Open orders">
+      <section className="h-full w-full max-w-xl overflow-y-auto bg-white p-5 text-wayne-ink shadow-2xl">{body}</section>
     </div> : null}
   </>;
 }

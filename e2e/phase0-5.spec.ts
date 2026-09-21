@@ -123,7 +123,7 @@ test.describe("Phase 0–5 staging vertical slice", () => {
     if (!walkInOrder) throw new Error("POS walk-in confirmation is missing its order number.");
 
     await pos.getByRole("button", { name: "Start new ticket" }).click();
-    await pos.getByRole("button", { name: "Phone" }).click();
+    await pos.getByRole("button", { name: "Phone order" }).click();
     await pos.getByLabel("First name").fill(`E2E Phone ${runId}`);
     await pos.getByLabel("Last name").fill("Acceptance");
     await pos.getByLabel("Phone").fill(phoneOrderPhone);
