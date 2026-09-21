@@ -152,7 +152,7 @@ function PrinterFields({ defaultPaper, namePlaceholder, prefix, printer }: { def
       <Input className="min-w-0 sm:col-span-2 lg:col-span-1" inputClassName="w-full min-w-0" defaultValue={printer.model ?? ""} label="Exact model" name={`${prefix}_model`} placeholder="e.g. TM-T20III L (M352A)" />
     </div>
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.ip ?? ""} inputMode="decimal" label="IP address" name={`${prefix}_ip`} placeholder="192.168.88.x" />
+      <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.ip ?? ""} inputMode="decimal" label="IP address" name={`${prefix}_ip`} placeholder="10.10.10.x" />
       <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.port ?? ""} label="Port" max={65535} min={1} name={`${prefix}_port`} placeholder="9100" type="number" />
       <SelectField defaultValue={["", "browser", "escpos"].includes(printer.protocol ?? "") ? printer.protocol ?? "" : ""} id={`${prefix}_protocol`} label="How to print"
         options={[["", "Not chosen yet"], ["browser", "Device print dialog"], ["escpos", "Network (ESC/POS)"]]} />

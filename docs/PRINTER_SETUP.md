@@ -13,6 +13,15 @@ Wayne's has two Epson network printers. The POS is set up for exactly these mode
 
 Both are already filled in under **Admin → Hardware**, switched **off**, because their IP addresses aren't known yet.
 
+## Recorded so far
+
+| Printer | IP address | Port | How it gets its address | MAC |
+| --- | --- | --- | --- | --- |
+| Front TM-T20III | **10.10.10.161** | 9100 | Fixed (set on the printer: "Manual") | 50:57:9C:06:47:43 |
+| Kitchen TM-U220B | *not yet* | 9100 | | 50:57:9C:58:F4:CE |
+
+Store network: 10.10.10.0/24, router/gateway 10.10.10.1.
+
 ## 1. Find each printer's IP address (don't change anything)
 
 Thrive still prints to these printers, so **only read the addresses. Don't change them.**
