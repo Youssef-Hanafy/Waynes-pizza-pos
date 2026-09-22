@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
-import { cartLineUnitCents, choicePriceDeltaCents, includedSelection, isIncludedChoice } from "@/lib/orders/cart";
+import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, includedSelection, isIncludedChoice } from "@/lib/orders/cart";
 import type { CartLine } from "@/lib/orders/schemas";
 
 type MenuItem = PublicMenu[number]["items"][number];
@@ -43,7 +43,9 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
     const currentCount = selectedChoices[choiceId] ?? 0;
     const othersCount = groupCount(group) - currentCount;
     const limit = Math.max(0, group.max_select - othersCount);
-    const safeCount = Math.max(0, Math.min(group.allow_quantities ? nextCount : Number(nextCount > 0), limit));
+    const choice = group.choices.find((option) => option.id === choiceId);
+    const multiple = choice ? choiceAllowsExtra(group, choice) : group.allow_quantities;
+    const safeCount = Math.max(0, Math.min(multiple ? nextCount : Number(nextCount > 0), limit));
     if (nextCount > currentCount && safeCount === currentCount) {
       setError(`You can choose up to ${group.max_select} in ${group.customer_label}. Remove one first to change it.`);
       return;
@@ -79,11 +81,11 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           const comesWith = isIncludedChoice(choice);
           const state = count ? "on" : comesWith ? "removed" : "off";
           const status = state === "removed" ? "NO — taken off" : !count ? "not on it" : comesWith ? (count > 1 ? `comes with it + ${count - 1} extra` : "comes with it") : count > 1 ? `added × ${count}` : "added";
-          const price = delta ? ` · ${delta > 0 ? "+" : ""}${formatCents(delta)}${comesWith ? " per extra" : " each"}` : "";
+          const price = delta ? ` · ${delta > 0 ? "+" : ""}${formatCents(delta)}${comesWith ? " per extra" : choiceAllowsExtra(group, choice) ? " each" : ""}` : "";
           return <div aria-label={`${choice.name}: ${status}`} className={`grid min-h-16 grid-cols-[3.25rem_1fr_3.25rem] overflow-hidden rounded-xl transition ${state === "on" ? "border-2 border-wayne-ok bg-wayne-ok-soft shadow-[0_0_0_3px_rgba(29,122,76,0.18)]" : state === "removed" ? "border-2 border-dashed border-wayne-red bg-white" : "border border-wayne-border bg-white"}`} data-state={state} key={choice.id}>
             <button aria-label={`Remove ${choice.name}`} className="bg-wayne-red px-2 text-2xl font-black text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={!count} onClick={() => setChoiceCount(group, choice.id, count - 1)} type="button">−</button>
             <div className="flex min-w-0 flex-col justify-center px-3"><strong className={`truncate ${state === "on" ? "text-wayne-ok" : state === "removed" ? "text-wayne-red line-through" : "font-semibold text-wayne-ink/70"}`}>{state === "on" ? "✓ " : ""}{choice.name}</strong><span className={`text-xs ${state === "on" ? "font-bold text-wayne-ok" : state === "removed" ? "font-bold text-wayne-red" : "text-wayne-muted"}`}>{status}{price}</span></div>
-            <button aria-label={`Add ${choice.name}`} className="bg-wayne-ok px-2 text-2xl font-black text-white" onClick={() => setChoiceCount(group, choice.id, count + 1)} type="button">+</button>
+            <button aria-label={`Add ${choice.name}`} className="bg-wayne-ok px-2 text-2xl font-black text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={count > 0 && !choiceAllowsExtra(group, choice)} onClick={() => setChoiceCount(group, choice.id, count + 1)} type="button">+</button>
           </div>;
         })}</div></fieldset>) : <div className="mt-5 rounded-xl border-2 border-dashed border-wayne-border bg-wayne-cream p-5"><strong>No modifier group is assigned to this item yet.</strong><p className="mt-1 text-sm text-wayne-muted">The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.</p></div>}
         <label className="mt-5 grid gap-2 font-bold">Item notes<textarea className="rounded-xl border p-3 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={2} value={instructions} /></label>

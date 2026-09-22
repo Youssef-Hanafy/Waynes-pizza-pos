@@ -9,6 +9,7 @@ import { MenuImage } from "@/components/site/menu-image";
 import { Button } from "@/components/ui/button";
 import { isMenuItemAvailableNow } from "@/lib/menu/availability";
 import {
+  choiceAllowsExtra,
   CART_STORAGE_KEY,
   cartLineUnitCents,
   cartSubtotalCents,
@@ -885,7 +886,7 @@ function ItemDialog({
                           ) : null}
                         </span>
                       </label>
-                      {group.allow_quantities && count > 0 ? (
+                      {choiceAllowsExtra(group, choice) && count > 0 ? (
                         <div className="flex items-center gap-2">
                           <button
                             aria-label={`Less ${choice.name}`}

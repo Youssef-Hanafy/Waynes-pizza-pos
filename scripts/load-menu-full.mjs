@@ -157,7 +157,9 @@ const groupId = new Map();
 {
   const rows = data.groups.map((g) => ({
     name: g.name, customer_label: g.customer_label, min_select: g.min_select,
-    max_select: g.max_select, required: g.required, allow_quantities: false,
+    // Sauces and extra dressings can be doubled (see migration 20260925080000).
+    max_select: g.max_select, required: g.required,
+    allow_quantities: g.max_select > 1 && ((g.name.endsWith(" – Sauces") && g.name !== "Pasta – Sauces") || g.name === "Salads – Salad Dressings"),
     sort_order: g.sort_order,
   }));
   const written = await insertAll("modifier_groups", rows, "id,name");
