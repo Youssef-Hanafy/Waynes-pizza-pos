@@ -18,9 +18,11 @@ Both are already filled in under **Admin → Hardware**, switched **off**, becau
 | Printer | IP address | Port | How it gets its address | MAC |
 | --- | --- | --- | --- | --- |
 | Front TM-T20III | **10.10.10.161** | 9100 | Fixed (set on the printer: "Manual") | 50:57:9C:06:47:43 |
-| Kitchen TM-U220B | *not yet* | 9100 | | 50:57:9C:58:F4:CE |
+| Kitchen TM-U220B | **10.10.10.171** | 9100 | Fixed (set on the UB-E04 card: "Manual") | 50:57:9C:58:F4:CE |
 
-Store network: 10.10.10.0/24, router/gateway 10.10.10.1.
+Store network: 10.10.10.0/24, router/gateway 10.10.10.1. Wi-Fi comes from a white EnGenius ceiling access point (powered over its blue network cable) on that network. The register tablet joins that Wi-Fi.
+
+Both printers are saved and switched on in Admin → Hardware.
 
 ## 1. Find each printer's IP address (don't change anything)
 
