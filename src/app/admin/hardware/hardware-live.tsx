@@ -8,6 +8,8 @@ import { formatPhone } from "@/lib/phone/normalize";
 import { getHardwareRuntime, useHardwareState } from "@/stores/hardware-store";
 import { usePhoneState } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
+import { usePrintStationRunner } from "@/stores/use-print-station";
+import { PrintStationPanel } from "@/components/pos/print-station-panel";
 
 const names: Record<string, string> = {
   caller_id: "Caller ID", caller_sync: "Live updates", receipt_printer: "Receipt printer",
@@ -21,6 +23,8 @@ const names: Record<string, string> = {
  */
 export function HardwareLive({ settings }: { settings: HardwareSettings }) {
   const ready = useHardware(settings, { drafts: false });
+  // If this device is the print station, keep printing while this page is open too.
+  usePrintStationRunner(settings, ready);
   const { statuses, online } = useHardwareState();
   const phone = usePhoneState();
   const last = phone.recent[0];
@@ -76,5 +80,6 @@ export function HardwareLive({ settings }: { settings: HardwareSettings }) {
       </div>
       {phone.recent.length > 1 ? <details className="mt-3 text-sm"><summary className="min-h-11 cursor-pointer content-center font-bold">View recent events</summary><ul className="mt-2 grid gap-1">{phone.recent.slice(0, 15).map((call) => <li key={call.id}>{new Date(call.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · Line {call.line_number} · {formatPhone(call.caller_number ?? call.caller_number_raw)} · {call.order_number ? `order ${call.order_number}` : call.status.replace("_", " ")}{call.simulated ? " · test" : ""}</li>)}</ul></details> : null}
     </div>
+    <PrintStationPanel className="border border-wayne-border shadow-none lg:col-span-2" />
   </section>;
 }
