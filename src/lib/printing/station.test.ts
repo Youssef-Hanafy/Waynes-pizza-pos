@@ -21,7 +21,7 @@ const doc = {
 } as PrintDocument;
 
 function printer(result: Awaited<ReturnType<StationPrinter["printLayout"]>>): StationPrinter {
-  return { printLayout: vi.fn().mockResolvedValue(result), printOnlineOrder: vi.fn().mockResolvedValue(result) };
+  return { printLayout: vi.fn().mockResolvedValue(result), printOnlineOrder: vi.fn().mockResolvedValue(result), printReceipt: vi.fn().mockResolvedValue(result) };
 }
 
 function queue(claimed: PrinterJob | null) {
@@ -88,5 +88,14 @@ describe("print station", () => {
     const adapter = createOnlineOrderStationAdapter({ printer: out, tipSlip: "card", now: () => now });
     await adapter.print(job({ destination: "receipt", job_type: "online_order" }), {});
     expect(out.printOnlineOrder).toHaveBeenCalledWith(doc.order.id, { tipSlip: true });
+  });
+
+  it("prints the customer receipt for delivery orders and for receipts someone asked for", async () => {
+    const out = printer({ ok: true });
+    const adapter = createOnlineOrderStationAdapter({ printer: out, tipSlip: "always", now: () => now });
+    await adapter.print(job({ destination: "receipt", job_type: "delivery_receipt" }), {});
+    await adapter.print(job({ destination: "receipt", job_type: "receipt_request" }), {});
+    expect(out.printReceipt).toHaveBeenCalledTimes(2);
+    expect(out.printOnlineOrder).not.toHaveBeenCalled();
   });
 });

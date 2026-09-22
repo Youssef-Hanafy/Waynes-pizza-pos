@@ -52,7 +52,9 @@ On the counter tablet (the Android app), open **POS → More → Print station**
 
 From then on:
 
-* Every order that reaches the kitchen gets a kitchen ticket on the TM-U220B.
+* **Every order** gets a kitchen ticket on the TM-U220B.
+* **Delivery orders** (counter and phone) also print the customer receipt on the TM-T20III for the driver. Switch: Admin → Hardware → *Print the receipt automatically for delivery orders*.
+* **Pickup / takeout orders** print only the kitchen ticket. If the customer asks for a receipt, tap **Print receipt**. It's on the order-sent screen and on every order in Orders / Deliveries, from any register or phone.
 * Every online order prints its order slip, then the tip & signature slip, on the TM-T20III.
 * It happens within a second or two (Supabase Realtime), with a 20-second safety check.
 * **Printer off or unplugged?** Nothing is lost. Tickets wait, the POS header shows *"Kitchen printer: … Tickets are waiting"*, and they print as soon as it answers.
@@ -60,7 +62,7 @@ From then on:
 * Anything over an hour old isn't printed automatically. It waits in Admin → Printing.
 * If a second register is switched on by mistake, nothing prints twice: the database hands each ticket to one station only.
 
-Receipts for counter and phone orders print from the **Print receipt** button on the order-sent screen. The cash drawer opens with **Open drawer** (Admin → Hardware test, and the POS drawer panel).
+The cash drawer opens with **Open drawer** (Admin → Hardware test, and the POS drawer panel).
 
 ## Running alongside Thrive
 

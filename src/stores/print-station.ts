@@ -14,8 +14,9 @@ import { getDeviceId } from "./draft-sync";
  * counter, next to both printers' network — is switched to "Print station".
  * It prints, as they arrive:
  *   • a kitchen ticket for every order, on the kitchen printer (TM-U220B)
- *   • an order slip + tip & signature slip for every online order, on the
- *     receipt printer (TM-T20III)
+ *   • an order slip + tip & signature slip for every online order, the
+ *     receipt for every register/phone delivery order, and any receipt a
+ *     register asks for, on the receipt printer (TM-T20III)
  *
  * It is woken by Realtime the moment a job is queued, and checks every 20 s
  * as a safety net.  Several registers switched on by mistake can't double
@@ -134,7 +135,8 @@ export function startPrintStation(options: {
   const kick = () => { for (const entry of lanes) void drain(entry); };
   const channel = options.client
     .channel(`wayne-print-station-${Math.random().toString(36).slice(2)}`)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "print_jobs" }, kick)
+    // Inserts are new jobs; updates include a receipt asked for again and a job retried in Admin → Printing.
+    .on("postgres_changes", { event: "*", schema: "public", table: "print_jobs" }, kick)
     .subscribe((state) => { if (state === "SUBSCRIBED") kick(); });
   const poll = window.setInterval(kick, POLL_MS);
   const online = () => { for (const entry of lanes) entry.pausedUntil = 0; kick(); };

@@ -39,6 +39,7 @@ export async function saveHardwareSettings(form: FormData) {
       port: port(form, "receipt_port"), protocol: text(form, "receipt_protocol"), enabled: form.get("receipt_enabled") === "on",
       paper_width_mm: Number(text(form, "receipt_paper") || 80), columns: columns(form, "receipt_columns"),
       online_order_slips: form.get("receipt_online_slips") === "on", tip_slip: text(form, "receipt_tip_slip") || "always",
+      auto_delivery_receipts: form.get("receipt_delivery_receipts") === "on",
     },
     kitchen_printer: {
       name: text(form, "kitchen_name"), model: text(form, "kitchen_model"), model_key: text(form, "kitchen_model_key") || "generic", ip: text(form, "kitchen_ip"),

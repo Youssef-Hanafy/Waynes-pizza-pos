@@ -17,6 +17,7 @@ const printerSchema = z.object({
   two_color: z.boolean().optional(),
   online_order_slips: z.boolean().optional(),
   tip_slip: z.string().max(10).optional(),
+  auto_delivery_receipts: z.boolean().optional(),
 });
 
 /** How a printer is spoken to. Nothing is assumed until the owner picks one for a confirmed model (§2.7). */
@@ -85,7 +86,7 @@ export const hardwareSettingsFormSchema = z.object({
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
     port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
     paper_width_mm: paperWidthSchema, columns: columnsSchema,
-    online_order_slips: z.boolean(), tip_slip: z.enum(["always", "card", "never"]),
+    online_order_slips: z.boolean(), tip_slip: z.enum(["always", "card", "never"]), auto_delivery_receipts: z.boolean(),
   }).refine(networkReady, { message: networkMessage("receipt") }),
   kitchen_printer: z.object({
     name: z.string().trim().max(80), model: z.string().trim().max(120), model_key: printerModelKeySchema,

@@ -79,6 +79,8 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
                 options={[["always", "Every online order"], ["card", "Only card orders"], ["never", "Never"]]} />
               <label className="flex min-h-11 items-center gap-3 self-end text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.online_order_slips !== false} name="receipt_online_slips" type="checkbox" />Print every online order automatically</label>
             </div>
+            <label className="flex min-h-11 items-center gap-3 text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.auto_delivery_receipts !== false} name="receipt_delivery_receipts" type="checkbox" />Print the receipt automatically for delivery orders (counter and phone)</label>
+            <p className="-mt-2 text-xs text-wayne-muted">Pickup and takeout orders only print the kitchen ticket. Use Print receipt on the order when a customer asks for one.</p>
           </PrinterPanel>
 
           <PrinterPanel

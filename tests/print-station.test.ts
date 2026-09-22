@@ -60,14 +60,16 @@ describe("Phase 7 — store printers and the print station", () => {
   type Job = { id: string; order_id: string; destination: string; job_type: string; status: string; lease_token: string | null; last_error: string | null };
   const claim = (destination: string) => call<Job | null>("authenticated", cashierId, "public.wayne_claim_print_job($1, 'station-test')", [destination]);
   let onlineNumber = 0;
-  async function onlineOrder(status = "placed") {
+  async function onlineOrder(status = "placed", source = "online", fulfillment = "pickup") {
     onlineNumber += 1;
     const rows = await database.query<{ id: string }>(
       `insert into public.orders(order_number, source, fulfillment_type, status, payment_status, payment_method, customer_name_snapshot, customer_phone_snapshot, placed_at, idempotency_key, pricing_snapshot, subtotal_cents, total_cents)
-       values ($1, 'online', 'pickup', $2, 'paid', 'card', 'Rita', '5085550100', now(), $3, '{}'::jsonb, 1500, 1605) returning id`,
-      [`WEB-${onlineNumber}`, status, `online-print-station-key-${onlineNumber}`]);
+       values ($1, $4, $5, $2, 'paid', 'card', 'Rita', '5085550100', now(), $3, '{}'::jsonb, 1500, 1605) returning id`,
+      [`WEB-${onlineNumber}`, status, `online-print-station-key-${onlineNumber}`, source, fulfillment]);
     return rows.rows[0]!.id;
   }
+  const receiptJobs = async (orderId: string) =>
+    (await database.query<Job>("select * from public.print_jobs where order_id = $1 and destination = 'receipt' order by created_at", [orderId])).rows;
 
   it("seeds the two Epson printers switched off, with the drawer on the receipt printer", async () => {
     const rows = await database.query<{ receipt: Record<string, unknown>; kitchen: Record<string, unknown>[]; drawer: Record<string, unknown> }>(
@@ -113,6 +115,24 @@ describe("Phase 7 — store printers and the print station", () => {
     await call("authenticated", cashierId, "public.wayne_finish_print_job($1::uuid, $2::uuid, true, null)", [again.id, again.lease_token]);
     expect((await database.query<Job>("select * from public.print_jobs where id = $1", [first.id])).rows[0]).toMatchObject({ status: "printed", last_error: null });
     await expect(call("authenticated", cashierId, "public.wayne_retry_print_job($1::uuid, 'reprint please')", [first.id])).rejects.toThrow(/management permission/);
+  });
+
+  it("prints the receipt by itself only for register and phone delivery orders", async () => {
+    const delivery = await onlineOrder("placed", "phone", "delivery");
+    expect((await receiptJobs(delivery)).map((job) => job.job_type)).toEqual(["delivery_receipt"]);
+    const pickup = await onlineOrder("placed", "pos", "pickup");
+    expect(await receiptJobs(pickup)).toEqual([]);
+  });
+
+  it("queues a receipt when someone asks, once at a time, and again after it printed", async () => {
+    const pickup = await onlineOrder("placed", "pos", "pickup");
+    expect(await call<{ status: string }>("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [pickup])).toMatchObject({ status: "queued" });
+    expect(await call<{ status: string }>("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [pickup])).toMatchObject({ status: "already_queued" });
+    expect((await receiptJobs(pickup)).map((job) => `${job.job_type}/${job.status}`)).toEqual(["receipt_request/pending"]);
+    await database.query("update public.print_jobs set status = 'printed', printed_at = now() where order_id = $1", [pickup]);
+    expect(await call<{ status: string }>("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [pickup])).toMatchObject({ status: "queued" });
+    expect((await receiptJobs(pickup)).map((job) => job.status)).toEqual(["pending"]);
+    await expect(call("anon", null, "public.wayne_request_receipt_print($1::uuid)", [pickup])).rejects.toThrow();
   });
 
   it("stops queueing slips when online order printing is switched off", async () => {

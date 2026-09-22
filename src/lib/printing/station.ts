@@ -9,6 +9,8 @@ import type { PrintQueueRepository } from "./worker";
  *
  *   destination "kitchen", job kitchen_ticket  → TM-U220B, kitchen ticket
  *   destination "receipt", job online_order    → TM-T20III, order slip (+ tip & signature slip)
+ *   destination "receipt", job delivery_receipt → TM-T20III, customer receipt (register/phone delivery)
+ *   destination "receipt", job receipt_request  → TM-T20III, customer receipt someone asked for
  *
  * Three outcomes, never blurred together:
  *   printed           → job marked printed
@@ -24,6 +26,7 @@ export type StationResult = { ok: true; jobId?: string } | { ok: false; reason: 
 export type StationPrinter = {
   printLayout(layout: PrintLayout): Promise<StationResult>;
   printOnlineOrder(orderId: string, options: { tipSlip: boolean }): Promise<StationResult>;
+  printReceipt(orderId: string): Promise<StationResult>;
 };
 
 /** A definite "not sent" that should wait for the printer rather than fail the job. */
@@ -90,8 +93,13 @@ export function createOnlineOrderStationAdapter(options: {
   return {
     async print(job) {
       guard(job, now);
-      if (job.job_type !== "online_order") throw new PrinterUnavailableError(`The receipt printer does not print "${job.job_type}" jobs.`);
-      return settle(await options.printer.printOnlineOrder(job.order_id, { tipSlip: tipSlipWanted(options.tipSlip, job.payload.payment_method) }));
+      if (job.job_type === "online_order") {
+        return settle(await options.printer.printOnlineOrder(job.order_id, { tipSlip: tipSlipWanted(options.tipSlip, job.payload.payment_method) }));
+      }
+      if (job.job_type === "delivery_receipt" || job.job_type === "receipt_request") {
+        return settle(await options.printer.printReceipt(job.order_id));
+      }
+      throw new PrinterUnavailableError(`The receipt printer does not print "${job.job_type}" jobs.`);
     },
   };
 }

@@ -11,6 +11,7 @@ import type { CartLine } from "@/lib/orders/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
 import { draftSync, useSyncState } from "@/stores/draft-sync";
+import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { phoneActions } from "@/stores/phone-store";
@@ -45,17 +46,24 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   const [customerBusy, setCustomerBusy] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<{ id: string; order_number: string; total_cents: number; duplicate: boolean } | null>(null);
+  const [created, setCreated] = useState<{ id: string; order_number: string; total_cents: number; duplicate: boolean; delivery?: boolean } | null>(null);
   const [printNote, setPrintNote] = useState("");
 
   /** Through the printer layer only (§23): which printer, and how, is Admin → Hardware's business. */
   async function print(kind: "receipt" | "kitchen") {
+    if (!created) return;
+    if (kind === "receipt") {
+      setPrintNote("Printing…");
+      setPrintNote((await requestReceipt(created.id)).message);
+      return;
+    }
     const runtime = getHardwareRuntime();
-    if (!runtime || !created) { setPrintNote("Printing is still starting up. Try again in a moment."); return; }
+    if (!runtime) { setPrintNote("Printing is still starting up. Try again in a moment."); return; }
     setPrintNote("Printing…");
-    const result = kind === "receipt" ? await runtime.receiptPrinter.printReceipt(created.id) : await runtime.kitchenPrinter.printKitchenTicket(created.id);
+    const result = await runtime.kitchenPrinter.printKitchenTicket(created.id);
     setPrintNote(result.ok ? (result.jobId === "print-dialog" ? "Sent to the print dialog." : "Sent to the printer.") : result.reason);
   }
+
   const [confirmClear, setConfirmClear] = useState(false);
 
   const visibleMenu = useMemo(() => menu.map((category) => ({ ...category, items: category.items.filter((item) => item.name.toLowerCase().includes(itemSearch.trim().toLowerCase())) })).filter((category) => category.items.length), [itemSearch, menu]);
@@ -113,9 +121,11 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
     setSubmitting(true); setError("");
     // Only a server answer counts as sent (§30). A dropped connection keeps the
     // ticket and resends it, with the same idempotency key, when it is back.
+    // Walk-ins without a profile always go out as pickup (see draftToOrderPayload).
+    const delivery = draft.fulfillment === "delivery" && !noProfile;
     const result = await draftSync.submit(draft.id);
     setSubmitting(false);
-    if (result.ok) { setPrintNote(""); setCreated(result.order); return; }
+    if (result.ok) { setPrintNote(""); setCreated({ ...result.order, delivery }); return; }
     setError(result.message);
   }
 
@@ -138,7 +148,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
   if (created) return <div className="grid min-h-0 flex-1 place-items-center bg-wayne-cream-deep p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl">
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">{created.duplicate ? "Already submitted" : "Order submitted"}</p>
     <h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p>
-    <div className="mt-5 grid grid-cols-2 gap-2"><Button onClick={() => void print("receipt")} variant="secondary">Print receipt</Button><Button onClick={() => void print("kitchen")} variant="secondary">Print kitchen ticket</Button></div>
+    <p className="mt-4 text-sm font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket and delivery receipt print automatically." : "Kitchen ticket prints automatically. Print a receipt only if the customer asks."}</p>
+    <div className="mt-3 grid grid-cols-2 gap-2"><Button onClick={() => void print("receipt")} variant="secondary">{created.delivery ? "Print another receipt" : "Print receipt"}</Button><Button onClick={() => void print("kitchen")} variant="secondary">Reprint kitchen ticket</Button></div>
     {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
     <p className="mt-4 rounded-xl bg-wayne-warn-soft p-4 font-bold">TEST / MANUAL boundary — no card was processed.</p>
     <Button className="mt-6 w-full text-lg" onClick={() => setCreated(null)}>{held.some(isWorthResuming) ? "Back to tickets" : "Start new ticket"}</Button>

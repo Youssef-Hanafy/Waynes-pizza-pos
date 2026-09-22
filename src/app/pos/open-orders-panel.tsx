@@ -6,6 +6,7 @@ import { formatCents } from "@/lib/menu/schemas";
 import { nextHandOff, openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import { z } from "zod";
 import { parseCashCountInput, posDrawerSchema } from "@/lib/cash/schemas";
+import { requestReceipt } from "@/lib/printing/request-receipt";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -29,7 +30,14 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment }: { tim
   const [shiftId, setShiftId] = useState("");
   const [cashFor, setCashFor] = useState<string | null>(null);
   const [tendered, setTendered] = useState("");
+  const [receiptNote, setReceiptNote] = useState<{ id: string; text: string } | null>(null);
   const mounted = useRef(true);
+
+  async function printReceipt(order: OpenOrder) {
+    setReceiptNote({ id: order.id, text: "Printing…" });
+    const result = await requestReceipt(order.id);
+    if (mounted.current) setReceiptNote({ id: order.id, text: result.message });
+  }
 
   const load = useCallback(async () => {
     try {
@@ -182,6 +190,8 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment }: { tim
               {shiftId && order.payment_status === "unpaid" && cashFor !== order.id
                 ? <Button disabled={pending !== null} onClick={() => { setCashFor(order.id); setTendered((order.total_cents / 100).toFixed(2)); setError(""); }} variant="secondary">Take cash</Button>
                 : null}
+              <Button disabled={receiptNote?.id === order.id && receiptNote.text === "Printing…"} onClick={() => { void printReceipt(order); }} variant="secondary">Print receipt</Button>
+              {receiptNote?.id === order.id && receiptNote.text !== "Printing…" ? <span aria-live="polite" className="text-sm font-bold">{receiptNote.text}</span> : null}
             </div>
             {cashFor === order.id ? <div className="mt-3 rounded-xl border border-wayne-border bg-wayne-cream p-3">
               <p className="text-sm font-bold">Amount due {formatCents(order.total_cents)}</p>
