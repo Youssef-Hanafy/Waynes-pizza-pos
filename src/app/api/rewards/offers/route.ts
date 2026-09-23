@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
+import { memberOffersSchema } from "@/lib/promotions/member-offers";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 /**
@@ -18,25 +19,6 @@ import { createServiceSupabaseClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ phone: z.string().trim().min(7).max(24) });
-
-const memberOffersSchema = z.object({
-  member: z.boolean(),
-  first_name: z.string().optional(),
-  reason: z.string().optional(),
-  offers: z.array(
-    z.object({
-      id: z.uuid(),
-      code: z.string(),
-      description: z.string(),
-      discount_type: z.enum(["fixed", "percent"]),
-      discount_value: z.number().int(),
-      minimum_order_cents: z.number().int(),
-      fulfillment_type: z.enum(["pickup", "delivery"]).nullable(),
-      ends_at: z.string().nullable(),
-      personal: z.boolean(),
-    }),
-  ),
-});
 
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");

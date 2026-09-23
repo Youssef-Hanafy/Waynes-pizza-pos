@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import type { MemberOffersResult } from "@/lib/promotions/member-offers";
+import { OfferList, PersonalLink } from "./offer-list";
 import { RewardsButton } from "./rewards-experience";
 import { SiteIcon } from "./site-icon";
 
@@ -17,36 +19,10 @@ import { SiteIcon } from "./site-icon";
  * answer.
  */
 
-type Offer = {
-  id: string;
-  code: string;
-  description: string;
-  discount_type: "fixed" | "percent";
-  discount_value: number;
-  minimum_order_cents: number;
-  fulfillment_type: "pickup" | "delivery" | null;
-  ends_at: string | null;
-  personal: boolean;
-};
-
-const headline = (offer: Offer) =>
-  offer.discount_type === "percent"
-    ? `${offer.discount_value / 100}% off`
-    : `$${(offer.discount_value / 100).toFixed(2).replace(/\.00$/, "")} off`;
-
-function condition(offer: Offer) {
-  const parts: string[] = [];
-  if (offer.minimum_order_cents > 0) parts.push(`on orders over $${(offer.minimum_order_cents / 100).toFixed(2)}`);
-  if (offer.fulfillment_type) parts.push(`${offer.fulfillment_type} only`);
-  if (offer.ends_at)
-    parts.push(`through ${new Date(offer.ends_at).toLocaleDateString("en-US", { month: "long", day: "numeric" })}`);
-  return parts.join(" · ");
-}
-
 export function MemberOffers() {
   const [phone, setPhone] = useState("");
   const [status, setStatus] = useState<"idle" | "checking">("idle");
-  const [result, setResult] = useState<{ member: boolean; first_name?: string; offers: Offer[] } | null>(null);
+  const [result, setResult] = useState<MemberOffersResult | null>(null);
   const [error, setError] = useState("");
 
   async function check(event: FormEvent<HTMLFormElement>) {
@@ -128,21 +104,11 @@ export function MemberOffers() {
               : "You’re a member — no offers running this week."}
           </strong>
           {result.offers.length ? (
-            <ul>
-              {result.offers.map((offer) => (
-                <li key={offer.id}>
-                  <p className="member-offer-headline">{headline(offer)}</p>
-                  <p className="member-offer-description">
-                    {offer.description || (offer.personal ? "Your welcome offer." : "Member offer.")}
-                  </p>
-                  {condition(offer) ? <p className="member-offer-condition">{condition(offer)}</p> : null}
-                  <code>{offer.code}</code>
-                </li>
-              ))}
-            </ul>
+            <OfferList offers={result.offers} />
           ) : (
             <p>Keep an eye on your texts — the next one lands soon.</p>
           )}
+          {result.link_key ? <PersonalLink linkKey={result.link_key} /> : null}
         </div>
       ) : null}
     </section>

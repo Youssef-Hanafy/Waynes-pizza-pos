@@ -6,10 +6,14 @@ import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
 import { getStoreSettings } from "@/lib/content/queries";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
-import { getPromotions } from "@/lib/promotions/queries";
-import { describeDiscount, promotionState, type Promotion } from "@/lib/promotions/schemas";
+import { getCustomerSegments } from "@/lib/customers/queries";
+import { getPromotionStats, getPromotions, type PromotionStats } from "@/lib/promotions/queries";
+import { describeCodeMode, describeDiscount, promotionState, type Promotion } from "@/lib/promotions/schemas";
 import { utcToZonedLocal } from "@/lib/time/zoned";
-import { archivePromotion, savePromotion } from "./actions";
+import { archivePromotion, publishOffer, savePromotion } from "./actions";
+
+type Segment = { id: string; name: string };
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 export const metadata: Metadata = { title: "Promotions" };
 export const dynamic = "force-dynamic";
@@ -18,25 +22,65 @@ export default async function PromotionsPage({ searchParams }: { searchParams: P
   await requirePermission("promotions.manage", "/admin/promotions");
   const [params, settings] = await Promise.all([searchParams, getStoreSettings()]);
   const showArchived = params.view === "archived";
-  const { promotions, readAt } = await getPromotions(showArchived);
+  const [{ promotions, readAt }, stats, segments] = await Promise.all([
+    getPromotions(showArchived),
+    getPromotionStats().catch(() => new Map<string, PromotionStats>()),
+    getCustomerSegments().then((rows) => rows.filter((row) => row.active).map((row) => ({ id: row.id, name: row.name }))).catch(() => [] as Segment[]),
+  ]);
   const state = (promotion: Promotion) => promotionState(promotion, readAt);
+  const segmentName = (id: string | null) => segments.find((segment) => segment.id === id)?.name ?? "a segment";
 
   return <main className="mx-auto max-w-6xl px-5 py-10">
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Marketing</p>
     <h1 className="mt-3 text-4xl font-black">Promotion codes</h1>
     <p className="mt-3 max-w-3xl text-wayne-muted">Codes work online and at the POS. Times use Wayne&apos;s {settings.timezone} clock. Per-customer limits are tracked by phone number, so a limited code needs a customer on POS tickets. Cancelling an order gives its use back.</p>
+    <p className="mt-3 max-w-3xl text-wayne-muted"><strong>Public code</strong>: one code for everyone (flyers, specials). <strong>Personal codes</strong>: every member gets their own single-use code, locked to their phone number, so you can see who was sent it, who used it and what they spent — here and in the Hanafy CRM. Members see their codes on their personal link (<code>/r/…</code>) or by typing their number on the Rewards page.</p>
     {params.saved ? <p role="status" className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{params.saved}</p> : null}
     {params.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{params.error}</p> : null}
-    <Card className="mt-7 p-5"><h2 className="text-xl font-black">New promotion</h2><PromotionForm timeZone={settings.timezone} /></Card>
+    <Card className="mt-7 p-5"><h2 className="text-xl font-black">New promotion</h2><PromotionForm segments={segments} timeZone={settings.timezone} /></Card>
     <div className="mt-9 flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-black">{showArchived ? "Archived promotions" : "Current promotions"}</h2><Button asChild variant="secondary"><a href={showArchived ? "/admin/promotions" : "/admin/promotions?view=archived"}>{showArchived ? "Show current" : "Show archived"}</a></Button></div>
     <div className="mt-4 grid gap-4">{promotions.map((promotion) => <Card className="p-5" key={promotion.id}>
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="font-mono text-2xl">{promotion.code}</strong><p className="font-bold">{describeDiscount(promotion)}{promotion.minimum_order_cents ? ` on orders over $${(promotion.minimum_order_cents / 100).toFixed(2)}` : ""}{promotion.fulfillment_type ? ` · ${promotion.fulfillment_type} only` : ""}{promotion.members_only ? " · Rewards members only" : ""}</p>{promotion.description ? <p className="text-sm text-wayne-muted">{promotion.description}</p> : null}<p className="mt-1 text-sm text-wayne-muted">Used {promotion.uses_count}{promotion.total_usage_limit ? ` of ${promotion.total_usage_limit}` : ""} times{promotion.per_customer_limit ? ` · max ${promotion.per_customer_limit} per customer` : ""}{promotion.starts_at ? ` · starts ${formatAdminDateTime(promotion.starts_at, settings.timezone)}` : ""}{promotion.ends_at ? ` · ends ${formatAdminDateTime(promotion.ends_at, settings.timezone)}` : ""}</p></div><Badge className={state(promotion) === "Live" ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-cream-deep text-wayne-muted"}>{state(promotion)}</Badge></div>
-      {!promotion.archived_at ? <details className="mt-4"><summary className="cursor-pointer font-bold">Edit</summary><PromotionForm promotion={promotion} timeZone={settings.timezone} /><form action={archivePromotion} className="mt-3"><input name="id" type="hidden" value={promotion.id} /><Button variant="danger">Archive code</Button></form></details> : null}
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="font-mono text-2xl">{promotion.code}</strong><p className="font-bold">{describeDiscount(promotion)}{promotion.minimum_order_cents ? ` on orders over $${(promotion.minimum_order_cents / 100).toFixed(2)}` : ""}{promotion.fulfillment_type ? ` · ${promotion.fulfillment_type} only` : ""}{promotion.members_only ? " · Rewards members only" : ""}</p><p className="text-sm font-semibold text-wayne-ink">{describeCodeMode(promotion)}{promotion.audience_segment_id ? ` · ${segmentName(promotion.audience_segment_id)}` : promotion.code_mode === "personal" ? " · all Rewards members" : ""}{promotion.code_valid_days ? ` · each code good ${promotion.code_valid_days} days` : ""}{promotion.crm_event_name ? ` · CRM event customer.offer.${promotion.crm_event_name}` : ""}</p>{promotion.description ? <p className="text-sm text-wayne-muted">{promotion.description}</p> : null}<p className="mt-1 text-sm text-wayne-muted">Used {promotion.uses_count}{promotion.total_usage_limit ? ` of ${promotion.total_usage_limit}` : ""} times{promotion.per_customer_limit ? ` · max ${promotion.per_customer_limit} per customer` : ""}{promotion.starts_at ? ` · starts ${formatAdminDateTime(promotion.starts_at, settings.timezone)}` : ""}{promotion.ends_at ? ` · ends ${formatAdminDateTime(promotion.ends_at, settings.timezone)}` : ""}</p></div><Badge className={state(promotion) === "Live" ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-cream-deep text-wayne-muted"}>{state(promotion)}</Badge></div>
+      <OfferNumbers promotion={promotion} stats={stats.get(promotion.id)} />
+      {!promotion.archived_at ? <PublishForm promotion={promotion} segmentName={segmentName(promotion.audience_segment_id)} /> : null}
+      {!promotion.archived_at ? <details className="mt-4"><summary className="cursor-pointer font-bold">Edit</summary><PromotionForm promotion={promotion} segments={segments} timeZone={settings.timezone} /><form action={archivePromotion} className="mt-3"><input name="id" type="hidden" value={promotion.id} /><Button variant="danger">Archive code</Button></form></details> : null}
     </Card>)}{!promotions.length ? <Card className="p-8 text-center text-wayne-muted">{showArchived ? "No archived promotions." : "No promotions yet. Create one above."}</Card> : null}</div>
   </main>;
 }
 
-function PromotionForm({ promotion, timeZone }: { promotion?: Promotion; timeZone: string }) {
+function OfferNumbers({ promotion, stats }: { promotion: Promotion; stats?: PromotionStats }) {
+  const personal = promotion.code_mode === "personal";
+  const items = [
+    ...(personal ? [["Codes sent", String(stats?.codes_issued ?? 0)]] : []),
+    ...(promotion.texts_queued ? [["Texts sent", String(promotion.texts_queued)]] : []),
+    ["Orders", String(stats?.orders_count ?? 0)],
+    ["Sales from those orders", money(stats?.revenue_cents ?? 0)],
+    ["Discount given", money(stats?.discount_cents ?? 0)],
+    ...(personal && stats?.codes_issued ? [["Came back", `${Math.round(((stats.orders_count ?? 0) / stats.codes_issued) * 100)}%`]] : []),
+  ];
+  return <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-wayne-cream p-3 text-sm sm:grid-cols-3 lg:grid-cols-6">{items.map(([label, value]) => <div key={label}><dt className="text-wayne-muted">{label}</dt><dd className="text-lg font-black">{value}</dd></div>)}</dl>;
+}
+
+function PublishForm({ promotion, segmentName }: { promotion: Promotion; segmentName: string }) {
+  const automatic = promotion.code_mode === "personal" && promotion.delivery === "segment_entered";
+  const personal = promotion.code_mode === "personal";
+  if (!personal && !promotion.members_only) return null;
+  const audience = promotion.audience_segment_id ? `members in ${segmentName}` : "all Wayne's Rewards members";
+  return <form action={publishOffer} className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-wayne-border p-3">
+    <input name="id" type="hidden" value={promotion.id} />
+    {automatic ? <>
+      <p className="flex-1 text-sm"><strong>Automatic:</strong> anyone who newly enters {segmentName} gets their own code and the CRM texts it. {promotion.published_at ? `Sent to the existing segment ${new Date(promotion.published_at).toLocaleDateString("en-US")}.` : "Customers already in the segment have not been sent it."}</p>
+      <input name="send_text" type="hidden" value="on" />
+      <Button variant="secondary">Send to everyone already in {segmentName}</Button>
+    </> : <>
+      <p className="flex-1 text-sm">{promotion.published_at ? `Published ${new Date(promotion.published_at).toLocaleDateString("en-US")}. ` : "Not published yet. "}{personal ? `Publishing makes a personal code for ${audience}.` : `Publishing texts ${audience} a link to their offers.`}</p>
+      <label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked name="send_text" type="checkbox" />Text them their personal link</label>
+      <Button>{promotion.published_at ? "Publish again (new members only)" : "Publish"}</Button>
+    </>}
+  </form>;
+}
+
+function PromotionForm({ promotion, segments, timeZone }: { promotion?: Promotion; segments: Segment[]; timeZone: string }) {
   const key = promotion?.id ?? "new";
   const amount = promotion ? promotion.discount_value / 100 : "";
   return <form action={savePromotion} className="mt-4 grid gap-4 md:grid-cols-3">
@@ -51,6 +95,16 @@ function PromotionForm({ promotion, timeZone }: { promotion?: Promotion; timeZon
     <Input defaultValue={utcToZonedLocal(promotion?.starts_at ?? null, timeZone)} id={`starts-${key}`} label="Starts (optional)" name="starts_at" type="datetime-local" />
     <Input defaultValue={utcToZonedLocal(promotion?.ends_at ?? null, timeZone)} id={`ends-${key}`} label="Ends (optional)" name="ends_at" type="datetime-local" />
     <div />
+    <fieldset className="grid gap-4 rounded-xl border border-wayne-border p-4 md:col-span-3 md:grid-cols-3">
+      <legend className="px-1 text-sm font-black">How the code works</legend>
+      <label className="grid gap-2 text-sm font-semibold" htmlFor={`mode-${key}`}>Code type<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.code_mode ?? "public"} id={`mode-${key}`} name="code_mode"><option value="public">Public — one code for everyone</option><option value="personal">Personal — each member gets their own code</option></select></label>
+      <label className="grid gap-2 text-sm font-semibold" htmlFor={`delivery-${key}`}>Sent (personal codes)<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.delivery ?? "publish"} id={`delivery-${key}`} name="delivery"><option value="publish">When I press Publish (weekly offers)</option><option value="segment_entered">Automatically when a customer enters the segment (win-back)</option></select></label>
+      <label className="grid gap-2 text-sm font-semibold" htmlFor={`segment-${key}`}>Who gets it<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.audience_segment_id ?? ""} id={`segment-${key}`} name="audience_segment_id"><option value="">All Wayne&apos;s Rewards members</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
+      <Input defaultValue={promotion?.code_valid_days ?? ""} id={`valid-${key}`} label="Each personal code good for (days, blank = until the offer ends)" min="1" max="365" name="code_valid_days" step="1" type="number" />
+      <Input defaultValue={promotion?.reissue_after_days ?? ""} id={`reissue-${key}`} label="Automatic: wait before sending the same customer another (days, blank = 60)" min="1" max="3650" name="reissue_after_days" step="1" type="number" />
+      <Input defaultValue={promotion?.crm_event_name ?? ""} id={`event-${key}`} label="Automatic: CRM event name (e.g. winback)" maxLength={40} name="crm_event_name" pattern="[a-z_]{2,40}" />
+      <p className="text-xs text-wayne-muted md:col-span-3">For personal codes, the code above is the start of every customer&apos;s code (WINBACK → WINBACK-7F3A9C) and doesn&apos;t work on its own. An automatic offer sends <code>customer.offer.&lt;event name&gt;</code> to the Hanafy CRM; point a CRM automation (&quot;Any other POS event&quot;) at that name and use {"{{reward_code}}"} in the text.</p>
+    </fieldset>
     <Input defaultValue={promotion?.total_usage_limit ?? ""} id={`total-${key}`} label="Total uses allowed (blank = unlimited)" min="1" name="total_usage_limit" step="1" type="number" />
     <Input defaultValue={promotion?.per_customer_limit ?? ""} id={`per-${key}`} label="Uses per customer (blank = unlimited)" min="1" name="per_customer_limit" step="1" type="number" />
     <Button className="self-end">{promotion ? "Save changes" : "Create promotion"}</Button>

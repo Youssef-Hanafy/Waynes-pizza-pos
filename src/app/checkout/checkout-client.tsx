@@ -22,6 +22,7 @@ import {
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
 import { WAYNE_REWARDS_CONSENT } from "@/lib/wayne/rewards";
+import { SAVED_PROMO_STORAGE_KEY } from "@/lib/promotions/member-offers";
 import {
   cardCheckoutResultSchema,
   type CheckoutPaymentConfig,
@@ -74,9 +75,20 @@ export function CheckoutClient({
   /* Whatever the customer told us before they started ordering — their name, and
      for delivery the address — is filled in here so nobody types it twice. */
   const [details, setDetails] = useState<OrderDetails | null>(null);
+  /* A code picked with "Use this code" on the member's offers page. */
+  const [promoCode, setPromoCode] = useState("");
   useEffect(() => {
     const savedDetails = readOrderDetails(window.localStorage.getItem(ORDER_DETAILS_STORAGE_KEY));
-    queueMicrotask(() => setDetails(savedDetails));
+    let savedPromo = "";
+    try {
+      savedPromo = (window.localStorage.getItem(SAVED_PROMO_STORAGE_KEY) ?? "").slice(0, 60);
+    } catch {
+      savedPromo = "";
+    }
+    queueMicrotask(() => {
+      setDetails(savedDetails);
+      setPromoCode(savedPromo);
+    });
   }, []);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
@@ -222,6 +234,7 @@ export function CheckoutClient({
           return;
         }
         window.localStorage.removeItem(CART_STORAGE_KEY);
+        window.localStorage.removeItem(SAVED_PROMO_STORAGE_KEY);
         window.sessionStorage.removeItem("wayne-order-idempotency-v1");
         router.push(
           `/order/${paid.data.id}?token=${paid.data.public_access_token}`,
@@ -249,6 +262,7 @@ export function CheckoutClient({
         return;
       }
       window.localStorage.removeItem(CART_STORAGE_KEY);
+      window.localStorage.removeItem(SAVED_PROMO_STORAGE_KEY);
       window.sessionStorage.removeItem("wayne-order-idempotency-v1");
       router.push(
         `/order/${result.data.id}?token=${result.data.public_access_token}`,
@@ -457,6 +471,8 @@ export function CheckoutClient({
           <input
             className="min-h-11 rounded-lg border px-3"
             name="promo_code"
+            onChange={(event) => setPromoCode(event.target.value)}
+            value={promoCode}
           />
         </label>
         <p className="mt-2 text-xs text-wayne-muted">
