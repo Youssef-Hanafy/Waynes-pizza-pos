@@ -21,6 +21,7 @@ import {
   readCart,
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
+import { WAYNE_REWARDS_CONSENT } from "@/lib/wayne/rewards";
 import {
   cardCheckoutResultSchema,
   type CheckoutPaymentConfig,
@@ -371,6 +372,11 @@ export function CheckoutClient({
           </p>
           <div className="mt-4 grid gap-3">
             <Check label="Send me Wayne's Pizza text deals" name="sms_opt_in" />
+            <p className="-mt-1 pl-8 text-xs leading-5 text-wayne-muted">
+              {WAYNE_REWARDS_CONSENT} See our{" "}
+              <Link className="underline" href="/terms">Terms</Link> and{" "}
+              <Link className="underline" href="/privacy">Privacy Policy</Link>.
+            </p>
             <Check
               label="Send me Wayne's Pizza email deals"
               name="email_opt_in"

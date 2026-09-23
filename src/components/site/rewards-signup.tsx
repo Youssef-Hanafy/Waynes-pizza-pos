@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SiteIcon } from "./site-icon";
 import { WayneBadge } from "./wayne-badge";
@@ -217,7 +218,7 @@ export function RewardsSignup({
               required
               type="checkbox"
             />
-            <span>{WAYNE_REWARDS_CONSENT}</span>
+            <span>{WAYNE_REWARDS_CONSENT} See our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.</span>
           </label>
           {error && (
             <p className={styles.signupError} role="alert">

@@ -24,6 +24,8 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
           <Link href="/rewards">Wayne’s Rewards</Link>
           <Link href="/about">The Wayne&apos;s story</Link>
           <Link href="/contact">Hours & location</Link>
+          <Link href="/terms">Text messaging terms</Link>
+          <Link href="/privacy">Privacy policy</Link>
         </nav>
         <div>
           <h2>FIND YOUR WAYNE’S</h2>
