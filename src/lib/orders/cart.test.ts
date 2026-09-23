@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cartLineUnitCents,
   cartSubtotalCents,
+  choiceAllowsExtra,
   choicePriceDeltaCents,
   describeLineModifiers,
   includedSelection,
@@ -230,5 +231,14 @@ describe("toppings an item comes with", () => {
     const notes = describeLineModifiers(meatLovers, { modifiers: [{ choice_id: pepperoni.id, quantity: 2 }, { choice_id: mushrooms.id, quantity: 1 }] });
     expect(notes.map((note) => note.label)).toEqual(["NO Salami", "Extra Pepperoni", "Mushrooms"]);
     expect(describeLineModifiers(meatLovers, { modifiers: [{ choice_id: pepperoni.id, quantity: 1 }, { choice_id: salami.id, quantity: 1 }] })).toEqual([]);
+  });
+
+  it("lets extra portions of a topping it comes with be added (Hawaiian: extra ham and pineapple)", () => {
+    const meats = { allow_quantities: true };
+    expect(choiceAllowsExtra(meats, { name: "Ham" })).toBe(true);
+    expect(choiceAllowsExtra(meats, { name: "Pineapple" })).toBe(true);
+    expect(choiceAllowsExtra(meats, { name: "No Cheese" })).toBe(false);
+    expect(choiceAllowsExtra(meats, { name: "Light Cheese" })).toBe(false);
+    expect(choiceAllowsExtra({ allow_quantities: false }, { name: "Ham" })).toBe(false);
   });
 });

@@ -153,13 +153,20 @@ const variantId = new Map();
   });
 }
 
+// Groups a customer can ask for extra of (extra ham, double pepperoni).
+function toppingGroup(g) {
+  return / – (Vegetables|Meats|Cheese)$/.test(g.name) || /^(One|Two|Three) Topping Pizza – Toppings?$/.test(g.name) || g.name === "Pasta Special – Toppings";
+}
 const groupId = new Map();
 {
   const rows = data.groups.map((g) => ({
     name: g.name, customer_label: g.customer_label, min_select: g.min_select,
-    // Sauces and extra dressings can be doubled (see migration 20260925080000).
-    max_select: g.max_select, required: g.required,
-    allow_quantities: g.max_select > 1 && ((g.name.endsWith(" – Sauces") && g.name !== "Pasta – Sauces") || g.name === "Salads – Salad Dressings"),
+    // Sauces, extra dressings (20260925080000) and toppings (20260928080000)
+    // can be doubled.  Topping groups whose limit is "every option once" get
+    // room for three portions of each.
+    max_select: toppingGroup(g) && g.max_select >= g.choices.length && g.choices.length > 0 ? Math.max(g.max_select, g.choices.length * 3) : g.max_select,
+    required: g.required,
+    allow_quantities: toppingGroup(g) || (g.max_select > 1 && ((g.name.endsWith(" – Sauces") && g.name !== "Pasta – Sauces") || g.name === "Salads – Salad Dressings")),
     sort_order: g.sort_order,
   }));
   const written = await insertAll("modifier_groups", rows, "id,name");

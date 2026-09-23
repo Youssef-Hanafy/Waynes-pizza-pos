@@ -56,8 +56,9 @@ export function isIncludedChoice(choice: { default_selected: boolean }) {
 
 /**
  * Whether a customer can ask for more than one portion of this option: the
- * group allows quantities (sauces, extra dressings), except for instructions
- * like "No Sauce" or "Light Sauce", which only make sense once.
+ * group allows quantities (toppings, cheese, sauces, extra dressings -- see
+ * migrations 20260925080000 and 20260928080000), except for instructions like
+ * "No Sauce" or "Light Cheese", which only make sense once.
  */
 export function choiceAllowsExtra(group: { allow_quantities: boolean }, choice: { name: string }) {
   return group.allow_quantities && !/^(no|light|lite)\b/i.test(choice.name.trim());
