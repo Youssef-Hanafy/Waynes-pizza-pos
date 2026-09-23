@@ -27,8 +27,9 @@ export default async function CheckoutPage({
     searchParams,
   ]);
   const fulfillment = params.fulfillment === "delivery" ? "delivery" : "pickup";
+  // Open when the store is open and a card can be taken or TEST ordering is on.
   const orderingOpen =
-    isStoreOpenNow(settings) && settings.test_ordering_enabled;
+    isStoreOpenNow(settings) && (settings.test_ordering_enabled || paymentConfig !== null);
   return (
     <div className="storefront checkout-page min-h-screen">
       <SiteHeader settings={settings} />

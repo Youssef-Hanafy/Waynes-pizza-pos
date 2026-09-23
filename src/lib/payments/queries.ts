@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isStoreOpenNow } from "@/lib/content/store-status";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   checkoutPaymentConfigSchema, orderPaymentSchema, paymentConsoleSchema,
@@ -63,4 +64,17 @@ export async function getPosTerminals() {
   ]);
   if (!settings.data?.terminal_card_enabled) return [];
   return (terminals.data ?? []).map((terminal) => ({ id: terminal.id, label: terminal.label }));
+}
+
+/**
+ * Whether customers can order online right now.  Online ordering is open when
+ * the store is open and there is a way to take the order: card payment is
+ * live, or TEST / MANUAL (no-payment) ordering is switched on.  Turning TEST
+ * ordering off at go-live must not close the storefront while cards are live.
+ */
+export async function isOnlineOrderingAvailable(settings: Parameters<typeof isStoreOpenNow>[0] & { test_ordering_enabled: boolean }, paymentConfig?: Awaited<ReturnType<typeof getCheckoutPaymentConfig>>) {
+  if (!isStoreOpenNow(settings)) return false;
+  if (settings.test_ordering_enabled) return true;
+  const card = paymentConfig === undefined ? await getCheckoutPaymentConfig() : paymentConfig;
+  return card !== null;
 }

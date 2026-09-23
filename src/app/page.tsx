@@ -9,8 +9,8 @@ import { SiteHeader } from "@/components/site/site-header";
 import { StartOrder } from "@/components/site/start-order";
 import { DealCard } from "@/components/site/deal-card";
 import { getStoreSettings } from "@/lib/content/queries";
+import { isOnlineOrderingAvailable } from "@/lib/payments/queries";
 import { formatAddress } from "@/lib/content/schemas";
-import { isStoreOpenNow } from "@/lib/content/store-status";
 import { getPublicMenu } from "@/lib/menu/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { getPublicPromotions } from "@/lib/promotions/public";
@@ -52,8 +52,7 @@ export default async function HomePage() {
     )
     .slice(0, 4);
   const orderingAvailable =
-    isStoreOpenNow(settings) &&
-    settings.test_ordering_enabled &&
+    (await isOnlineOrderingAvailable(settings)) &&
     (settings.pickup_enabled || settings.delivery_enabled);
   const categories = [
     "Pizza",

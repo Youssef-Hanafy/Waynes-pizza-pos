@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { getStoreSettings } from "@/lib/content/queries";
-import { isStoreOpenNow } from "@/lib/content/store-status";
+import { isOnlineOrderingAvailable } from "@/lib/payments/queries";
 import { getPublicMenu } from "@/lib/menu/queries";
 import { OrderMenuClient } from "./order-menu-client";
 
@@ -32,8 +32,7 @@ export default async function MenuPage({
     searchParams,
   ]);
   const fulfillment = params.fulfillment === "delivery" ? "delivery" : "pickup";
-  const orderingOpen =
-    isStoreOpenNow(settings) && settings.test_ordering_enabled;
+  const orderingOpen = await isOnlineOrderingAvailable(settings);
   return (
     <div className="storefront flex min-h-screen flex-col">
       <SiteHeader settings={settings} />
