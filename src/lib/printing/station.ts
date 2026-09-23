@@ -11,6 +11,7 @@ import type { PrintQueueRepository } from "./worker";
  *   destination "receipt", job online_order    → TM-T20III, order slip (+ tip & signature slip)
  *   destination "receipt", job delivery_receipt → TM-T20III, customer receipt (register/phone delivery)
  *   destination "receipt", job receipt_request  → TM-T20III, customer receipt someone asked for
+ *   destination "receipt", job drawer_kick      → cash drawer on the TM-T20III's DK port (every payment taken at the store)
  *
  * Three outcomes, never blurred together:
  *   printed           → job marked printed
@@ -20,6 +21,13 @@ import type { PrintQueueRepository } from "./worker";
 
 /** Jobs older than this are not printed automatically: a ticket for an order from hours ago would only confuse the kitchen. */
 export const STALE_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * A drawer kick that couldn't be sent within this long is dropped: a drawer
+ * popping open minutes after the sale, with nobody at the till, is worse than
+ * the cashier using the key.
+ */
+export const DRAWER_KICK_STALE_AFTER_MS = 2 * 60 * 1000;
 
 export type StationResult = { ok: true; jobId?: string } | { ok: false; reason: string; notSent?: boolean };
 
@@ -87,11 +95,19 @@ export function createKitchenStationAdapter(options: {
 export function createOnlineOrderStationAdapter(options: {
   printer: StationPrinter;
   tipSlip: "always" | "card" | "never";
+  /** Pulse the cash drawer wired to this printer. */
+  openDrawer?: () => Promise<StationResult>;
   now?: () => number;
 }): PrinterAdapter {
   const now = options.now ?? Date.now;
   return {
     async print(job) {
+      if (job.job_type === "drawer_kick") {
+        const created = job.created_at ? Date.parse(job.created_at) : Number.NaN;
+        if (Number.isFinite(created) && now() - created > DRAWER_KICK_STALE_AFTER_MS) return { receiptId: "drawer-kick-skipped-too-late" };
+        if (!options.openDrawer) throw new PrinterUnavailableError("No cash drawer is connected to the receipt printer.");
+        return settle(await options.openDrawer());
+      }
       guard(job, now);
       if (job.job_type === "online_order") {
         return settle(await options.printer.printOnlineOrder(job.order_id, { tipSlip: tipSlipWanted(options.tipSlip, job.payload.payment_method) }));

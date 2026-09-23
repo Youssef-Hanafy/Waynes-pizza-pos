@@ -98,4 +98,15 @@ describe("print station", () => {
     expect(out.printReceipt).toHaveBeenCalledTimes(2);
     expect(out.printOnlineOrder).not.toHaveBeenCalled();
   });
+
+  it("opens the cash drawer for a payment, and drops a kick that is minutes late", async () => {
+    const out = printer({ ok: true });
+    const openDrawer = vi.fn().mockResolvedValue({ ok: true, jobId: "drawer-opened" });
+    const adapter = createOnlineOrderStationAdapter({ printer: out, tipSlip: "never", openDrawer, now: () => now });
+    await expect(adapter.print(job({ destination: "receipt", job_type: "drawer_kick", created_at: "2026-09-21T17:59:30Z" }), {})).resolves.toEqual({ receiptId: "drawer-opened" });
+    expect(openDrawer).toHaveBeenCalledOnce();
+    await expect(adapter.print(job({ destination: "receipt", job_type: "drawer_kick", created_at: "2026-09-21T17:55:00Z" }), {})).resolves.toEqual({ receiptId: "drawer-kick-skipped-too-late" });
+    expect(openDrawer).toHaveBeenCalledOnce();
+    expect(out.printReceipt).not.toHaveBeenCalled();
+  });
 });

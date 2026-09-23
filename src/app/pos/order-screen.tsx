@@ -24,6 +24,8 @@ type Props = {
   menu: PublicMenu;
   settings: StoreSettings;
   onOpenPhone: () => void;
+  /** Open the Payments screen on the order just sent. */
+  onTakePayment?: (orderId: string) => void;
 };
 
 /**
@@ -31,7 +33,7 @@ type Props = {
  * the active draft, so holding it, taking a second call and coming back leaves
  * it exactly as it was (§36), and a refresh does too (test 15).
  */
-export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: Props) {
+export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, onTakePayment }: Props) {
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
   const held = drafts.filter((candidate) => candidate.id !== activeId);
@@ -151,7 +153,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone }: 
     <p className="mt-4 text-sm font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket and delivery receipt print automatically." : "Kitchen ticket prints automatically. Print a receipt only if the customer asks."}</p>
     <div className="mt-3 grid grid-cols-2 gap-2"><Button onClick={() => void print("receipt")} variant="secondary">{created.delivery ? "Print another receipt" : "Print receipt"}</Button><Button onClick={() => void print("kitchen")} variant="secondary">Reprint kitchen ticket</Button></div>
     {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
-    <p className="mt-4 rounded-xl bg-wayne-warn-soft p-4 font-bold">TEST / MANUAL boundary — no card was processed.</p>
+    {onTakePayment ? <Button className="mt-5 w-full text-xl" onClick={() => { const id = created.id; setCreated(null); onTakePayment(id); }} size="lg">Take payment · {formatCents(created.total_cents)}</Button> : null}
+    <p className="mt-4 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">Not paid yet. Take payment now, or later from Payments.</p>
     <Button className="mt-6 w-full text-lg" onClick={() => setCreated(null)}>{held.some(isWorthResuming) ? "Back to tickets" : "Start new ticket"}</Button>
     {held.filter(isWorthResuming).length ? <div className="mt-4 grid gap-2 text-left"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p>{held.filter(isWorthResuming).map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setCreated(null); }} variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div> : null}
   </section></div>;

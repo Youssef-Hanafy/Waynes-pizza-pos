@@ -1,6 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PrinterDrawerProvider } from "@/hardware/drawer/provider";
 import { fetchPrintDocument, type PrinterConfig, type PrinterProvider } from "@/hardware/printers/provider";
 import type { PrinterAdapter } from "@/lib/printing/adapter";
 import { createKitchenStationAdapter, createOnlineOrderStationAdapter, createStationRepository } from "@/lib/printing/station";
@@ -17,6 +18,8 @@ import { getDeviceId } from "./draft-sync";
  *   • an order slip + tip & signature slip for every online order, the
  *     receipt for every register/phone delivery order, and any receipt a
  *     register asks for, on the receipt printer (TM-T20III)
+ *   • opens the cash drawer (on the TM-T20III's DK port) for every payment
+ *     taken at the store, whichever register or phone took it
  *
  * It is woken by Realtime the moment a job is queued, and checks every 20 s
  * as a safety net.  Several registers switched on by mistake can't double
@@ -58,6 +61,20 @@ function setLane(name: StationLane, patch: Partial<LaneState>) {
   printStationStore.set((state) => ({ ...state, lanes: { ...state.lanes, [name]: { ...state.lanes[name], ...patch } } }));
 }
 
+/** The drawer on the receipt printer's DK port, pulsed for every payment taken at the store. */
+function openDrawerThrough(config: PrinterConfig) {
+  const drawer = new PrinterDrawerProvider(config);
+  return async () => {
+    try {
+      await drawer.open();
+      return { ok: true as const, jobId: "drawer-opened" };
+    } catch (error) {
+      // Nothing reached the printer: wait for it (briefly — stale kicks are dropped).
+      return { ok: false as const, reason: error instanceof Error ? error.message : "The cash drawer could not be opened.", notSent: true };
+    }
+  };
+}
+
 type LaneSetup = { name: StationLane; destination: string; printer: PrinterConfig; provider: PrinterProvider };
 
 function ready(config: PrinterConfig) {
@@ -92,7 +109,7 @@ export function startPrintStation(options: {
     const station = createStationRepository(base, release);
     const adapter = setup.name === "kitchen"
       ? createKitchenStationAdapter({ printer: setup.provider, routingCategories: setup.printer.routingCategories, loadDocument: fetchPrintDocument })
-      : createOnlineOrderStationAdapter({ printer: setup.provider, tipSlip: setup.printer.tipSlip });
+      : createOnlineOrderStationAdapter({ printer: setup.provider, tipSlip: setup.printer.tipSlip, openDrawer: openDrawerThrough(setup.printer) });
     lanes.push({ ...setup, adapter: station.watch(adapter), station, pausedUntil: 0, busy: false });
     setLane(setup.name, { state: "ready", detail: `${setup.printer.name || setup.name} at ${setup.printer.ip}` });
   }

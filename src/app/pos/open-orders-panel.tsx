@@ -18,7 +18,7 @@ const labels: Record<string, string> = { placed: "New", accepted: "Accepted", in
  * `inline` draws the list straight into a POS section (Orders, Delivery) instead
  * of behind the header button; `fulfillment` narrows it to pickup or delivery.
  */
-export function OpenOrdersPanel({ timeZone, inline = false, fulfillment }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery" }) {
+export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery"; onPay?: (orderId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [error, setError] = useState("");
@@ -184,10 +184,11 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment }: { tim
           return <li className={`rounded-xl border p-4 ${order.status === "ready" ? "border-wayne-ok/40 bg-wayne-ok-soft" : "border-wayne-border"}`} key={order.id}>
             <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-xl">{order.order_number}</strong><p className="font-bold">{order.customer_name}</p><p className="text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · placed {time(order.placed_at)}{order.promised_at ? ` · promised ${time(order.promised_at)}` : ""}</p></div><div className="text-right"><span className="rounded-full bg-white px-3 py-1 text-sm font-black">{labels[order.status] ?? order.status}</span><p className="mt-2 font-black">{formatCents(order.total_cents)}</p><p className="text-xs capitalize text-wayne-muted">{order.payment_method.replace("_", " ")} · {order.payment_status}</p></div></div>
             <div className="mt-3 flex flex-wrap items-center gap-2">{handOff ? <Button disabled={pending !== null} onClick={() => { void move(order, handOff.status); }}>{pending === order.id ? "Saving…" : handOff.label}</Button> : <Button disabled={pending !== null} onClick={() => { void move(order, "completed"); }} variant="secondary">{pending === order.id ? "Saving…" : "Complete now (skip kitchen)"}</Button>}
-              {terminals.length && order.payment_status === "unpaid" ? (charging === order.id
+              {onPay && order.payment_status === "unpaid" ? <Button onClick={() => onPay(order.id)}>Take payment</Button> : null}
+              {!onPay && terminals.length && order.payment_status === "unpaid" ? (charging === order.id
                 ? <><span className="text-sm font-bold">{chargeNote || "Charging…"}</span><Button onClick={() => { void cancelCharge(order); }} variant="secondary">Cancel on reader</Button></>
                 : <Button disabled={charging !== null} onClick={() => { void chargeCard(order); }} variant="secondary">Take card payment</Button>) : null}
-              {shiftId && order.payment_status === "unpaid" && cashFor !== order.id
+              {!onPay && shiftId && order.payment_status === "unpaid" && cashFor !== order.id
                 ? <Button disabled={pending !== null} onClick={() => { setCashFor(order.id); setTendered((order.total_cents / 100).toFixed(2)); setError(""); }} variant="secondary">Take cash</Button>
                 : null}
               <Button disabled={receiptNote?.id === order.id && receiptNote.text === "Printing…"} onClick={() => { void printReceipt(order); }} variant="secondary">Print receipt</Button>
