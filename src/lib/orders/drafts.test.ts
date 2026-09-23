@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  activeDraft, blankDraft, draftFromCall, draftToOrderPayload, findDraftForCall, heldDrafts, holdActive, initialDrafts, parseSavedDrafts, removeDraft, resumeDraft, startDraft, updateDraft,
+  activeDraft, blankDraft, draftFromCall, draftToOrderPayload, findDraftForCall, heldDrafts, holdActive, initialDrafts, isDraftIdle, parseSavedDrafts, removeDraft, resumeDraft, startDraft, updateDraft,
 } from "./drafts";
 
 const line = { line_id: "l1", menu_item_id: "64000000-0000-4000-8000-000000000001", variant_id: null, quantity: 1, special_instructions: "", modifiers: [] };
@@ -87,5 +87,16 @@ describe("drafts shared between registers (Phase 6)", () => {
     expect(state.drafts.find((draft) => draft.id === mine.id)!.held).toBe(true);
     expect(draftBody(theirs)).not.toHaveProperty("syncedVersion");
     expect(draftBody(theirs)).not.toHaveProperty("submitPending");
+  });
+});
+
+describe("an idle ticket (a ringing phone may open over it)", () => {
+  it("is idle only while nothing has been started on it", () => {
+    const state = initialDrafts();
+    const fresh = activeDraft(state);
+    expect(isDraftIdle(fresh)).toBe(true);
+    expect(isDraftIdle({ ...fresh, cart: [line] })).toBe(false);
+    expect(isDraftIdle({ ...fresh, firstName: "Rita" })).toBe(false);
+    expect(isDraftIdle({ ...fresh, phoneCallKey: "call-1" })).toBe(false);
   });
 });

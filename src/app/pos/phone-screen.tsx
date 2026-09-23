@@ -19,6 +19,8 @@ type Props = {
   simulatorAvailable: boolean;
   onStartOrder: StartPhoneOrder;
   onOpenCustomer: (customer: PosCustomer) => void;
+  /** A ringing call the register opened by itself (auto pick-up). Shown, not claimed. */
+  focusKey?: string | null;
 };
 
 function useClock(intervalMs = 15_000) {
@@ -50,10 +52,13 @@ function callerTitle(call: PhoneCallView) {
  * (§16).  Opening a line claims it for this register (§22); the detail shows
  * the customer, or the new-caller choices, and starts the order (§9).
  */
-export function PhoneScreen({ profileId, timeZone, simulatorAvailable, onStartOrder, onOpenCustomer }: Props) {
+export function PhoneScreen({ profileId, timeZone, simulatorAvailable, onStartOrder, onOpenCustomer, focusKey = null }: Props) {
   const state = usePhoneState();
   const now = useClock();
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  // An auto-opened ring starts on its line's detail.  It is not claimed just by
+  // appearing, so an idle second register never locks the call; pressing
+  // Start phone order claims it as usual (§22).
+  const [openKey, setOpenKey] = useState<string | null>(focusKey);
   const openCall = openKey ? state.calls[openKey] ?? null : null;
 
   async function openLine(call: PhoneCallView) {

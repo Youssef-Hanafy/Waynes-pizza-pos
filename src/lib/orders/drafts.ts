@@ -271,3 +271,14 @@ export function draftBody(draft: PosDraft) {
   void _version; void _syncedAt; void _pending;
   return body;
 }
+
+/**
+ * Nothing has been started on this ticket: no items, no customer, not from a
+ * call, nothing typed.  A ringing phone may open itself over an idle ticket,
+ * never over one someone is in the middle of (§34.1).
+ */
+export function isDraftIdle(draft: PosDraft): boolean {
+  return draft.cart.length === 0 && draft.customer === null && draft.phoneCallKey === null
+    && !draft.firstName.trim() && !draft.lastName.trim() && !draft.phone.trim() && !draft.orderNote.trim()
+    && !draft.submitPending;
+}

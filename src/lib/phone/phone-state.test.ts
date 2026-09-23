@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IncomingCallEvent } from "@/hardware/types";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import {
-  applyBoard, applyServerCall, callOnLine, expiredKeys, hasUnclaimedCall, initialPhoneState, matchOutcome, receiveIncoming, setStatus, waitingCallCount,
+  applyBoard, applyServerCall, callOnLine, expiredKeys, hasUnclaimedCall, initialPhoneState, matchOutcome, receiveIncoming, ringingCallsToOpen, setStatus, waitingCallCount,
 } from "./phone-state";
 import type { PhoneBoard, PhoneCall } from "./schemas";
 
@@ -102,5 +102,20 @@ describe("phone state (build sheet §16, §17, §34)", () => {
     // Once recorded, the server is the truth: an empty line means it is over.
     const synced = applyBoard(applyServerCall(next, serverCall({ event_key: "offline", status: "dismissed" })), board);
     expect(callOnLine(synced, 1)).toBeNull();
+  });
+});
+
+describe("calls that open by themselves (auto pick-up)", () => {
+  it("opens a ringing Line 1 or Line 2 call, Line 1 first, and each ring only once", () => {
+    let state = receiveIncoming(initialPhoneState(), ring("b", 2, "7745552222")).state;
+    state = receiveIncoming(state, ring("a", 1, "5085551234", 1)).state;
+    expect(ringingCallsToOpen(state, new Set()).map((call) => call.line)).toEqual([1, 2]);
+    expect(ringingCallsToOpen(state, new Set(["a"])).map((call) => call.key)).toEqual(["b"]);
+  });
+
+  it("does not open a call another register has already answered", () => {
+    let state = receiveIncoming(initialPhoneState(), ring("a", 1, "5085551234")).state;
+    state = setStatus(state, "a", "selected");
+    expect(ringingCallsToOpen(state, new Set())).toEqual([]);
   });
 });

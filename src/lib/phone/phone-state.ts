@@ -252,3 +252,15 @@ export function matchOutcome(call: PhoneCallView): "looking_up" | "new_caller" |
   if (!call.matches.length) return "new_caller";
   return call.matches.length === 1 ? "existing" : "choose";
 }
+
+/**
+ * Rings that should open by themselves ("auto pick-up", like Thrive's caller
+ * ID pop-up): calls still ringing (nobody has taken them) that this register
+ * has not already opened or passed over.  Lowest line first, so Line 1 wins
+ * when both lines ring at once; the other stays on the PHONE badge.
+ */
+export function ringingCallsToOpen(state: PhoneState, alreadySeen: ReadonlySet<string>): PhoneCallView[] {
+  return state.lines
+    .map((line) => callOnLine(state, line.line))
+    .filter((call): call is PhoneCallView => call !== null && call.status === "incoming" && !alreadySeen.has(call.key));
+}

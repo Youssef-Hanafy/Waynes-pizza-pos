@@ -23,6 +23,28 @@ const serverSnapshot = initialPhoneState();
 export const phoneStore = createStore<PhoneState>(serverSnapshot);
 
 const TERMINAL_KEY = "wayne.pos.terminal";
+const AUTO_OPEN_KEY = "wayne.pos.autoOpenCalls";
+
+/**
+ * Auto pick-up: when Line 1 or Line 2 rings and this register is idle, the
+ * call opens on screen by itself (Thrive's caller ID pop-up).  On by default;
+ * each register can switch it off in POS -> More (e.g. a kitchen tablet).
+ */
+export function getAutoOpenCalls(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_OPEN_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setAutoOpenCalls(on: boolean) {
+  try {
+    window.localStorage.setItem(AUTO_OPEN_KEY, on ? "on" : "off");
+  } catch {
+    // Not persisted; the default (on) is used.
+  }
+}
 
 /** This register's name, shown to the others when it claims a call (§22). */
 export function getTerminalLabel(): string {

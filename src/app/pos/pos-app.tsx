@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { StoreSettings } from "@/lib/content/schemas";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
 import type { PublicMenu } from "@/lib/menu/schemas";
-import { draftFromCall } from "@/lib/orders/drafts";
+import { activeDraft, draftFromCall, isDraftIdle } from "@/lib/orders/drafts";
+import { ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
-import { orderActions, useDrafts } from "@/stores/order-store";
-import { getTerminalLabel, phoneActions, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
+import { orderActions, orderStore, useDrafts } from "@/stores/order-store";
+import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOpenCalls, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
 import { usePrintStationRunner } from "@/stores/use-print-station";
@@ -50,6 +51,9 @@ export function PosApp(props: Props) {
   const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware } = props;
   const [section, setSection] = useState<Section>("order");
   const [customerFocus, setCustomerFocus] = useState<PosCustomer | null>(null);
+  const [phoneFocus, setPhoneFocus] = useState<{ key: string; n: number } | null>(null);
+  const sectionRef = useRef<Section>(section);
+  useEffect(() => { sectionRef.current = section; }, [section]);
   const badge = usePhoneBadge();
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
@@ -85,6 +89,33 @@ export function PosApp(props: Props) {
     setSection("order");
   }
 
+  /**
+   * Auto pick-up.  When Line 1 or Line 2 rings, the call opens on this register
+   * by itself if the register is idle: an empty ticket or the order lists.
+   * Someone in the middle of a ticket, a customer form, settings, or another
+   * caller on the phone screen is never pulled away; the PHONE button and the
+   * ringing line card light up instead (§34.1).
+   */
+  useEffect(() => {
+    const seen = new Set<string>();
+    // Calls already on the lines when the POS opens are not popped.
+    for (const call of Object.values(phoneStore.get().calls)) seen.add(call.key);
+    let n = 0;
+    return phoneStore.subscribe(() => {
+      const ringing = ringingCallsToOpen(phoneStore.get(), seen);
+      if (!ringing.length) return;
+      for (const call of ringing) seen.add(call.key);
+      if (!getAutoOpenCalls()) return;
+      const current = sectionRef.current;
+      const idle = current === "orders" || current === "delivery"
+        || (current === "order" && isDraftIdle(activeDraft(orderStore.get())));
+      if (!idle) return;
+      n += 1;
+      setPhoneFocus({ key: ringing[0]!.key, n });
+      setSection("phone");
+    });
+  }, []);
+
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
   const warning = !hardwareState.online
@@ -106,7 +137,7 @@ export function PosApp(props: Props) {
   return <div className="flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden">
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">Wayne&apos;s Pizza</strong>
-      <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => setSection("phone")} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button>
+      <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button>
       <PrintStationBadge />
       <DrawerPanel timeZone={settings.timezone} />
       <span className="hidden text-sm font-bold text-wayne-cream/80 sm:inline">{staffName}</span>
@@ -115,11 +146,11 @@ export function PosApp(props: Props) {
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
     {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
-      {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => setSection(tab.id)} type="button">{tab.label}</button>)}
+      {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
     </nav>
 
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => setSection("phone")} settings={settings} /> : null}
-    {section === "phone" ? <PhoneScreen onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
+    {section === "phone" ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
@@ -136,8 +167,9 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
   const { statuses, online } = useHardwareState();
   const [terminal, setTerminal] = useState("");
   const [saved, setSaved] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(true);
   useEffect(() => {
-    const timer = window.setTimeout(() => setTerminal(getTerminalLabel()), 0);
+    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -150,6 +182,10 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
           <label className="grid flex-1 gap-1.5 text-sm font-bold" htmlFor="terminal-name">Register name<input className="min-h-11 rounded-xl border border-wayne-border px-3 font-normal" id="terminal-name" maxLength={60} onChange={(event) => { setTerminal(event.target.value); setSaved(false); }} value={terminal} /></label>
           <Button type="submit">{saved ? "Saved" : "Save"}</Button>
         </form>
+        <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
+          <input checked={autoOpen} className="mt-1 size-5" onChange={(event) => { setAutoOpen(event.target.checked); setAutoOpenCalls(event.target.checked); }} type="checkbox" />
+          <span><strong className="block text-base">Pick up calls automatically</strong>When Line 1 or Line 2 rings and this register isn&apos;t in the middle of a ticket, the caller&apos;s card opens by itself. Turn off on a register that shouldn&apos;t jump to the phone (e.g. a kitchen tablet).</span>
+        </label>
       </section>
       <section className="rounded-3xl bg-white p-5 shadow-sm">
         <h2 className="text-xl font-black">Hardware</h2>
