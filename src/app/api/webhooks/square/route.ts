@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-square-hmacsha256-signature");
 
-  const resolved = await resolveWebhookProvider();
+  const resolved = await resolveWebhookProvider(request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? undefined);
   if (!resolved) {
     logger.warn("square_webhook.unconfigured", { length: rawBody.length });
     // 200 so Square stops retrying into a deployment that has no processor at all.

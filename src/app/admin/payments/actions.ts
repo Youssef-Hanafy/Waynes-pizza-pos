@@ -20,7 +20,7 @@ export async function savePaymentSettings(form: FormData) {
     terminal_card_enabled: form.get("terminal_card_enabled") === "on",
   };
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.rpc("wayne_save_payment_settings", { payload });
+  const { error } = await supabase.rpc("hanafy_save_location_payment_configuration", { payload });
   if (error) {
     back(error.message.includes("payment_provider_settings_ready")
       ? "Enter the application ID and location ID before switching card payment on."

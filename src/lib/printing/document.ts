@@ -210,11 +210,11 @@ function ruler(columns: number) {
   return text;
 }
 
-export function buildTestPage(printerName: string, now = new Date(), columns = 42): PrintLayout {
+export function buildTestPage(printerName: string, now = new Date(), columns = 42, receiptHeader = "Store"): PrintLayout {
   return {
     title: "Test print",
     lines: [
-      { kind: "text", text: "WAYNE'S PIZZA", align: "center", bold: true, large: true },
+      { kind: "text", text: receiptHeader, align: "center", bold: true, large: true },
       { kind: "text", text: "Printer test", align: "center", bold: true },
       { kind: "rule" },
       { kind: "pair", left: "Printer", right: printerName || "Unnamed" },

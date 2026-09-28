@@ -195,10 +195,7 @@ export async function updateWebsiteSettings(formData: FormData) {
   const payload = logoPath
     ? { ...parsed.data, logo_path: logoPath }
     : parsed.data;
-  const { error } = await supabase
-    .from("store_settings")
-    .update(payload)
-    .eq("id", true);
+  const { error } = await supabase.rpc("hanafy_save_location_settings", { payload });
   if (error)
     redirect(`/admin/settings?error=${encodeURIComponent(error.message)}`);
   revalidatePath("/", "layout");

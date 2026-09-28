@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getCurrentAccess } from "@/lib/auth/access";
 import { isStoreOpenNow } from "@/lib/content/store-status";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
@@ -58,9 +59,11 @@ export async function getOrderPayments(orderId: string): Promise<OrderPayment[]>
 /** Card readers the counter may charge. Returns nothing when reader payment is off. */
 export async function getPosTerminals() {
   const supabase = await createServerSupabaseClient();
+  const access = await getCurrentAccess();
+  if (!access?.workspace_id) return [];
   const [settings, terminals] = await Promise.all([
-    supabase.from("payment_provider_settings").select("terminal_card_enabled").eq("id", true).maybeSingle(),
-    supabase.from("payment_terminals").select("id, label, device_id, status").eq("status", "active").order("label"),
+    supabase.from("location_payment_configurations").select("terminal_card_enabled").eq("workspace_id", access.workspace_id).order("created_at").limit(1).maybeSingle(),
+    supabase.from("payment_terminals").select("id, label, device_id, status").eq("workspace_id", access.workspace_id).eq("status", "active").order("label"),
   ]);
   if (!settings.data?.terminal_card_enabled) return [];
   return (terminals.data ?? []).map((terminal) => ({ id: terminal.id, label: terminal.label }));

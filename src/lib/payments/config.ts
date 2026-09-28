@@ -1,5 +1,6 @@
 import "server-only";
 
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { createSquareProvider, type SquareConfig } from "./square";
@@ -19,15 +20,28 @@ export function paymentSecretsPresent() {
   }).success;
 }
 
-export async function readPaymentSettings(): Promise<PaymentProviderSettings | null> {
+function normalizedHost(value: string) {
+  return value.trim().toLowerCase().replace(/:\d+$/, "");
+}
+
+export async function readPaymentSettings(host?: string): Promise<PaymentProviderSettings | null> {
   const supabase = createServiceSupabaseClient();
+  const requestHost = host ?? (await headers()).get("x-forwarded-host") ?? (await headers()).get("host") ?? "";
+  const { data: domain, error: domainError } = await supabase
+    .from("workspace_domains")
+    .select("workspace_id,location_id")
+    .eq("hostname", normalizedHost(requestHost))
+    .eq("active", true)
+    .maybeSingle();
+  if (domainError || !domain) return null;
   const { data, error } = await supabase
-    .from("payment_provider_settings")
-    .select("provider, environment, application_id, location_id, notification_url, online_card_enabled, terminal_card_enabled, updated_at")
-    .eq("id", true)
+    .from("location_payment_configurations")
+    .select("provider, environment, application_id, provider_location_id, notification_url, online_card_enabled, terminal_card_enabled, updated_at")
+    .eq("workspace_id", domain.workspace_id)
+    .eq("location_id", domain.location_id)
     .maybeSingle();
   if (error || !data) return null;
-  const parsed = paymentProviderSettingsSchema.safeParse(data);
+  const parsed = paymentProviderSettingsSchema.safeParse({ ...data, location_id: data.provider_location_id });
   return parsed.success ? parsed.data : null;
 }
 
@@ -65,8 +79,8 @@ export async function resolvePaymentProvider(channel: "online" | "terminal"): Pr
 }
 
 /** The webhook receiver needs the provider even when the switches are off. */
-export async function resolveWebhookProvider() {
-  const settings = await readPaymentSettings();
+export async function resolveWebhookProvider(host?: string) {
+  const settings = await readPaymentSettings(host);
   if (!settings || settings.provider === "none") return null;
   const secrets = secretsSchema.safeParse({
     SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN,

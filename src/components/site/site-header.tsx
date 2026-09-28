@@ -43,7 +43,7 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
                 className="uploaded-logo"
               />
             ) : (
-              <BrandMark />
+              <BrandMark name={settings.store_name} city={[settings.city, settings.state].filter(Boolean).join(", ")} />
             )}
           </Link>
           <div className="header-location">

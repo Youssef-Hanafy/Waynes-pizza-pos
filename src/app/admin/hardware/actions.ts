@@ -53,7 +53,7 @@ export async function saveHardwareSettings(form: FormData) {
   const input = parsed.data!;
 
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.rpc("wayne_update_hardware_settings", {
+  const { error } = await supabase.rpc("hanafy_save_location_hardware_configuration", {
     payload: {
       caller_id_provider: input.caller_id_provider,
       caller_line_count: input.caller_line_count,

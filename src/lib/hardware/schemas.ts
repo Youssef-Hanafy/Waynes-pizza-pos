@@ -41,12 +41,12 @@ export const hardwareSettingsSchema = z.object({
 });
 export type HardwareSettings = z.infer<typeof hardwareSettingsSchema>;
 
-/** Safe defaults when the settings row cannot be read: simulator, two lines. */
+/** Safe defaults when the settings row cannot be read: no assumed hardware. */
 export const defaultHardwareSettings: HardwareSettings = {
   caller_id_provider: "simulated",
-  caller_device_model: "CallerID.com Whozz Calling? Basic POS 2 Ethernet",
-  caller_line_count: 2,
-  caller_udp_port: 3520,
+  caller_device_model: "",
+  caller_line_count: 1,
+  caller_udp_port: 1,
   caller_bind_address: "0.0.0.0",
   caller_device_ip: "",
   call_expire_minutes: 10,

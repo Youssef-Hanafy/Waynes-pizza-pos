@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getCurrentAccess } from "@/lib/auth/access";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { defaultHardwareSettings, hardwareSettingsSchema, type HardwareSettings } from "./schemas";
 
@@ -10,8 +11,16 @@ import { defaultHardwareSettings, hardwareSettingsSchema, type HardwareSettings 
  */
 export async function getHardwareSettings(): Promise<{ settings: HardwareSettings; unavailable: boolean }> {
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.rpc("wayne_pos_hardware_settings");
-  const parsed = hardwareSettingsSchema.safeParse(data);
+  const access = await getCurrentAccess();
+  if (!access?.workspace_id) return { settings: defaultHardwareSettings, unavailable: true };
+  const { data, error } = await supabase
+    .from("location_hardware_configurations")
+    .select("configuration,updated_at")
+    .eq("workspace_id", access.workspace_id)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  const parsed = hardwareSettingsSchema.safeParse(data && { ...data.configuration, updated_at: data.updated_at });
   if (error || !parsed.success) return { settings: defaultHardwareSettings, unavailable: true };
   return { settings: parsed.data, unavailable: false };
 }
