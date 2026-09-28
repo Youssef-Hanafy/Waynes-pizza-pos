@@ -12,7 +12,10 @@ export async function getCurrentAccess(): Promise<CurrentAccess | null> {
 
   if (userError || !userData.user) return null;
 
-  const { data, error } = await supabase.rpc("wayne_my_access");
+  // This RPC derives an active workspace from the authenticated identity. It
+  // deliberately returns no access for a user with ambiguous memberships;
+  // workspace-routed UI will choose context explicitly in a later phase.
+  const { data, error } = await supabase.rpc("hanafy_current_workspace_access");
   if (error || data === null) return null;
 
   const parsed = accessSchema.safeParse(data);

@@ -37,6 +37,10 @@ export const accessSchema = z.object({
   profile_id: z.uuid(),
   display_name: z.string().min(1),
   role: roleSchema,
+  // Present when access is resolved through the Phase 3 workspace context.
+  // Optional keeps this parser compatible with older serialized test fixtures.
+  workspace_id: z.uuid().optional(),
+  workspace_slug: z.string().min(1).optional(),
   // Unknown codes (e.g. a permission added by a newer migration) are ignored instead
   // of failing the whole parse, which would sign every staff member out.
   permissions: z.array(z.string()).transform((codes) =>
