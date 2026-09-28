@@ -14,10 +14,11 @@ const baseContext: WorkspaceContextRecord = {
 };
 
 describe("workspace entitlement helpers", () => {
-  it("uses workspace permissions unless the user is an explicit platform administrator", () => {
+  it("uses only the permissions the database resolved, even for platform administrators", () => {
     expect(hasWorkspacePermission(baseContext, "pos.access")).toBe(true);
     expect(hasWorkspacePermission(baseContext, "settings.manage")).toBe(false);
-    expect(hasWorkspacePermission({ ...baseContext, is_platform_admin: true }, "settings.manage")).toBe(true);
+    // No silent platform bypass (build sheet §8.4): access comes from a support session.
+    expect(hasWorkspacePermission({ ...baseContext, is_platform_admin: true }, "settings.manage")).toBe(false);
   });
 
   it("does not infer an entitlement from platform access or permissions", () => {

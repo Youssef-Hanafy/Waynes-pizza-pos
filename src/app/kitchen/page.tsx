@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SupportPill } from "@/components/ops/support-banner";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getKitchenBoard } from "@/lib/kitchen/queries";
@@ -15,5 +16,5 @@ export default async function KitchenPage() {
   let initialError = "";
   try { tickets = await getKitchenBoard(); } catch { initialError = "Kitchen is unavailable. Checking connection…"; }
   return <><WorkspaceScope legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} /><KitchenBoard businessName={access.workspace_name ?? "Kitchen"} initialTickets={tickets} initialError={initialError} staffName={access.display_name}
-    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} canManageOrders={hasPermission(access, "orders.manage")} /></>;
+    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} canManageOrders={hasPermission(access, "orders.manage")} /><SupportPill access={access} /></>;
 }

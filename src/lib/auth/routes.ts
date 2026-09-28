@@ -1,4 +1,4 @@
-const protectedPrefixes = ["/admin", "/pos", "/kitchen", "/driver", "/w"] as const;
+const protectedPrefixes = ["/admin", "/pos", "/kitchen", "/driver", "/w", "/platform"] as const;
 
 export function isProtectedPath(pathname: string) {
   return protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

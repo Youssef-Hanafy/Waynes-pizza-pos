@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { SupportBanner } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { Badge } from "@/components/ui/badge";
 import { buildWorkspaceNavigation } from "@/lib/tenancy/navigation";
@@ -39,9 +40,12 @@ export default async function WorkspaceLayout({ children, params }: Readonly<{ c
   return (
     <div className="min-h-screen bg-wayne-cream">
       <WorkspaceScope legacyOperations={context.legacy_operations ?? false} locationId={context.location?.id ?? null} workspaceId={context.workspace.id} />
-      {supportView ? (
+      {supportView && context.support_session ? (
+        <SupportBanner expiresAt={context.support_session.expires_at} timeZone={context.workspace.timezone} workspaceName={context.workspace.name} workspaceSlug={context.workspace.slug} />
+      ) : supportView ? (
         <p className="bg-wayne-warn-soft px-5 py-2 text-center text-sm font-bold" role="status">
-          Viewing {context.workspace.name} as Hanafy platform staff. You are not a member of this business.
+          You are Hanafy platform staff, not a member of {context.workspace.name}, so nothing here is open to you.{" "}
+          <Link className="underline" href={`/platform/workspaces/${context.workspace.slug}`}>Start a support session in Platform Admin</Link> to work in this business.
         </p>
       ) : null}
       <header className="border-b border-wayne-border bg-wayne-surface">

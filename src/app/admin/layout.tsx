@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { isPathEnabled } from "@/lib/tenancy/services";
+import { SupportBanner } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { AdminNav } from "./admin-nav";
 import { signOut } from "./actions";
@@ -68,6 +69,9 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   return (
     <div className="flex min-h-screen flex-col bg-wayne-cream">
       <WorkspaceScope legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} />
+      {access.support_session && access.workspace_slug ? (
+        <SupportBanner expiresAt={access.support_session.expires_at} workspaceName={workspaceName} workspaceSlug={access.workspace_slug} />
+      ) : null}
       <header className="sticky top-0 z-40 border-b border-wayne-border bg-wayne-surface/95 backdrop-blur-md">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-5 px-5">
           <Link className="flex items-center gap-2.5" href="/admin">
@@ -89,7 +93,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
             </Link>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-bold leading-tight">{access.display_name}</p>
-              <Badge className="mt-0.5" tone="neutral">{access.role}</Badge>
+              <Badge className="mt-0.5" tone={access.role === "hanafy_support" ? "warn" : "neutral"}>{access.role === "hanafy_support" ? "Hanafy support" : access.role}</Badge>
             </div>
             <form action={signOut}><Button size="sm" variant="secondary">Sign out</Button></form>
           </div>

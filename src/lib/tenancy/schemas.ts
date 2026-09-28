@@ -33,7 +33,9 @@ export const workspaceContextSchema = z.object({
   permissions: z.array(z.string()),
   enabled_services: z.array(z.string()),
   // Phase 5: true only for the workspace the pre-platform wayne_* operations serve.
-  legacy_operations: z.boolean().optional()
+  legacy_operations: z.boolean().optional(),
+  // Phase 6: the caller's live Hanafy support session when they are not a member.
+  support_session: z.object({ id: z.uuid(), expires_at: z.string(), platform_role: z.string(), reason: z.string() }).nullable().optional()
 });
 
 export type WorkspaceContextRecord = z.infer<typeof workspaceContextSchema>;

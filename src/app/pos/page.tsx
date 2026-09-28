@@ -6,6 +6,7 @@ import { getHardwareSettings } from "@/lib/hardware/queries";
 import { callerIdProviderSchema } from "@/lib/hardware/schemas";
 import { getPosMenu } from "@/lib/pos/queries";
 import { AutoRefresh } from "@/components/ops/auto-refresh";
+import { SupportPill } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { PosApp } from "./pos-app";
 
@@ -41,6 +42,7 @@ export default async function PosPage() {
       settings={settings}
       staffName={access.display_name}
     />
+    <SupportPill access={access} />
     <div className="sr-only"><AutoRefresh intervalMs={60_000} label="Menu refreshes every minute" /></div>
   </>;
 }

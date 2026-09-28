@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const roleSchema = z.enum(["owner", "manager", "cashier", "kitchen", "driver", "marketing_readonly"]);
 export type AppRole = z.infer<typeof roleSchema>;
+export type AccessRole = AppRole | "hanafy_support";
 
 export const permissionSchema = z.enum([
   "admin.access",
@@ -33,10 +34,19 @@ export const permissionSchema = z.enum([
 ]);
 export type Permission = z.infer<typeof permissionSchema>;
 
+export const supportSessionSchema = z.object({
+  id: z.uuid(),
+  expires_at: z.string(),
+  platform_role: z.string(),
+  reason: z.string(),
+});
+export type SupportSession = z.infer<typeof supportSessionSchema>;
+
 export const accessSchema = z.object({
   profile_id: z.uuid(),
   display_name: z.string().min(1),
-  role: roleSchema,
+  // "hanafy_support" only during an audited Hanafy support session (Phase 6).
+  role: roleSchema.or(z.literal("hanafy_support")),
   // Present when access is resolved through the Phase 3 workspace context.
   // Optional keeps this parser compatible with older serialized test fixtures.
   workspace_id: z.uuid().optional(),
@@ -48,6 +58,8 @@ export const accessSchema = z.object({
   // True only for the workspace the pre-platform wayne_* operations serve.
   legacy_operations: z.boolean().optional(),
   membership_count: z.number().int().nonnegative().optional(),
+  // Phase 6: present when this access comes from a Hanafy support session.
+  support_session: supportSessionSchema.nullable().optional(),
   // Unknown codes (e.g. a permission added by a newer migration) are ignored instead
   // of failing the whole parse, which would sign every staff member out.
   permissions: z.array(z.string()).transform((codes) =>

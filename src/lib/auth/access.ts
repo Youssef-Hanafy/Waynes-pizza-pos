@@ -54,11 +54,19 @@ export async function isSignedIn() {
   return !error && Boolean(data.user);
 }
 
+/** True for an active Hanafy platform user (decided by the database). */
+export async function isPlatformUser() {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_role");
+  return !error && typeof data === "string" && data.length > 0;
+}
+
 export async function requirePermission(permission: Permission, nextPath = "/admin") {
   const access = await getWorkspaceAccess();
   if (!access) {
-    // Signed in but no workspace chosen (several memberships, or platform staff).
-    if (await isSignedIn()) redirect("/w");
+    // Signed in but no workspace chosen (several memberships), or Hanafy
+    // platform staff without a support session: they start in Platform Admin.
+    if (await isSignedIn()) redirect((await isPlatformUser()) ? "/platform" : "/w");
     redirect(`/login?next=${encodeURIComponent(nextPath)}`);
   }
   if (access.legacy_operations === false && access.workspace_slug) redirect(`/w/${access.workspace_slug}`);

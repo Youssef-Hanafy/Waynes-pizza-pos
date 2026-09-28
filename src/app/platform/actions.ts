@@ -1,0 +1,204 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { logger } from "@/lib/logging/logger";
+import { getPlatformWorkspace, requirePlatformUser } from "@/lib/platform/queries";
+import {
+  platformErrorMessage,
+  setMemberInputSchema,
+  setServiceInputSchema,
+  setServiceResultSchema,
+  startSupportInputSchema,
+} from "@/lib/platform/schemas";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
+import { zonedLocalToUtcIso } from "@/lib/time/zoned";
+
+const text = (form: FormData, key: string) => {
+  const value = form.get(key);
+  return typeof value === "string" ? value : "";
+};
+
+function back(path: string, message: string, key: "error" | "saved" = "error", extra: Record<string, string> = {}): never {
+  const params = new URLSearchParams({ ...extra, [key]: message });
+  redirect(`${path}?${params.toString()}`);
+}
+
+const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const workspacePath = (slug: string, tab = "") => (slugPattern.test(slug) ? `/platform/workspaces/${slug}${tab}` : "/platform/workspaces");
+
+// ---------------------------------------------------------------------------
+// Services
+// ---------------------------------------------------------------------------
+export async function setWorkspaceService(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/services");
+  await requirePlatformUser({ manage: true, nextPath: path });
+
+  const parsed = setServiceInputSchema.safeParse({
+    workspace,
+    service: text(form, "service"),
+    status: text(form, "status"),
+    source: text(form, "source") || "manual",
+    starts_on: text(form, "starts_on"),
+    ends_on: text(form, "ends_on"),
+    reason: text(form, "reason"),
+    confirmed: text(form, "confirmed") === "yes",
+  });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the service details.");
+  const input = parsed.data;
+
+  // Dates are whole days on the business's own clock.
+  const detail = await getPlatformWorkspace(input.workspace);
+  const startsAt = input.starts_on ? zonedLocalToUtcIso(`${input.starts_on}T00:00`, detail.timezone) : null;
+  const endsAt = input.ends_on ? zonedLocalToUtcIso(`${input.ends_on}T00:00`, detail.timezone) : null;
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_set_service", {
+    target_workspace_slug: input.workspace,
+    service_code: input.service,
+    new_status: input.status,
+    new_source: input.source,
+    new_starts_at: startsAt,
+    new_ends_at: endsAt,
+    change_reason: input.reason,
+    confirmed: input.confirmed,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = setServiceResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check the service.");
+
+  if (result.data.status === "needs_confirmation") {
+    // Ask again with the same values and the consequences spelled out.
+    back(path, "Confirm this change", "error", {
+      confirm: input.service,
+      status: input.status,
+      source: input.source,
+      starts_on: input.starts_on ?? "",
+      ends_on: input.ends_on ?? "",
+      reason: input.reason,
+      warnings: JSON.stringify(result.data.warnings.slice(0, 8)),
+    });
+  }
+  revalidatePath(`/platform/workspaces/${input.workspace}`, "layout");
+  revalidatePath("/platform");
+  if (result.data.status === "unchanged") back(path, "Nothing changed.", "saved");
+  back(path, `${detail.service_catalog.find((service) => service.code === input.service)?.name ?? input.service} is now ${input.status}${result.data.effective ? "" : " (not active right now)"}.`, "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+export async function setWorkspaceMember(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/users");
+  await requirePlatformUser({ manage: true, nextPath: path });
+
+  const parsed = setMemberInputSchema.safeParse({
+    workspace,
+    email: text(form, "email"),
+    role: text(form, "role"),
+    status: text(form, "status") || "active",
+    reason: text(form, "reason"),
+    display_name: text(form, "display_name"),
+    password: text(form, "password"),
+  });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the user details.");
+  const input = parsed.data;
+
+  const supabase = await createServerSupabaseClient();
+  const save = () => supabase.rpc("hanafy_platform_set_member", {
+    target_workspace_slug: input.workspace,
+    member_email: input.email,
+    role_code: input.role,
+    member_status: input.status,
+    change_reason: input.reason,
+  });
+
+  let { error } = await save();
+  let created = false;
+  if (error?.message.includes("No account uses that email")) {
+    if (!input.password) back(path, "No account uses that email. Add a name and a temporary password to create one.");
+    const service = (() => {
+      try {
+        return createServiceSupabaseClient();
+      } catch {
+        return null;
+      }
+    })();
+    if (!service) back(path, "Creating sign-ins needs SUPABASE_SERVICE_ROLE_KEY on the server.");
+    // The new account starts with no access anywhere; the audited RPC below grants it.
+    const createdUser = await service.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: { display_name: input.display_name ?? input.email.split("@")[0] },
+    });
+    if (createdUser.error || !createdUser.data.user) {
+      logger.warn("platform.member_create_failed", { code: createdUser.error?.code ?? null });
+      back(path, "The sign-in could not be created.");
+    }
+    created = true;
+    ({ error } = await save());
+  }
+  if (error) back(path, platformErrorMessage(error.message));
+
+  revalidatePath(`/platform/workspaces/${input.workspace}`, "layout");
+  back(path, created
+    ? `${input.email} can now sign in. Share the temporary password privately and ask them to change it.`
+    : `${input.email} is now ${input.status === "active" ? input.role : "suspended"}.`, "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Support sessions (§8.4)
+// ---------------------------------------------------------------------------
+export async function startSupportSession(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace);
+  await requirePlatformUser({ support: true, nextPath: path });
+
+  const parsed = startSupportInputSchema.safeParse({
+    workspace,
+    reason: text(form, "reason"),
+    ticket: text(form, "ticket"),
+    minutes: text(form, "minutes") || "60",
+  });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the support details.");
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("hanafy_platform_start_support", {
+    target_workspace_slug: parsed.data.workspace,
+    support_reason: parsed.data.reason,
+    ticket_reference: parsed.data.ticket,
+    duration_minutes: parsed.data.minutes,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+
+  // Work in that business from now on (the slug is re-validated on every request).
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_WORKSPACE_COOKIE, parsed.data.workspace, activeWorkspaceCookieOptions);
+  revalidatePath("/", "layout");
+  redirect(`/w/${parsed.data.workspace}`);
+}
+
+export async function endSupportSession(form: FormData) {
+  await requirePlatformUser();
+  const sessionId = text(form, "session_id");
+  const returnTo = text(form, "return_to");
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("hanafy_platform_end_support", {
+    target_session_id: /^[0-9a-f-]{36}$/i.test(sessionId) ? sessionId : null,
+  });
+  const path = returnTo.startsWith("/platform") && !returnTo.startsWith("//") ? returnTo.split("?")[0] ?? "/platform" : "/platform";
+  if (error) back(path, platformErrorMessage(error.message));
+
+  if (!sessionId) {
+    // Own session ended: stop pointing the back office at that business.
+    const cookieStore = await cookies();
+    cookieStore.delete(ACTIVE_WORKSPACE_COOKIE);
+  }
+  revalidatePath("/", "layout");
+  back(path, "Support session ended.", "saved");
+}
