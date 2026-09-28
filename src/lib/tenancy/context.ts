@@ -10,6 +10,8 @@ import {
   workspaceRowSchema,
   workspaceServiceCodeSchema,
   workspaceSlugSchema,
+  myWorkspacesSchema,
+  type MyWorkspace,
   type WorkspaceContextRecord
 } from "./schemas";
 
@@ -84,4 +86,13 @@ export async function requireWorkspaceContext(input: RequireWorkspaceContextInpu
   }
 
   return { ...context, location, userId: userData.user.id, workspace };
+}
+
+/** Workspaces the signed-in user can open (memberships; all of them for platform staff). */
+export async function listMyWorkspaces(): Promise<MyWorkspace[]> {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_my_workspaces");
+  if (error) return [];
+  const parsed = myWorkspacesSchema.safeParse(data ?? []);
+  return parsed.success ? parsed.data : [];
 }

@@ -12,6 +12,9 @@ export function StartOrder({
   pickupEnabled,
   pickupMinutes = 25,
   deliveryMinutes = 45,
+  shortName,
+  locality,
+  stampWord = "",
 }: {
   deliveryEnabled: boolean;
   /* Whatever photo the owner put on the first menu category carries the hero,
@@ -23,6 +26,11 @@ export function StartOrder({
   pickupEnabled: boolean;
   pickupMinutes?: number;
   deliveryMinutes?: number;
+  /** Brand short name and "CITY, ST" from workspace/location configuration. */
+  shortName: string;
+  locality: string;
+  /** Second line of the hero stamp, e.g. PIZZA from "Wayne’s Pizza". */
+  stampWord?: string;
 }) {
   const heroImageUrl = getPublicAssetUrl(heroImagePath);
   const choices = [
@@ -67,11 +75,11 @@ export function StartOrder({
             <h1>
               Make tonight
               <br />
-              a <span>Wayne’s night.</span>
+              a <span>{shortName} night.</span>
             </h1>
             <p className="hero-description">
               The crispy crust. The melty cheese. The first bite.
-              <br className="desktop-break" /> Your Wayne&apos;s favorites,
+              <br className="desktop-break" /> Your {shortName} favorites,
               fresh from our oven.
             </p>
             <div className="hero-actions">
@@ -90,9 +98,9 @@ export function StartOrder({
             </div>
           </div>
           <div className="hero-stamp" aria-hidden>
-            <span>WORCESTER, MA</span>
+            <span>{locality.toUpperCase()}</span>
             <strong>
-              Wayne’s<br />PIZZA
+              {shortName}{stampWord ? <><br />{stampWord}</> : null}
             </strong>
             <span>★ THE GOOD STUFF ★</span>
           </div>
@@ -112,7 +120,7 @@ export function StartOrder({
               <p className="eyebrow">LET’S EAT</p>
               <h2>
                 {orderingAvailable
-                  ? "How do you want your Wayne’s?"
+                  ? `How do you want your ${shortName}?`
                   : "A little menu inspiration?"}
               </h2>
               <p>

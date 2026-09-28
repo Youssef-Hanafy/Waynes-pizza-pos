@@ -34,7 +34,7 @@ export type HardwareRuntimeConfig = {
  * or claimed on another register reach this one that way (§22).
  */
 export function createHardwareRuntime(config: HardwareRuntimeConfig, bus: HardwareEventBus, client: SupabaseClient | null) {
-  // Inside the Wayne's POS Android app this exposes the native caller ID and
+  // Inside the POS Android app this exposes the native caller ID and
   // printer plugins; in a browser it does nothing.
   installNativeBridge();
   const cloud = new CloudCallerIdProvider(client);

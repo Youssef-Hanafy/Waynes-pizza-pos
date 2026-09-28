@@ -53,19 +53,19 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
             </select>
           </label>
           <Input defaultValue={settings.caller_device_model} label="Device" name="caller_device_model" required />
-          <Input defaultValue={settings.caller_line_count} hint="Wayne's has two physical lines." label="Lines" max={8} min={1} name="caller_line_count" required type="number" />
+          <Input defaultValue={settings.caller_line_count} hint="How many phone lines the caller ID box watches." label="Lines" max={8} min={1} name="caller_line_count" required type="number" />
           <Input defaultValue={settings.call_expire_minutes} hint="An unanswered call card goes quiet after this long. It stays in Recent calls." label="Call card expires after (minutes)" max={240} min={1} name="call_expire_minutes" required type="number" />
           <Input defaultValue={settings.caller_udp_port} hint="CallerID.com factory default is 3520. Used by the Android app and the store bridge." label="UDP port" max={65535} min={1} name="caller_udp_port" required type="number" />
           <Input defaultValue={settings.caller_bind_address} hint="0.0.0.0 listens on every network the tablet is on." label="Bind address" name="caller_bind_address" required />
           <Input defaultValue={settings.caller_device_ip} hint="Optional. Leave blank to accept broadcasts from the box wherever it is on the LAN." label="Caller ID box IP" name="caller_device_ip" placeholder="Auto" />
           <label className="flex min-h-11 items-center gap-3 text-sm font-bold"><input className="h-5 w-5" defaultChecked={settings.simulator_enabled} name="simulator_enabled" type="checkbox" />Allow test calls from the simulator</label>
         </div>
-        <p className="mt-4 text-sm text-wayne-muted">Protocol UDP · the box&apos;s DIP switches and factory settings are left as they are while Thrive still uses it. A web browser cannot listen for UDP, which is why real caller ID needs either the store bridge or the Android app.</p>
+        <p className="mt-4 text-sm text-wayne-muted">Protocol UDP · leave the box&apos;s DIP switches and factory settings as they are if another system still reads it. A web browser cannot listen for UDP, which is why real caller ID needs either the store bridge or the Android app.</p>
       </Card>
 
       <Card className="p-6">
         <h2 className="text-2xl font-black">Printers</h2>
-        <p className="mt-1 text-sm text-wayne-muted">Wayne&apos;s has two Epson printers. The <strong>TM-T20III</strong> (thermal &quot;box&quot;) at the front prints customer receipts, every online order slip and its tip &amp; signature slip, and opens the cash drawer. The <strong>TM-U220B</strong> (impact, round top) prints kitchen tickets only. Both are on the network, port 9100. They&apos;re reached from the Wayne&apos;s POS Android app; a web browser cannot open a printer connection. Turn a printer on once its IP address is in, then press its test button below.</p>
+        <p className="mt-1 text-sm text-wayne-muted">The <strong>receipt printer</strong> at the front prints customer receipts, online order slips and tip &amp; signature slips, and opens the cash drawer. The <strong>kitchen printer</strong> prints the tickets the kitchen cooks from. Choose each printer&apos;s model so tickets are laid out for its paper.</p>
         <div className="mt-5 grid gap-5">
           <PrinterPanel
             enabled={receipt.enabled ?? false}

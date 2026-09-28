@@ -4,6 +4,7 @@ import { resolvePaymentProvider } from "@/lib/payments/config";
 import { PaymentProviderError } from "@/lib/payments/provider";
 import { cardCheckoutRequestSchema } from "@/lib/payments/schemas";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { requirePublicService } from "@/lib/tenancy/public-service";
 import { tryGetServerSupabaseEnvironment } from "@/lib/supabase/env";
 
 /**
@@ -25,11 +26,15 @@ export async function POST(request: Request) {
   const parsed = cardCheckoutRequestSchema.safeParse(input);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Check the order details." }, { status: 400 });
 
-  if (!tryGetServerSupabaseEnvironment())
-    return Response.json({ error: "Online ordering is temporarily unavailable. Please call Wayne's Pizza." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  const service = await requirePublicService("online_ordering");
+  if (!service.ok) return service.response;
+  const storeName = service.storefront.settings.store_name;
 
-  const resolved = await resolvePaymentProvider("online");
-  if (!resolved.ok) return Response.json({ error: "Card payment is not available right now. Please call Wayne's Pizza." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  if (!tryGetServerSupabaseEnvironment())
+    return Response.json({ error: `Online ordering is temporarily unavailable. Please call ${storeName}.` }, { status: 503, headers: { "Cache-Control": "no-store" } });
+
+  const resolved = await resolvePaymentProvider("online", { workspaceId: service.storefront.workspace!.workspace_id, locationId: service.storefront.workspace!.location_id });
+  if (!resolved.ok) return Response.json({ error: `Card payment is not available right now. Please call ${storeName}.` }, { status: 503, headers: { "Cache-Control": "no-store" } });
 
   const supabase = createServiceSupabaseClient();
   const { data: allowed, error: rateLimitError } = await supabase.rpc("wayne_consume_public_order_rate_limit", {
@@ -67,7 +72,7 @@ export async function POST(request: Request) {
       sourceId: parsed.data.payment.source_id,
       verificationToken: parsed.data.payment.verification_token ?? null,
       referenceId: order.order_number,
-      note: `Wayne's Pizza order ${order.order_number}`,
+      note: `${storeName} order ${order.order_number}`,
     });
 
     // 4. Settle. Only a captured payment may release the order.
@@ -102,7 +107,7 @@ export async function POST(request: Request) {
     }
     // No answer at all: leave the ledger pending so the webhook decides.
     return Response.json({
-      error: "We could not reach the card network. Do not re-enter your card — call Wayne's Pizza to confirm before paying again.",
+      error: `We could not reach the card network. Do not re-enter your card — call ${storeName} to confirm before paying again.`,
       order_number: order.order_number,
     }, { status: 502, headers: { "Cache-Control": "no-store" } });
   }

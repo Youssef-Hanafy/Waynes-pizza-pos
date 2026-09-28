@@ -1,7 +1,7 @@
 import { parseWhozzCallingRecord } from "@/lib/phone/schemas";
 
 /**
- * The contract between the POS and the Wayne's POS Android app (build sheet
+ * The contract between the POS and the POS Android app (build sheet
  * §19, §52, §59, §62).  The app (android/ in this repo) is a full-screen
  * WebView of this website plus two native abilities, exposed to the page as
  * window.WaynesAndroid; every screen, store and business rule stays here.
@@ -107,7 +107,7 @@ export function createAndroidHardware(android: WaynesAndroidInterface, target: W
     const timer = setTimeout(() => {
       if (!pending.delete(callId)) return;
       // The app never answered: treat the outcome as unknown, not as "not sent".
-      reject(Object.assign(new Error("The Wayne's POS app did not answer in time."), { code: "TIMEOUT" }));
+      reject(Object.assign(new Error("The POS app did not answer in time."), { code: "TIMEOUT" }));
     }, timeoutMs);
     pending.set(callId, {
       resolve: () => { clearTimeout(timer); resolve(); },

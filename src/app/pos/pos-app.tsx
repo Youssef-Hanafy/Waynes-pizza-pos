@@ -37,6 +37,10 @@ type Props = {
   canManageOrders: boolean;
   canOpenAdmin: boolean;
   canManageHardware: boolean;
+  /** Phase 5: module-aware sections for this workspace. */
+  callerIdEnabled: boolean;
+  deliveryEnabled: boolean;
+  workspaceName: string;
 };
 
 /**
@@ -49,7 +53,7 @@ type Props = {
  * the cashier away from what they are doing (§6, §34.1).
  */
 export function PosApp(props: Props) {
-  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware } = props;
+  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, callerIdEnabled, deliveryEnabled, workspaceName } = props;
   const [section, setSection] = useState<Section>("order");
   const [customerFocus, setCustomerFocus] = useState<PosCustomer | null>(null);
   const [phoneFocus, setPhoneFocus] = useState<{ key: string; n: number } | null>(null);
@@ -108,6 +112,7 @@ export function PosApp(props: Props) {
     // Calls already on the lines when the POS opens are not popped.
     for (const call of Object.values(phoneStore.get().calls)) seen.add(call.key);
     let n = 0;
+    if (!callerIdEnabled) return;
     return phoneStore.subscribe(() => {
       const ringing = ringingCallsToOpen(phoneStore.get(), seen);
       if (!ringing.length) return;
@@ -121,7 +126,7 @@ export function PosApp(props: Props) {
       setPhoneFocus({ key: ringing[0]!.key, n });
       setSection("phone");
     });
-  }, []);
+  }, [callerIdEnabled]);
 
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
@@ -134,18 +139,18 @@ export function PosApp(props: Props) {
 
   const tabs: { id: Section; label: string }[] = [
     { id: "order", label: heldCount ? `New Order · ${heldCount} held` : "New Order" },
-    { id: "phone", label: badge.waiting ? `Phone (${badge.waiting})` : "Phone" },
+    ...(callerIdEnabled ? [{ id: "phone" as const, label: badge.waiting ? `Phone (${badge.waiting})` : "Phone" }] : []),
     { id: "pay", label: "Payments" },
     ...(canManageOrders ? [{ id: "orders" as const, label: "Orders" }] : []),
     { id: "customers", label: "Customers" },
-    ...(canManageOrders && settings.delivery_enabled ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
+    ...(canManageOrders && deliveryEnabled && settings.delivery_enabled ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
     { id: "more", label: "More" },
   ];
 
   return <div className="flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden">
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
-      <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">Wayne&apos;s Pizza</strong>
-      <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button>
+      <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
+      {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
       <PrintStationBadge />
       <DrawerPanel timeZone={settings.timezone} />
       <span className="hidden text-sm font-bold text-wayne-cream/80 sm:inline">{staffName}</span>
@@ -157,11 +162,11 @@ export function PosApp(props: Props) {
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
     </nav>
 
-    {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => setSection("phone")} onTakePayment={takePayment} settings={settings} /> : null}
+    {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} onTakePayment={takePayment} settings={settings} /> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
-    {section === "phone" ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
+    {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
-    {section === "delivery" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline onPay={takePayment} timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}
+    {section === "delivery" && canManageOrders && deliveryEnabled ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline onPay={takePayment} timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;

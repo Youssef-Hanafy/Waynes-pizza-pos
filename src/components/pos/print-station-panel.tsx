@@ -18,7 +18,7 @@ export function PrintStationPanel({ className = "" }: { className?: string }) {
   const station = usePrintStation();
   return <section className={`rounded-3xl bg-white p-5 shadow-sm ${className}`}>
     <h2 className="text-xl font-black">Print station</h2>
-    <p className="mt-1 text-sm text-wayne-muted">Switch this on for <strong>one</strong> device only: the counter tablet running the Wayne&apos;s POS app on ThriveAP. It prints kitchen tickets for every order, receipts for delivery orders, receipts someone asks for, and online order slips, as they come in. It keeps printing while the POS (or this page) is open, so leave that tablet on the POS and signed in during opening hours.</p>
+    <p className="mt-1 text-sm text-wayne-muted">Switch this on for <strong>one</strong> device only: the counter tablet running the POS app on the store network. It prints kitchen tickets for every order, receipts for delivery orders, receipts someone asks for, and online order slips, as they come in. It keeps printing while the POS (or this page) is open, so leave that tablet on the POS and signed in during opening hours.</p>
     <label className="mt-3 flex min-h-11 items-center gap-3 text-base font-black"><input checked={station.enabled} className="h-6 w-6" onChange={(event) => setPrintStationDevice(event.target.checked)} type="checkbox" />This device is the print station</label>
     <p className="text-xs text-wayne-muted">This switch is saved on this device only. It&apos;s off on every other register and phone.</p>
     {station.enabled ? <ul className="mt-2 divide-y divide-wayne-border">

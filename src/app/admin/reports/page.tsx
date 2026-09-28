@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { getReportData } from "@/lib/reports/queries";
 
@@ -19,7 +19,7 @@ function businessDate(timeZone: string, date = new Date()) {
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string | string[]; to?: string | string[] }> }) {
   await requirePermission("reports.view", "/admin/reports");
-  const [settings, params] = await Promise.all([getStoreSettings(), searchParams]);
+  const [settings, params] = await Promise.all([getWorkspaceStoreSettings(), searchParams]);
   const today = businessDate(settings.timezone);
   const rawFrom = Array.isArray(params.from) ? params.from[0] : params.from;
   const rawTo = Array.isArray(params.to) ? params.to[0] : params.to;
@@ -28,7 +28,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const report = await getReportData(from, to);
   const exportHref = (dataset: string) => `/api/reports/export?dataset=${dataset}&from=${from}&to=${to}`;
   return <main className="mx-auto max-w-6xl px-5 py-10">
-    <div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Reporting</p><h1 className="mt-3 text-4xl font-black">Sales & operations</h1><p className="mt-3 max-w-3xl text-wayne-muted">All dates use Wayne&apos;s {settings.timezone} business day. Sales are authoritative order totals; refunds are recorded on the business date they were issued.</p></div><Button asChild variant="secondary"><Link href="/admin/orders">Order history</Link></Button></div>
+    <div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Reporting</p><h1 className="mt-3 text-4xl font-black">Sales & operations</h1><p className="mt-3 max-w-3xl text-wayne-muted">All dates use the store&apos;s {settings.timezone} business day. Sales are authoritative order totals; refunds are recorded on the business date they were issued.</p></div><Button asChild variant="secondary"><Link href="/admin/orders">Order history</Link></Button></div>
     <Card className="mt-8 p-5"><form className="flex flex-wrap items-end gap-4" method="get"><Input defaultValue={from} label="From business date" name="from" type="date" /><Input defaultValue={to} label="Through business date" name="to" type="date" /><Button type="submit">Run report</Button><Button asChild variant="secondary"><Link href="/admin/reports">Today</Link></Button></form></Card>
     <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Net sales" value={formatCents(report.summary.net_sales_cents)} /><Metric label="Orders" value={String(report.summary.order_count)} /><Metric label="Refunds issued" value={formatCents(report.summary.refund_cents)} /><Metric label="Average order" value={formatCents(report.summary.average_order_cents)} /></div>
     <Card className="mt-5 p-5"><h2 className="text-xl font-black">Reconciliation</h2><dl className="mt-4 grid gap-3 sm:grid-cols-3"><Metric label="Gross before discounts" value={formatCents(report.summary.gross_sales_cents)} /><Metric label="Discounts on orders" value={formatCents(report.summary.discount_cents)} /><Metric label="Net order totals less refunds" value={formatCents(report.summary.net_sales_cents)} /></dl></Card>

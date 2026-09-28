@@ -3,6 +3,7 @@ import { z } from "zod";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
 import { memberOffersSchema } from "@/lib/promotions/member-offers";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { requirePublicService } from "@/lib/tenancy/public-service";
 
 /**
  * "What have I got this week?"
@@ -23,14 +24,16 @@ const bodySchema = z.object({ phone: z.string().trim().min(7).max(24) });
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) {
-    return Response.json({ error: "Please check your offers from Wayne’s website." }, { status: 403 });
+    return Response.json({ error: "Please check your offers from the store’s website." }, { status: 403 });
   }
   let phone: string;
   try {
     phone = bodySchema.parse(await request.json()).phone;
   } catch {
-    return Response.json({ error: "Enter the mobile number on your Wayne’s Rewards account." }, { status: 400 });
+    return Response.json({ error: "Enter the mobile number on your Rewards account." }, { status: 400 });
   }
+  const service = await requirePublicService("sms");
+  if (!service.ok) return service.response;
 
   const db = createServiceSupabaseClient();
   // Guessing numbers to find codes is the only real abuse here, so the lookup

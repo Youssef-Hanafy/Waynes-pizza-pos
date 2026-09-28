@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { monthForTimeZone } from "@/lib/orders/admin-format";
 import { getAdminOrderCalendar } from "@/lib/orders/admin-queries";
@@ -16,7 +16,7 @@ const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 
 export default async function AdminCalendarPage({ searchParams }: { searchParams: Promise<{ month?: string | string[] }> }) {
   await requirePermission("orders.view", "/admin/calendar");
-  const [settings, query] = await Promise.all([getStoreSettings(), searchParams]);
+  const [settings, query] = await Promise.all([getWorkspaceStoreSettings(), searchParams]);
   const rawMonth = Array.isArray(query.month) ? query.month[0] : query.month;
   const month = monthSchema.safeParse(rawMonth).success ? rawMonth! : monthForTimeZone(settings.timezone);
   const days = await getAdminOrderCalendar(month);

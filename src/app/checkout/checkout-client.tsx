@@ -21,7 +21,8 @@ import {
   readCart,
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
-import { WAYNE_REWARDS_CONSENT } from "@/lib/wayne/rewards";
+import { rewardsConsentText } from "@/lib/wayne/rewards";
+import { useStorefrontBrand } from "@/components/site/storefront-brand";
 import { SAVED_PROMO_STORAGE_KEY } from "@/lib/promotions/member-offers";
 import {
   cardCheckoutResultSchema,
@@ -65,6 +66,7 @@ export function CheckoutClient({
   settings,
 }: Props) {
   const router = useRouter();
+  const brand = useStorefrontBrand();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
   const [tipCents, setTipCents] = useState(0);
@@ -229,7 +231,7 @@ export function CheckoutClient({
         const paid = cardCheckoutResultSchema.safeParse(body);
         if (!paid.success) {
           setError(
-            "The payment confirmation was invalid. Please call Wayne's Pizza before paying again.",
+            `The payment confirmation was invalid. Please call ${brand.storeName} before paying again.`,
           );
           return;
         }
@@ -258,7 +260,7 @@ export function CheckoutClient({
       }
       const result = orderCreatedSchema.safeParse(body);
       if (!result.success) {
-        setError("Order confirmation was invalid. Please call Wayne's Pizza.");
+        setError(`Order confirmation was invalid. Please call ${brand.storeName}.`);
         return;
       }
       window.localStorage.removeItem(CART_STORAGE_KEY);
@@ -356,7 +358,7 @@ export function CheckoutClient({
                 required
               />
               <Input
-                defaultValue={details?.state || "MA"}
+                defaultValue={details?.state || brand.state}
                 key={`state-${details?.state ?? ""}`}
                 label="State"
                 name="state"
@@ -381,18 +383,20 @@ export function CheckoutClient({
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
           <h2 className="text-2xl font-black">Deals & order notes</h2>
           <p className="mt-2 text-sm text-wayne-muted">
-            Keep up with Wayne’s deals if you’d like. These choices are optional
+            Keep up with {brand.shortName} deals if you’d like. These choices are optional
             and do not affect your order updates.
           </p>
           <div className="mt-4 grid gap-3">
-            <Check label="Send me Wayne's Pizza text deals" name="sms_opt_in" />
-            <p className="-mt-1 pl-8 text-xs leading-5 text-wayne-muted">
-              {WAYNE_REWARDS_CONSENT} See our{" "}
-              <Link className="underline" href="/terms">Terms</Link> and{" "}
-              <Link className="underline" href="/privacy">Privacy Policy</Link>.
-            </p>
+            {brand.services.includes("sms") ? <>
+              <Check label={`Send me ${brand.brandName} text deals`} name="sms_opt_in" />
+              <p className="-mt-1 pl-8 text-xs leading-5 text-wayne-muted">
+                {rewardsConsentText(brand.brandName)} See our{" "}
+                <Link className="underline" href="/terms">Terms</Link> and{" "}
+                <Link className="underline" href="/privacy">Privacy Policy</Link>.
+              </p>
+            </> : null}
             <Check
-              label="Send me Wayne's Pizza email deals"
+              label={`Send me ${brand.brandName} email deals`}
               name="email_opt_in"
             />
           </div>

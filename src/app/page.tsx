@@ -8,7 +8,8 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { StartOrder } from "@/components/site/start-order";
 import { DealCard } from "@/components/site/deal-card";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getStoreSettings, storefrontSettings } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import { isOnlineOrderingAvailable } from "@/lib/payments/queries";
 import { formatAddress } from "@/lib/content/schemas";
 import { getPublicMenu } from "@/lib/menu/queries";
@@ -28,10 +29,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HomePage() {
   const [settings, menu, promotions] = await Promise.all([
-    getStoreSettings(),
+    storefrontSettings(),
     getPublicMenu(),
     getPublicPromotions(),
   ]);
+  const brand = brandNames(settings);
 
   const allItems = menu.flatMap((category) =>
     category.items.map((item) => ({ ...item, categoryName: category.name })),
@@ -100,8 +102,11 @@ export default async function HomePage() {
       <SiteHeader settings={settings} />
       <main id="main-content">
         <StartOrder
+          shortName={brand.shortName}
+          stampWord={brand.brandName.startsWith(brand.shortName) ? brand.brandName.slice(brand.shortName.length).trim().toUpperCase() : ""}
+          locality={[settings.city, settings.state].filter(Boolean).join(", ")}
           deliveryEnabled={settings.delivery_enabled}
-          heroImageAlt={heroCategory?.image_alt || "Fresh from Wayne's oven"}
+          heroImageAlt={heroCategory?.image_alt || `Fresh from ${brand.shortName} oven`}
           heroImagePath={heroCategory?.image_path ?? null}
           orderingAvailable={orderingAvailable}
           phone={settings.public_phone}
@@ -247,7 +252,7 @@ export default async function HomePage() {
             {mealCategory?.image_path ? (
               <div className="more-photo">
                 <MenuImage
-                  alt={mealCategory.image_alt || "Sides from Wayne's"}
+                  alt={mealCategory.image_alt || `Sides from ${brand.shortName}`}
                   path={mealCategory.image_path}
                   sizes="(max-width: 900px) 100vw, 700px"
                 />
@@ -271,11 +276,11 @@ export default async function HomePage() {
               <h2>
                 A neighborhood original.
                 <br />
-                <em>Always Wayne’s.</em>
+                <em>Always {brand.shortName}.</em>
               </h2>
               <p>{settings.story}</p>
               <Link href="/about" className="text-link">
-                Get to know Wayne’s <SiteIcon name="arrow" size={18} />
+                Get to know {brand.shortName} <SiteIcon name="arrow" size={18} />
               </Link>
               <div className="story-details">
                 <span>

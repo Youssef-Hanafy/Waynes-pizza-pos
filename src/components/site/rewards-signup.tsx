@@ -4,10 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SiteIcon } from "./site-icon";
 import { WayneBadge } from "./wayne-badge";
-import {
-  WAYNE_REWARDS_CONSENT,
-  WAYNE_REWARDS_CONSENT_VERSION,
-} from "@/lib/wayne/rewards";
+import { REWARDS_CONSENT_VERSION, rewardsConsentText } from "@/lib/wayne/rewards";
+import { useStorefrontBrand } from "./storefront-brand";
 import styles from "./rewards.module.css";
 
 const perks = [
@@ -34,6 +32,7 @@ export function RewardsSignup({
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const brand = useStorefrontBrand();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -67,7 +66,7 @@ export function RewardsSignup({
           lastName,
           phone,
           consent,
-          consentVersion: WAYNE_REWARDS_CONSENT_VERSION,
+          consentVersion: REWARDS_CONSENT_VERSION,
         }),
       });
       const result = await response.json();
@@ -117,8 +116,8 @@ export function RewardsSignup({
       </button>
 
       <div className={styles.dialogIntro}>
-        <WayneBadge className={styles.dialogBadge} size={62} />
-        <span className={styles.eyebrow}>WAYNE’S REWARDS</span>
+        <WayneBadge className={styles.dialogBadge} label={brand.shortName} size={62} />
+        <span className={styles.eyebrow}>{brand.rewardsName.toUpperCase()}</span>
         <h2 id="rewards-title">
           Good pizza.
           <br />
@@ -166,7 +165,7 @@ export function RewardsSignup({
             </>
           ) : (
             <p>
-              Welcome to Wayne’s Rewards. Watch your texts — the good offers
+              Welcome to {brand.rewardsName}. Watch your texts — the good offers
               land there first.
             </p>
           )}
@@ -205,7 +204,7 @@ export function RewardsSignup({
               inputMode="tel"
               maxLength={24}
               onChange={(event) => setPhone(event.target.value)}
-              placeholder="(508) 000-0000"
+              placeholder="Mobile number"
               required
               type="tel"
               value={phone}
@@ -218,7 +217,7 @@ export function RewardsSignup({
               required
               type="checkbox"
             />
-            <span>{WAYNE_REWARDS_CONSENT} See our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.</span>
+            <span>{rewardsConsentText(brand.brandName)} See our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.</span>
           </label>
           {error && (
             <p className={styles.signupError} role="alert">
@@ -226,7 +225,7 @@ export function RewardsSignup({
             </p>
           )}
           <button disabled={status === "submitting"} type="submit">
-            {status === "submitting" ? "Joining…" : "Join Wayne’s Rewards"}
+            {status === "submitting" ? "Joining…" : `Join ${brand.rewardsName}`}
             <SiteIcon name="arrow" size={17} />
           </button>
           <button

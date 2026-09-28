@@ -6,7 +6,8 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { MemberOffers } from "@/components/site/member-offers";
 import { OfferList, PersonalLink } from "@/components/site/offer-list";
 import { RewardsButton } from "@/components/site/rewards-experience";
-import { getStoreSettings } from "@/lib/content/queries";
+import { storefrontSettings } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import { logger } from "@/lib/logging/logger";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
 import { memberOffersSchema, type MemberOffersResult } from "@/lib/promotions/member-offers";
@@ -23,7 +24,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/server";
  */
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Your Wayne’s offers",
+  title: "Your offers",
   robots: { index: false, follow: false },
 };
 
@@ -49,7 +50,8 @@ async function lookUp(key: string): Promise<Lookup> {
 }
 
 export default async function PersonalOffersPage({ params }: { params: Promise<{ key: string }> }) {
-  const [{ key }, settings] = await Promise.all([params, getStoreSettings()]);
+  const [{ key }, settings] = await Promise.all([params, storefrontSettings("sms")]);
+  const brand = brandNames(settings);
   const lookup = await lookUp(decodeURIComponent(key).slice(0, 60));
   const result = lookup.state === "ok" ? lookup.result : null;
 
@@ -60,7 +62,7 @@ export default async function PersonalOffersPage({ params }: { params: Promise<{
         <div className="site-container personal-offers-page">
           {result?.member ? (
             <section className="member-offers">
-              <span className="eyebrow">WAYNE’S REWARDS</span>
+              <span className="eyebrow">{brand.rewardsName.toUpperCase()}</span>
               <h1 className="mt-2 text-4xl font-black">
                 {result.first_name ? `${result.first_name}, here` : "Here"}’s
                 <br />
@@ -84,13 +86,13 @@ export default async function PersonalOffersPage({ params }: { params: Promise<{
           ) : lookup.state === "ok" ? (
             <>
               <section className="member-offers">
-                <span className="eyebrow">WAYNE’S REWARDS</span>
+                <span className="eyebrow">{brand.rewardsName.toUpperCase()}</span>
                 <h1 className="mt-2 text-3xl font-black">This link isn’t active.</h1>
                 <p>
                   It may have been typed wrong, or the membership was closed. Check your offers with your phone number
-                  below, or join Wayne’s Rewards — it’s free.
+                  below, or join {brand.rewardsName} — it’s free.
                 </p>
-                <RewardsButton className="order-button">Join Wayne’s Rewards →</RewardsButton>
+                <RewardsButton className="order-button">Join {brand.rewardsName} →</RewardsButton>
               </section>
               <div className="mt-6">
                 <MemberOffers />

@@ -57,6 +57,12 @@ export async function POST(request: Request) {
   // the staff placed is recorded for the call log but never pops a card.
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase.rpc("wayne_record_phone_call", { payload });
+  if (error?.message.startsWith("SERVICE_DISABLED")) {
+    // Caller ID is switched off for this business: tell the bridge plainly
+    // (it must not retry a ring that will never be recorded).
+    logger.warn("phone.service_disabled", {});
+    return Response.json({ error: "Caller ID is not enabled for this business.", code: "SERVICE_DISABLED", service: "caller_id" }, { status: 403 });
+  }
   if (error) {
     logger.error("phone.record_failed", { message: error.message });
     return Response.json({ error: "The call could not be recorded." }, { status: 500 });

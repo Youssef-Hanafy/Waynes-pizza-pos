@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { getDeliveryMetrics, getDispatchBoard } from "@/lib/delivery/queries";
 import { driverStepLabels, formatAddress, minutesBetween, type DeliveryMetrics, type DispatchBoard } from "@/lib/delivery/schemas";
 import { formatCents } from "@/lib/menu/schemas";
@@ -34,7 +34,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
   const canReport = hasPermission(access, "reports.view");
   if (!canDispatch && !canReport) return <main className="mx-auto max-w-6xl px-5 py-10"><Card className="p-6"><h1 className="text-2xl font-black">Delivery</h1><p className="mt-3 text-wayne-muted">Your account cannot dispatch deliveries or read delivery analytics. Ask an owner for access.</p></Card></main>;
 
-  const [settings, params] = await Promise.all([getStoreSettings(), searchParams]);
+  const [settings, params] = await Promise.all([getWorkspaceStoreSettings(), searchParams]);
   const today = businessDate(settings.timezone);
   const rawFrom = single(params.from);
   const rawTo = single(params.to);

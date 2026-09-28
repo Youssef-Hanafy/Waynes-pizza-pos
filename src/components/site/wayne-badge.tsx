@@ -7,10 +7,15 @@
 export function WayneBadge({
   size = 56,
   className,
+  label = "",
 }: {
   size?: number;
   className?: string;
+  /** The word on the banner: the business's short name (configuration). */
+  label?: string;
 }) {
+  const banner = label.trim().toUpperCase();
+  const bannerSize = banner.length > 8 ? Math.max(9, Math.floor(136 / banner.length)) : 17;
   return (
     <svg
       aria-hidden="true"
@@ -89,14 +94,14 @@ export function WayneBadge({
       <text
         fill="#fff8e7"
         fontFamily="var(--font-display), Archivo, system-ui, sans-serif"
-        fontSize="17"
+        fontSize={bannerSize}
         fontWeight="900"
         letterSpacing="1.6"
         textAnchor="middle"
         x="60"
         y="91"
       >
-        WAYNE&apos;S
+        {banner}
       </text>
     </svg>
   );

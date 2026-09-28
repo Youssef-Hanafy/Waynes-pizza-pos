@@ -34,7 +34,7 @@ export class PrinterDrawerProvider implements CashDrawerProvider {
 
   async getStatus() {
     if (!this.ready()) return status("not_configured", "Not configured", "Set the receipt printer to ESC/POS with its address first. Open the drawer with the key meanwhile.");
-    if (typeof window === "undefined" || !window.WaynesNativeHardware?.printer) return status("unavailable", "Needs the app", "The drawer is opened through the receipt printer by the Wayne's POS Android app.");
+    if (typeof window === "undefined" || !window.WaynesNativeHardware?.printer) return status("unavailable", "Needs the app", "The drawer is opened through the receipt printer by the POS Android app.");
     return status("connected", "Ready", `Through the receipt printer at ${this.printer.ip}`);
   }
 

@@ -4,7 +4,7 @@ import { getHardwareRuntime } from "@/stores/hardware-store";
  * Print a customer receipt when someone asks for one (pickup and takeout
  * orders don't print one on their own).
  *
- * On the counter tablet (the Wayne's POS app, printer reachable) it prints
+ * On the counter tablet (the POS app, printer reachable) it prints
  * straight away.  Anywhere else it's queued for the front printer and the
  * print station prints it, so any register or phone can ask.
  */

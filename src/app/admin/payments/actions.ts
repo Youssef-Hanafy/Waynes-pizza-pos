@@ -9,7 +9,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 const back = (message: string, key: "error" | "saved" = "error") => redirect(`/admin/payments?${key}=${encodeURIComponent(message)}`);
 
 export async function savePaymentSettings(form: FormData) {
-  await requirePermission("payments.manage", "/admin/payments");
+  const access = await requirePermission("payments.manage", "/admin/payments");
   const payload = {
     provider: String(form.get("provider") ?? "none"),
     environment: String(form.get("environment") ?? "sandbox"),
@@ -20,9 +20,9 @@ export async function savePaymentSettings(form: FormData) {
     terminal_card_enabled: form.get("terminal_card_enabled") === "on",
   };
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.rpc("hanafy_save_location_payment_configuration", { payload });
+  const { error } = await supabase.rpc("hanafy_save_location_payment_configuration", { payload, target_workspace_slug: access.workspace_slug ?? null });
   if (error) {
-    back(error.message.includes("payment_provider_settings_ready")
+    back(error.message.includes("payment_provider_settings_ready") || error.message.includes("location_payment_configurations_check")
       ? "Enter the application ID and location ID before switching card payment on."
       : paymentErrorMessage(error));
   }

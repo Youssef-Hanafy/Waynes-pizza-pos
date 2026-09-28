@@ -2,14 +2,15 @@ import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { DealCard } from "@/components/site/deal-card";
 import { MemberOffers } from "@/components/site/member-offers";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getStoreSettings, storefrontSettings } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import { getPublicPromotions } from "@/lib/promotions/public";
 
 export const dynamic = "force-dynamic";
-export const metadata = {
-  title: "Offers",
-  description: "Wayne’s Pizza deals, plus member-only offers for Wayne’s Rewards.",
-};
+export async function generateMetadata() {
+  const brand = brandNames(await getStoreSettings());
+  return { title: "Offers", description: `${brand.brandName} deals, plus member-only offers for ${brand.rewardsName}.` };
+}
 
 /**
  * Two kinds of offer live here.  The deals on the left are for everybody and
@@ -19,7 +20,7 @@ export const metadata = {
  * instead of an empty page.
  */
 export default async function OffersPage() {
-  const [settings, promotions] = await Promise.all([getStoreSettings(), getPublicPromotions()]);
+  const [settings, promotions] = await Promise.all([storefrontSettings(), getPublicPromotions()]);
   return (
     <div className="storefront">
       <SiteHeader settings={settings} />
@@ -27,7 +28,7 @@ export default async function OffersPage() {
         <div className="site-container offers-page-layout">
           <section>
             <p className="eyebrow">DEALS FOR EVERYONE</p>
-            <h1 className="mt-2 text-4xl font-black">This week at Wayne’s</h1>
+            <h1 className="mt-2 text-4xl font-black">This week at {brandNames(settings).shortName}</h1>
             {promotions.length ? (
               <div className="mt-6 grid gap-4">
                 {promotions.map((promotion) => (

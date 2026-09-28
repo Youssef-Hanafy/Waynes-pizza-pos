@@ -156,13 +156,13 @@ export class BrowserPrintProvider extends LayoutPrinter {
 export class NativeEscPosPrinterProvider extends LayoutPrinter {
   async getStatus() {
     if (!this.config.ip || !this.config.port) return status("not_configured", "Not configured", `${this.label}: enter its IP address and port.`);
-    if (!nativePrinter()) return status("unavailable", "Needs the app", `${this.label} at ${this.config.ip}:${this.config.port} is reached by the Wayne's POS Android app; a browser cannot open a printer socket.`);
+    if (!nativePrinter()) return status("unavailable", "Needs the app", `${this.label} at ${this.config.ip}:${this.config.port} is reached by the POS Android app; a browser cannot open a printer socket.`);
     return status("connected", "Ready", `${this.config.model || printerModel(this.config.modelKey).label} at ${this.config.ip}:${this.config.port}`);
   }
 
   protected async output(layout: PrintLayout): Promise<PrintResult> {
     const bridge = nativePrinter();
-    if (!bridge) return { ok: false, reason: `${this.label} can only be reached from the Wayne's POS Android app.`, notSent: true };
+    if (!bridge) return { ok: false, reason: `${this.label} can only be reached from the POS Android app.`, notSent: true };
     if (!this.config.ip || !this.config.port) return { ok: false, reason: `${this.label} has no IP address or port.`, notSent: true };
     const model = printerModel(this.config.modelKey);
     const data = toBase64(encodeEscPos(layout, {

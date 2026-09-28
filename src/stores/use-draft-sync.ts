@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { draftSync } from "./draft-sync";
 import { loadSavedDrafts, orderStore } from "./order-store";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 /**
  * Runs Phase 6 on the POS screen: mirrors tickets to the server as they
@@ -16,8 +17,8 @@ export function useDraftSync() {
     loadSavedDrafts();
     const offStore = orderStore.subscribe(() => draftSync.schedule());
     const client = createBrowserSupabaseClient();
-    const channel = client?.channel(`wayne-drafts-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "pos_drafts" }, () => void draftSync.refreshRemote())
+    const channel = client?.channel(`hanafy-drafts-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pos_drafts", ...workspaceRealtimeFilter() }, () => void draftSync.refreshRemote())
       .subscribe((state) => { if (state === "SUBSCRIBED") void draftSync.refreshRemote(); });
 
     const back = () => { void draftSync.retryPending().then(() => draftSync.pushNow()).then(() => draftSync.refreshRemote()); };

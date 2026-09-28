@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/site/legal-page";
-import { getStoreSettings } from "@/lib/content/queries";
-import { formatAddress } from "@/lib/content/schemas";
+import { getStoreSettings, storefrontSettings } from "@/lib/content/queries";
+import { brandNames, formatAddress } from "@/lib/content/schemas";
 import { PRIVACY_UPDATED } from "@/lib/wayne/legal";
 
 export const dynamic = "force-dynamic";
@@ -11,16 +11,16 @@ export async function generateMetadata(): Promise<Metadata> {
   const settings = await getStoreSettings();
   return {
     title: `Privacy Policy | ${settings.store_name}`,
-    description: `How ${settings.store_name} collects, uses and protects your information when you order or join Wayne's Rewards.`,
+    description: `How ${settings.store_name} collects, uses and protects your information when you order or join ${brandNames(settings).rewardsName}.`,
     alternates: { canonical: settings.canonical_url ? `${settings.canonical_url}/privacy` : "/privacy" },
   };
 }
 
 export default async function PrivacyPage() {
-  const settings = await getStoreSettings();
+  const settings = await storefrontSettings();
   const name = settings.store_name;
   return <LegalPage eyebrow="Privacy" settings={settings} title="Privacy policy" updated={PRIVACY_UPDATED}>
-    <p>This policy explains what {name} ({formatAddress(settings)}) collects when you order from us or join Wayne&apos;s Rewards, and what we do with it.</p>
+    <p>This policy explains what {name} ({formatAddress(settings)}) collects when you order from us or join {brandNames(settings).rewardsName}, and what we do with it.</p>
     <h2>What we collect</h2>
     <ul>
       <li>Your name, phone number and email, and a delivery address when you order delivery.</li>
@@ -31,7 +31,7 @@ export default async function PrivacyPage() {
     <h2>How we use it</h2>
     <ul>
       <li>To make, deliver and support your order, including texts about your order.</li>
-      <li>To run Wayne&apos;s Rewards: your member offers, and deals and reminders if you&apos;ve opted in.</li>
+      <li>To run {brandNames(settings).rewardsName}: your member offers, and deals and reminders if you&apos;ve opted in.</li>
       <li>To understand what our customers order so we can run the shop better.</li>
     </ul>
     <h2>Text messages</h2>

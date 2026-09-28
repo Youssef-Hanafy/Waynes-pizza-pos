@@ -1,5 +1,5 @@
 import { getCurrentAccess } from "@/lib/auth/access";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasPermission, hasService } from "@/lib/auth/permissions";
 import { logger } from "@/lib/logging/logger";
 import { posCallRecordedSchema, posCallReportSchema } from "@/lib/phone/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
+  if (!hasService(access, "caller_id")) return Response.json({ error: "Caller ID is not enabled for this business.", code: "SERVICE_DISABLED", service: "caller_id" }, { status: 403 });
   let body: unknown;
   try {
     body = await request.json();

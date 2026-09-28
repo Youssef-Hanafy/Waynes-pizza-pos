@@ -9,6 +9,7 @@ import { createSupabasePrintQueueRepository } from "@/lib/printing/supabase-repo
 import { processNextPrintJob } from "@/lib/printing/worker";
 import { createStore, useStore } from "./create-store";
 import { getDeviceId } from "./draft-sync";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 /**
  * PRINT STATION (Phase 7).  Exactly one register — the Android app at the
@@ -104,7 +105,7 @@ export function startPrintStation(options: {
     { name: "receipt", destination: "receipt", printer: options.receipt.config, provider: options.receipt.provider },
   ];
   for (const setup of setups) {
-    if (!native) { setLane(setup.name, { state: "off", detail: "Printing runs in the Wayne's POS Android app." }); continue; }
+    if (!native) { setLane(setup.name, { state: "off", detail: "Printing runs in the POS Android app." }); continue; }
     if (!ready(setup.printer)) { setLane(setup.name, { state: "off", detail: "Printer is off or has no IP address (Admin → Hardware)." }); continue; }
     const station = createStationRepository(base, release);
     const adapter = setup.name === "kitchen"
@@ -151,9 +152,9 @@ export function startPrintStation(options: {
 
   const kick = () => { for (const entry of lanes) void drain(entry); };
   const channel = options.client
-    .channel(`wayne-print-station-${Math.random().toString(36).slice(2)}`)
+    .channel(`hanafy-print-station-${Math.random().toString(36).slice(2)}`)
     // Inserts are new jobs; updates include a receipt asked for again and a job retried in Admin → Printing.
-    .on("postgres_changes", { event: "*", schema: "public", table: "print_jobs" }, kick)
+    .on("postgres_changes", { event: "*", schema: "public", table: "print_jobs", ...workspaceRealtimeFilter() }, kick)
     .subscribe((state) => { if (state === "SUBSCRIBED") kick(); });
   const poll = window.setInterval(kick, POLL_MS);
   const online = () => { for (const entry of lanes) entry.pausedUntil = 0; kick(); };

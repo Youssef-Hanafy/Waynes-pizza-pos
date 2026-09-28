@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getKitchenBoard } from "@/lib/kitchen/queries";
 import type { KitchenTicket } from "@/lib/kitchen/schemas";
+import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { KitchenBoard } from "./kitchen-board";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,6 @@ export default async function KitchenPage() {
   let tickets: KitchenTicket[] = [];
   let initialError = "";
   try { tickets = await getKitchenBoard(); } catch { initialError = "Kitchen is unavailable. Checking connection…"; }
-  return <KitchenBoard initialTickets={tickets} initialError={initialError} staffName={access.display_name}
-    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} canManageOrders={hasPermission(access, "orders.manage")} />;
+  return <><WorkspaceScope legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} /><KitchenBoard businessName={access.workspace_name ?? "Kitchen"} initialTickets={tickets} initialError={initialError} staffName={access.display_name}
+    canOpenAdmin={hasPermission(access, "admin.access")} canOpenPos={hasPermission(access, "pos.access")} canManageOrders={hasPermission(access, "orders.manage")} /></>;
 }

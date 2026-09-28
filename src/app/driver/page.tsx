@@ -14,6 +14,7 @@ export default async function DriverPage() {
   let initialError = "";
   try { board = await getDriverBoard(); } catch { initialError = "Deliveries are unavailable. Checking connection…"; }
   return <DriverScreen
+    businessName={access.workspace_name ?? "Deliveries"}
     initialBoard={board}
     initialError={initialError}
     staffName={access.display_name}

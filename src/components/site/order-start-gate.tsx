@@ -1,5 +1,6 @@
 "use client";
 
+import { useStorefrontBrand } from "./storefront-brand";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SiteIcon } from "./site-icon";
 import {
@@ -39,6 +40,7 @@ export function OrderStartGate({
   open: boolean;
   pickupMinutes: number;
 }) {
+  const brand = useStorefrontBrand();
   const dialog = useRef<HTMLDialogElement>(null);
   const [residence, setResidence] = useState<ResidenceType>(initial?.residence_type ?? "house");
 
@@ -122,7 +124,7 @@ export function OrderStartGate({
             inputMode="tel"
             maxLength={24}
             name="phone"
-            placeholder="(508) 000-0000"
+            placeholder="Mobile number"
             type="tel"
           />
         </label>
@@ -178,7 +180,7 @@ export function OrderStartGate({
                 City
                 <input
                   autoComplete="address-level2"
-                  defaultValue={initial?.city ?? "Worcester"}
+                  defaultValue={initial?.city ?? brand.city}
                   maxLength={120}
                   name="city"
                   required
@@ -188,7 +190,7 @@ export function OrderStartGate({
                 State
                 <input
                   autoComplete="address-level1"
-                  defaultValue={initial?.state ?? "MA"}
+                  defaultValue={initial?.state ?? brand.state}
                   maxLength={80}
                   name="state"
                   required

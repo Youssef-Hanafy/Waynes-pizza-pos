@@ -3,7 +3,8 @@ import { SiteIcon } from "@/components/site/site-icon";
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { getStoreSettings } from "@/lib/content/queries";
+import { storefrontSettings } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import { isStoreOpenNow } from "@/lib/content/store-status";
 import { getPublicMenu } from "@/lib/menu/queries";
 import { getCheckoutPaymentConfig } from "@/lib/payments/queries";
@@ -21,7 +22,7 @@ export default async function CheckoutPage({
   searchParams: Promise<{ fulfillment?: string }>;
 }) {
   const [settings, menu, paymentConfig, params] = await Promise.all([
-    getStoreSettings(),
+    storefrontSettings("online_ordering"),
     getPublicMenu(),
     getCheckoutPaymentConfig(),
     searchParams,
@@ -54,7 +55,7 @@ export default async function CheckoutPage({
         </h1>
         <p className="mt-3 max-w-2xl text-wayne-muted">
           {paymentConfig
-            ? "Your card is charged when you place the order. Wayne's starts cooking once the payment clears."
+            ? `Your card is charged when you place the order. ${brandNames(settings).shortName} starts cooking once the payment clears.`
             : "This checkout is clearly labeled TEST / MANUAL. It saves a real test order but does not collect card payment."}
         </p>
         <CheckoutClient

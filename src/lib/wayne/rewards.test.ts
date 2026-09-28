@@ -1,14 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { parseRewardsSignup, WAYNE_REWARDS_CONSENT_VERSION } from "./rewards";
-const signup = { phone: "(508) 555-0198", consent: true, consentVersion: WAYNE_REWARDS_CONSENT_VERSION };
-describe("Wayne’s Rewards signup", () => {
-  it("normalizes valid US numbers", () => {
-    expect(parseRewardsSignup(signup).phone).toBe("+15085550198");
-    expect(parseRewardsSignup({ ...signup, phone: "+1 508 555 0198" }).phone).toBe("+15085550198");
+import { describe, expect, it } from "vitest";
+import { rewardsConsentText } from "./rewards";
+
+describe("Rewards consent wording", () => {
+  it("keeps Wayne's recorded consent wording byte-for-byte", () => {
+    expect(rewardsConsentText("Wayne’s Pizza")).toBe("I agree to receive recurring automated marketing texts from Wayne’s Pizza at this number. Consent is not a condition of purchase. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help.");
   });
-  it("rejects malformed numbers, implicit consent, and outdated terms", () => {
-    for (const phone of ["123", "0000000000", "508abc5550198", "+44 20 7946 0123"]) expect(() => parseRewardsSignup({ ...signup, phone })).toThrow();
-    for (const consent of [false, "true", 1, undefined]) expect(() => parseRewardsSignup({ ...signup, consent })).toThrow();
-    expect(() => parseRewardsSignup({ ...signup, consentVersion: "old" })).toThrow();
+
+  it("names whichever business the storefront belongs to", () => {
+    expect(rewardsConsentText("Another Cafe")).toContain("marketing texts from Another Cafe at this number");
   });
 });

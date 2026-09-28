@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isProtectedPath } from "@/lib/auth/routes";
+import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions, workspaceSlugFromPath } from "@/lib/tenancy/active-workspace";
 
 export async function proxy(request: NextRequest) {
   if (!isProtectedPath(request.nextUrl.pathname)) return NextResponse.next();
@@ -22,7 +23,15 @@ export async function proxy(request: NextRequest) {
   });
 
   const { data, error } = await supabase.auth.getUser();
-  return error || !data.user ? redirectToLogin(request) : response;
+  if (error || !data.user) return redirectToLogin(request);
+
+  // Opening a workspace remembers it (slug only; the database re-validates
+  // membership on every request, so this is never an authorization).
+  const selected = workspaceSlugFromPath(request.nextUrl.pathname);
+  if (selected && request.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value !== selected) {
+    response.cookies.set(ACTIVE_WORKSPACE_COOKIE, selected, activeWorkspaceCookieOptions);
+  }
+  return response;
 }
 
 function redirectToLogin(request: NextRequest, error?: string) {
@@ -34,4 +43,4 @@ function redirectToLogin(request: NextRequest, error?: string) {
   return NextResponse.redirect(target);
 }
 
-export const config = { matcher: ["/admin/:path*", "/pos/:path*", "/kitchen/:path*", "/driver/:path*"] };
+export const config = { matcher: ["/admin/:path*", "/pos/:path*", "/kitchen/:path*", "/driver/:path*", "/w", "/w/:path*"] };

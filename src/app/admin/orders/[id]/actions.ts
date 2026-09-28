@@ -49,7 +49,7 @@ export async function refundOrderPayment(form: FormData) {
   const orderId = z.uuid().safeParse(form.get("order_id"));
   if (!orderId.success) redirect("/admin/orders");
   const path = `/admin/orders/${orderId.data}`;
-  await requirePermission("payments.manage", path);
+  const access = await requirePermission("payments.manage", path);
 
   const amount = parseAmountInput(String(form.get("amount") ?? ""));
   if (!amount.ok) redirect(`${path}?error=${encodeURIComponent(amount.error)}`);
@@ -68,7 +68,7 @@ export async function refundOrderPayment(form: FormData) {
   if (begun.duplicate) redirect(`${path}?saved=refund_duplicate`);
   if (!begun.provider_payment_id) redirect(`${path}?error=${encodeURIComponent("That payment has no processor reference to refund.")}`);
 
-  const resolved = await resolvePaymentProvider("online");
+  const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) redirect(`${path}?error=${encodeURIComponent("The payment processor is not available. The refund is recorded as pending.")}`);
 
   const service = createServiceSupabaseClient();
@@ -106,12 +106,12 @@ export async function voidOrderPayment(form: FormData) {
   const orderId = z.uuid().safeParse(form.get("order_id"));
   if (!orderId.success) redirect("/admin/orders");
   const path = `/admin/orders/${orderId.data}`;
-  await requirePermission("payments.manage", path);
+  const access = await requirePermission("payments.manage", path);
   const paymentId = z.uuid().safeParse(form.get("payment_id"));
   const providerPaymentId = String(form.get("provider_payment_id") ?? "");
   if (!paymentId.success || !providerPaymentId) redirect(`${path}?error=${encodeURIComponent("That payment cannot be voided.")}`);
 
-  const resolved = await resolvePaymentProvider("online");
+  const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) redirect(`${path}?error=${encodeURIComponent("The payment processor is not available.")}`);
   const service = createServiceSupabaseClient();
   try {

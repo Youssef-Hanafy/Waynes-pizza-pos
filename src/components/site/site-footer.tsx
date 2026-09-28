@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatAddress, type StoreSettings } from "@/lib/content/schemas";
+import { brandNames, formatAddress, type StoreSettings } from "@/lib/content/schemas";
 import { BrandMark } from "./brand-mark";
 import { SiteIcon } from "./site-icon";
 import { SocialLinks } from "./social-links";
@@ -10,7 +10,7 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
       <div className="site-container footer-grid">
         <div>
           <Link href="/" className="footer-brand">
-            <BrandMark name={settings.store_name} city={[settings.city, settings.state].filter(Boolean).join(", ")} />
+            <BrandMark badgeLabel={brandNames(settings).shortName} name={settings.store_name} city={[settings.city, settings.state].filter(Boolean).join(", ")} />
           </Link>
           <p>
             {settings.story}

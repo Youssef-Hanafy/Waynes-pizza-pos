@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
 import { cashMovementLabels, varianceLabel, type CashCloseout } from "@/lib/cash/schemas";
 import { getCashCloseout, getRegisters } from "@/lib/cash/queries";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { closeDrawerAsManager, saveRegister } from "./actions";
@@ -26,7 +26,7 @@ type Search = { from?: string | string[]; to?: string | string[]; error?: string
 
 export default async function CashPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requirePermission("cash.manage", "/admin/cash");
-  const [settings, params, registers] = await Promise.all([getStoreSettings(), searchParams, getRegisters()]);
+  const [settings, params, registers] = await Promise.all([getWorkspaceStoreSettings(), searchParams, getRegisters()]);
   const today = businessDate(settings.timezone);
   const rawFrom = single(params.from);
   const rawTo = single(params.to);

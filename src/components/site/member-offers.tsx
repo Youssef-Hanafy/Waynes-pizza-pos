@@ -1,5 +1,6 @@
 "use client";
 
+import { useStorefrontBrand } from "./storefront-brand";
 import { useState, type FormEvent } from "react";
 import type { MemberOffersResult } from "@/lib/promotions/member-offers";
 import { OfferList, PersonalLink } from "./offer-list";
@@ -20,6 +21,7 @@ import { SiteIcon } from "./site-icon";
  */
 
 export function MemberOffers() {
+  const brand = useStorefrontBrand();
   const [phone, setPhone] = useState("");
   const [status, setStatus] = useState<"idle" | "checking">("idle");
   const [result, setResult] = useState<MemberOffersResult | null>(null);
@@ -55,7 +57,7 @@ export function MemberOffers() {
         <em>waiting for you.</em>
       </h2>
       <p>
-        Enter the mobile number your Wayne’s texts go to and we’ll show this
+        Enter the mobile number your {brand.shortName} texts go to and we’ll show this
         week’s member offers and any code you haven’t used yet.
       </p>
       <form className="member-offers-form" onSubmit={check}>
@@ -66,7 +68,7 @@ export function MemberOffers() {
             inputMode="tel"
             maxLength={24}
             onChange={(event) => setPhone(event.target.value)}
-            placeholder="(508) 000-0000"
+            placeholder="Mobile number"
             required
             type="tel"
             value={phone}
@@ -86,12 +88,12 @@ export function MemberOffers() {
 
       {result && !result.member ? (
         <div className="member-offers-join" role="status">
-          <strong>This number isn’t in Wayne’s Rewards yet.</strong>
+          <strong>This number isn’t in {brand.rewardsName} yet.</strong>
           <p>
             Members get offers texted to them and a free small side on their
             first order. It’s free, and it takes a few seconds.
           </p>
-          <RewardsButton className="order-button">Join Wayne’s Rewards →</RewardsButton>
+          <RewardsButton className="order-button">Join {brand.rewardsName} →</RewardsButton>
         </div>
       ) : null}
 

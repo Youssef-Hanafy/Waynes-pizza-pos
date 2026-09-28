@@ -3,7 +3,7 @@ import type { NativeCallerIdBridge } from "../native/bridge";
 import { CallListeners, type CallerIdProvider } from "./provider";
 
 /**
- * Caller ID from the Wayne's POS Android app (§19, §52).  The app's native
+ * Caller ID from the POS Android app (§19, §52).  The app's native
  * plugin listens on the configured UDP port and src/hardware/native/bridge.ts
  * turns each CallerID.com record into the call shape below; this provider
  * only adapts it to the same IncomingCallEvent the simulator produces.
@@ -41,7 +41,7 @@ export class AndroidCallerIdProvider implements CallerIdProvider {
 
   async getStatus(): Promise<HardwareStatus> {
     const bridge = this.bridge();
-    if (!bridge) return status("unavailable", "Not installed", "Android caller ID needs the Wayne's POS app. This browser cannot listen for the caller ID box.");
+    if (!bridge) return status("unavailable", "Not installed", "Android caller ID needs the POS app. This browser cannot listen for the caller ID box.");
     const native = await bridge.status();
     if (native.state === "listening") return status("listening", "Listening", `UDP port ${this.options.port}`);
     if (native.state === "permission_denied") return status("error", "Offline", "Local network permission unavailable");

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { paymentSecretsPresent } from "@/lib/payments/config";
@@ -27,7 +27,7 @@ type Search = { from?: string | string[]; to?: string | string[]; error?: string
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requirePermission("payments.manage", "/admin/payments");
-  const [settings, params] = await Promise.all([getStoreSettings(), searchParams]);
+  const [settings, params] = await Promise.all([getWorkspaceStoreSettings(), searchParams]);
   const today = businessDate(settings.timezone);
   const rawFrom = single(params.from);
   const rawTo = single(params.to);

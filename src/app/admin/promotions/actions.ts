@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { parsePromotionForm } from "@/lib/promotions/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -14,7 +14,7 @@ const dbError = (message: string) => message.includes("promotions_active_code_id
 
 export async function savePromotion(form: FormData) {
   await requirePermission("promotions.manage", "/admin/promotions");
-  const settings = await getStoreSettings();
+  const settings = await getWorkspaceStoreSettings();
   const result = parsePromotionForm(Object.fromEntries(fields.map((field) => [field, form.get(field)])), settings.timezone);
   if (!result.ok) back(result.error);
   const row = result.ok ? result.row : null;

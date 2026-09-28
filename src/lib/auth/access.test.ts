@@ -35,3 +35,16 @@ describe("hasPermission", () => {
     expect(parsed.permissions).toEqual(["admin.access", "orders.cancel"]);
   });
 });
+
+describe("workspace-aware access", () => {
+  it("withholds legacy operations from a workspace the wayne_* functions do not serve", async () => {
+    const { forLegacyOperations, hasService } = await import("./permissions");
+    const other = { ...owner, legacy_operations: false, enabled_services: ["pos"] };
+    expect(forLegacyOperations(other).permissions).toEqual([]);
+    expect(forLegacyOperations({ ...owner, legacy_operations: true }).permissions).toEqual(owner.permissions);
+    expect(forLegacyOperations(owner).permissions).toEqual(owner.permissions);
+    expect(hasService(other, "pos")).toBe(true);
+    expect(hasService(other, "sms")).toBe(false);
+    expect(hasService(null, "pos")).toBe(false);
+  });
+});

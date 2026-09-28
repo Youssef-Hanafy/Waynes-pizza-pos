@@ -1,3 +1,4 @@
+import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
 import { z } from "zod";
 import { cartLineSchema, type CartLine } from "@/lib/orders/schemas";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
@@ -19,7 +20,11 @@ export const draftAddressSchema = z.object({
 });
 export type DraftAddress = z.infer<typeof draftAddressSchema>;
 
-export const blankAddress: DraftAddress = { address1: "", address2: "", city: "Worcester", state: "MA", postal_code: "", delivery_instructions: "" };
+/** A new delivery address, pre-filled with the register's own city and state (workspace location settings). */
+export function blankAddress(): DraftAddress {
+  const { defaultCity = "", defaultState = "" } = getClientWorkspaceScope();
+  return { address1: "", address2: "", city: defaultCity, state: defaultState, postal_code: "", delivery_instructions: "" };
+}
 
 export const posDraftSchema = z.object({
   id: z.string().min(1),
@@ -83,7 +88,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     phone: "",
     email: "",
     addressId: "",
-    address: blankAddress,
+    address: blankAddress(),
     cart: [],
     orderNote: "",
     promoCode: "",

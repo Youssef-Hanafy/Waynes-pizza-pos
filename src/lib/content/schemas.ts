@@ -107,6 +107,10 @@ export const storeSettingsSchema = z.object({
   seo_contact_description: z.string(),
   faq_items: z.array(faqItemSchema),
   special_hours: z.array(specialHoursSchema),
+  // Phase 4.1 brand names used in storefront copy (empty → derived from store_name).
+  brand_name: z.string().max(80).default(""),
+  brand_short_name: z.string().max(60).default(""),
+  rewards_program_name: z.string().max(80).default(""),
 });
 
 export type BusinessHours = z.infer<typeof businessHoursSchema>;
@@ -177,6 +181,9 @@ export const defaultSettings: StoreSettings = {
   seo_contact_description: "",
   faq_items: [],
   special_hours: [],
+  brand_name: "",
+  brand_short_name: "",
+  rewards_program_name: "",
 };
 
 export function formatTime(value: string) {
@@ -197,4 +204,18 @@ export function formatAddress(settings: StoreSettings) {
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+export type BrandNames = { storeName: string; brandName: string; shortName: string; rewardsName: string };
+
+/**
+ * The names storefront copy uses.  Each is workspace configuration with a
+ * sensible derivation, so a new business reads correctly with no code change.
+ */
+export function brandNames(settings: Pick<StoreSettings, "store_name" | "brand_name" | "brand_short_name" | "rewards_program_name">): BrandNames {
+  const storeName = settings.store_name.trim() || "Our store";
+  const brandName = settings.brand_name.trim() || storeName;
+  const shortName = settings.brand_short_name.trim() || brandName;
+  const rewardsName = settings.rewards_program_name.trim() || `${shortName} Rewards`;
+  return { storeName, brandName, shortName, rewardsName };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useStorefrontBrand } from "./storefront-brand";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SAVED_PROMO_STORAGE_KEY, memberOfferLinkPath, type MemberOffer } from "@/lib/promotions/member-offers";
@@ -60,6 +61,7 @@ export function OfferList({ offers }: { offers: MemberOffer[] }) {
 
 /** "Your personal link" — bookmark it, or tap the one in your texts. */
 export function PersonalLink({ linkKey }: { linkKey: string }) {
+  const brand = useStorefrontBrand();
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
   useEffect(() => {
@@ -81,7 +83,7 @@ export function PersonalLink({ linkKey }: { linkKey: string }) {
     <div className="member-offer-link">
       <p>
         <strong>Your personal offers link</strong> — opens your offers without typing your number. The link in
-        Wayne’s texts goes to the same place.
+        {brand.shortName} texts goes to the same place.
       </p>
       <div className="member-offer-actions">
         <a href={path}>{url.replace(/^https?:\/\//, "")}</a>

@@ -1,6 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { isPhoneLineNumber, status, type HardwareStatus, type IncomingCallEvent } from "../types";
 import { CallListeners, type CallerIdProvider } from "./provider";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 type PhoneCallRow = {
   id: string;
@@ -40,8 +41,8 @@ export class CloudCallerIdProvider implements CallerIdProvider {
     }
     if (this.channel) return;
     this.channel = this.client
-      .channel(`wayne-phone-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "phone_calls" }, (payload) => {
+      .channel(`hanafy-phone-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "phone_calls", ...workspaceRealtimeFilter() }, (payload) => {
         const row = payload.new as PhoneCallRow;
         this.emitChange(row.id);
         if (row.direction !== "inbound" || row.status !== "incoming" || !isPhoneLineNumber(row.line_number)) return;
@@ -58,7 +59,7 @@ export class CloudCallerIdProvider implements CallerIdProvider {
         };
         this.listeners.emit(event);
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "phone_calls" }, (payload) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "phone_calls", ...workspaceRealtimeFilter() }, (payload) => {
         this.emitChange((payload.new as PhoneCallRow).id);
       })
       .subscribe((state) => {

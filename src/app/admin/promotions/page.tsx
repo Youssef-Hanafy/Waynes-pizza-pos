@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { getCustomerSegments } from "@/lib/customers/queries";
 import { getPromotionStats, getPromotions, type PromotionStats } from "@/lib/promotions/queries";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PromotionsPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; view?: string }> }) {
   await requirePermission("promotions.manage", "/admin/promotions");
-  const [params, settings] = await Promise.all([searchParams, getStoreSettings()]);
+  const [params, settings] = await Promise.all([searchParams, getWorkspaceStoreSettings()]);
   const showArchived = params.view === "archived";
   const [{ promotions, readAt }, stats, segments] = await Promise.all([
     getPromotions(showArchived),
@@ -33,7 +33,7 @@ export default async function PromotionsPage({ searchParams }: { searchParams: P
   return <main className="mx-auto max-w-6xl px-5 py-10">
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Marketing</p>
     <h1 className="mt-3 text-4xl font-black">Promotion codes</h1>
-    <p className="mt-3 max-w-3xl text-wayne-muted">Codes work online and at the POS. Times use Wayne&apos;s {settings.timezone} clock. Per-customer limits are tracked by phone number, so a limited code needs a customer on POS tickets. Cancelling an order gives its use back.</p>
+    <p className="mt-3 max-w-3xl text-wayne-muted">Codes work online and at the POS. Times use the store&apos;s {settings.timezone} clock. Per-customer limits are tracked by phone number, so a limited code needs a customer on POS tickets. Cancelling an order gives its use back.</p>
     <p className="mt-3 max-w-3xl text-wayne-muted"><strong>Public code</strong>: one code for everyone (flyers, specials). <strong>Personal codes</strong>: every member gets their own single-use code, locked to their phone number, so you can see who was sent it, who used it and what they spent — here and in the Hanafy CRM. Members see their codes on their personal link (<code>/r/…</code>) or by typing their number on the Rewards page.</p>
     {params.saved ? <p role="status" className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{params.saved}</p> : null}
     {params.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{params.error}</p> : null}
@@ -65,7 +65,7 @@ function PublishForm({ promotion, segmentName }: { promotion: Promotion; segment
   const automatic = promotion.code_mode === "personal" && promotion.delivery === "segment_entered";
   const personal = promotion.code_mode === "personal";
   if (!personal && !promotion.members_only) return null;
-  const audience = promotion.audience_segment_id ? `members in ${segmentName}` : "all Wayne's Rewards members";
+  const audience = promotion.audience_segment_id ? `members in ${segmentName}` : "all Rewards members";
   return <form action={publishOffer} className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-wayne-border p-3">
     <input name="id" type="hidden" value={promotion.id} />
     {automatic ? <>
@@ -91,7 +91,7 @@ function PromotionForm({ promotion, segments, timeZone }: { promotion?: Promotio
     <div className="md:col-span-3"><Input defaultValue={promotion?.description ?? ""} id={`description-${key}`} label="Description (staff-facing)" maxLength={500} name="description" /></div>
     <Input defaultValue={promotion ? promotion.minimum_order_cents / 100 : 0} id={`minimum-${key}`} label="Minimum order ($)" min="0" name="minimum_order" step="0.01" type="number" />
     <label className="grid gap-2 text-sm font-semibold" htmlFor={`fulfillment-${key}`}>Applies to<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.fulfillment_type ?? ""} id={`fulfillment-${key}`} name="fulfillment_type"><option value="">Pickup and delivery</option><option value="pickup">Pickup only</option><option value="delivery">Delivery only</option></select></label>
-    <div className="grid gap-2 pt-7"><label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked={promotion?.active ?? true} name="active" type="checkbox" />Active</label><label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked={promotion?.members_only ?? false} name="members_only" type="checkbox" />Wayne&apos;s Rewards members only</label></div>
+    <div className="grid gap-2 pt-7"><label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked={promotion?.active ?? true} name="active" type="checkbox" />Active</label><label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked={promotion?.members_only ?? false} name="members_only" type="checkbox" />Rewards members only</label></div>
     <Input defaultValue={utcToZonedLocal(promotion?.starts_at ?? null, timeZone)} id={`starts-${key}`} label="Starts (optional)" name="starts_at" type="datetime-local" />
     <Input defaultValue={utcToZonedLocal(promotion?.ends_at ?? null, timeZone)} id={`ends-${key}`} label="Ends (optional)" name="ends_at" type="datetime-local" />
     <div />
@@ -99,7 +99,7 @@ function PromotionForm({ promotion, segments, timeZone }: { promotion?: Promotio
       <legend className="px-1 text-sm font-black">How the code works</legend>
       <label className="grid gap-2 text-sm font-semibold" htmlFor={`mode-${key}`}>Code type<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.code_mode ?? "public"} id={`mode-${key}`} name="code_mode"><option value="public">Public — one code for everyone</option><option value="personal">Personal — each member gets their own code</option></select></label>
       <label className="grid gap-2 text-sm font-semibold" htmlFor={`delivery-${key}`}>Sent (personal codes)<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.delivery ?? "publish"} id={`delivery-${key}`} name="delivery"><option value="publish">When I press Publish (weekly offers)</option><option value="segment_entered">Automatically when a customer enters the segment (win-back)</option></select></label>
-      <label className="grid gap-2 text-sm font-semibold" htmlFor={`segment-${key}`}>Who gets it<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.audience_segment_id ?? ""} id={`segment-${key}`} name="audience_segment_id"><option value="">All Wayne&apos;s Rewards members</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
+      <label className="grid gap-2 text-sm font-semibold" htmlFor={`segment-${key}`}>Who gets it<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.audience_segment_id ?? ""} id={`segment-${key}`} name="audience_segment_id"><option value="">All Rewards members</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
       <Input defaultValue={promotion?.code_valid_days ?? ""} id={`valid-${key}`} label="Each personal code good for (days, blank = until the offer ends)" min="1" max="365" name="code_valid_days" step="1" type="number" />
       <Input defaultValue={promotion?.reissue_after_days ?? ""} id={`reissue-${key}`} label="Automatic: wait before sending the same customer another (days, blank = 60)" min="1" max="3650" name="reissue_after_days" step="1" type="number" />
       <Input defaultValue={promotion?.crm_event_name ?? ""} id={`event-${key}`} label="Automatic: CRM event name (e.g. winback)" maxLength={40} name="crm_event_name" pattern="[a-z_]{2,40}" />

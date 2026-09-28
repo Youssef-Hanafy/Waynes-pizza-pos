@@ -1,5 +1,6 @@
 "use client";
 
+import { useStorefrontBrand } from "@/components/site/storefront-brand";
 import { RewardsButton } from "@/components/site/rewards-experience";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,7 @@ export function OrderMenuClient({
   deliveryMinutes,
 }: Props) {
   const router = useRouter();
+  const brand = useStorefrontBrand();
   const [fulfillment, setFulfillment] = useState<Fulfillment>(
     initialFulfillment === "delivery" && deliveryEnabled
       ? "delivery"
@@ -534,7 +536,7 @@ export function OrderMenuClient({
           <SiteIcon name="check" size={14} /> Customize every bite before
           checkout.
         </p>
-        <RewardsButton className="cart-rewards-link">Pizza person? Join Wayne’s Rewards →</RewardsButton>
+        {brand.services.includes("sms") ? <RewardsButton className="cart-rewards-link">Pizza person? Join {brand.rewardsName} →</RewardsButton> : null}
       </aside>
 
       <div role="status" className={announcement ? "cart-toast" : "sr-only"}>
@@ -628,6 +630,7 @@ function ItemDialog({
   onAdd: (line: CartLine) => void;
   onClose: () => void;
 }) {
+  const brand = useStorefrontBrand();
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -789,7 +792,7 @@ function ItemDialog({
           ) : (
             <p className="item-dialog-description">
               {item.description ||
-                "Your Wayne’s favorite. Choose your size and make it just right."}
+                `Your ${brand.shortName} favorite. Choose your size and make it just right.`}
             </p>
           )}
           {item.variants.length ? (

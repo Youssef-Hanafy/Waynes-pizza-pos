@@ -4,13 +4,18 @@ import {
   activeDraft, findDraftForCall, holdActive, initialDrafts, parseSavedDrafts, removeDraft, resumeDraft, startDraft, updateDraft,
   type DraftsState, type PosDraft,
 } from "@/lib/orders/drafts";
+import { workspaceStorageKey } from "@/lib/tenancy/active-workspace";
+import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
 import { createStore, useStore } from "./create-store";
 
 /**
  * Tickets at this register.  Saved to the device on every change, so a
  * refresh, a crash or a closed tab never loses an order being entered (§30).
+ * The key includes the workspace (§37.3): a device shared by two businesses
+ * can never open one business's tickets in the other.
  */
-const STORAGE_KEY = "wayne.pos.drafts.v1";
+const LEGACY_STORAGE_KEY = "wayne.pos.drafts.v1";
+let STORAGE_KEY = workspaceStorageKey(null, "pos-drafts.v1");
 
 const serverSnapshot = initialDrafts();
 export const orderStore = createStore<DraftsState>(serverSnapshot);
@@ -29,9 +34,20 @@ function save(state: DraftsState) {
 export function loadSavedDrafts() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
+  const scope = getClientWorkspaceScope();
+  STORAGE_KEY = workspaceStorageKey(scope.workspaceId, "pos-drafts.v1");
   let raw: string | null = null;
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
+    // One-time move of tickets saved before workspaces existed.  They can only
+    // belong to the workspace the pre-platform POS served.
+    if (raw === null && scope.workspaceId && scope.legacyOperations) {
+      raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (raw !== null) {
+        window.localStorage.setItem(STORAGE_KEY, raw);
+        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+    }
   } catch {
     raw = null;
   }

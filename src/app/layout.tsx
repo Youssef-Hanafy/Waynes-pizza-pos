@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
-import { getStoreSettings } from "@/lib/content/queries";
+import { StorefrontBrandProvider } from "@/components/site/storefront-brand";
+import { getStorefront } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import "./globals.css";
 import "./storefront.css";
 
@@ -9,17 +11,21 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo", display: "swap" });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getStoreSettings();
+  const { known, settings } = await getStorefront();
+  // A host no workspace has claimed (a preview URL, a register on the app
+  // domain) carries the platform name, never another business's.
+  const name = known ? settings.store_name : "Hanafy";
   return {
-    title: { default: settings.store_name, template: `%s | ${settings.store_name}` },
-    description: settings.seo_home_description,
+    title: { default: name, template: `%s | ${name}` },
+    description: known ? settings.seo_home_description : undefined,
   };
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const { settings, services } = await getStorefront();
   return (
     <html className={`${inter.variable} ${archivo.variable}`} lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased"><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider></body>
     </html>
   );
 }

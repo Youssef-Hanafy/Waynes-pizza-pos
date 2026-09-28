@@ -24,7 +24,7 @@ function port(form: FormData, name: string) {
 
 /** Save Admin → Hardware (§28). Validated here, then in the database, then audited. */
 export async function saveHardwareSettings(form: FormData) {
-  await requirePermission("hardware.manage", "/admin/hardware");
+  const access = await requirePermission("hardware.manage", "/admin/hardware");
   const parsed = hardwareSettingsFormSchema.safeParse({
     caller_id_provider: text(form, "caller_id_provider"),
     caller_line_count: text(form, "caller_line_count"),
@@ -67,6 +67,7 @@ export async function saveHardwareSettings(form: FormData) {
       kitchen_printers: [input.kitchen_printer],
       cash_drawer: input.cash_drawer,
     },
+    target_workspace_slug: access.workspace_slug ?? null,
   });
   if (error) back(error.code === "42501" ? "Only the owner can change hardware settings." : "The hardware settings could not be saved.");
   revalidatePath("/admin/hardware");

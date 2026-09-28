@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getCurrentAccess } from "@/lib/auth/access";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasPermission, hasService } from "@/lib/auth/permissions";
 import { callActionResultSchema, callActionSchema } from "@/lib/phone/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
+  if (!hasService(access, "caller_id")) return Response.json({ error: "Caller ID is not enabled for this business.", code: "SERVICE_DISABLED", service: "caller_id" }, { status: 403 });
   const { id } = await context.params;
   if (!z.uuid().safeParse(id).success) return Response.json({ error: "Unknown call." }, { status: 404 });
   let body: unknown;
