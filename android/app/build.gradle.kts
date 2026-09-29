@@ -15,7 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         // The POS the app opens. Change it here (and rebuild) if the POS moves to another address.
-        buildConfigField("String", "POS_URL", "\"https://waynes-pizza-pos.vercel.app/pos\"")
+        buildConfigField("String", "POS_URL", "\"https://app.hanafymedia.com/pos\"")
     }
 
     buildFeatures {

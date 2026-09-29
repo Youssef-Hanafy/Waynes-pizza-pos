@@ -11,7 +11,7 @@
  *
  * Run it on the counter computer:
  *
- *   WAYNES_URL=https://waynespizzaofworcester.com \
+ *   WAYNES_URL=https://app.hanafymedia.com \
  *   CALLER_ID_INGEST_TOKEN=<the same token set on the website> \
  *   node scripts/callerid-bridge.mjs
  *
