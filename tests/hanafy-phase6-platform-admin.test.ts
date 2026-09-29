@@ -127,7 +127,8 @@ describe("Hanafy Platform Phase 6 Platform Admin foundation", () => {
     expect(row?.me).toMatchObject({ platform_role: "platform_read_only", can_manage: false });
     expect(Number(row?.dashboard.workspaces.total)).toBe(2);
     expect(row?.dashboard.workspace_rows.map((workspace) => workspace.slug).sort()).toEqual(["tenant-six", "waynes-pizza"]);
-    expect(row?.dashboard.billing).toBeNull();
+    // Phase 11 filled in Hanafy billing: nothing is owed until an agreement is recorded.
+    expect(row?.dashboard.billing).toMatchObject({ monthly_recurring_cents: 0, open_balance_cents: 0, equipment_balance_cents: 0 });
     expect(row?.detail.slug).toBe("tenant-six");
     expect(row?.detail.service_catalog.find((service) => service.code === "pos")?.effective).toBe(true);
     expect(row?.detail.service_catalog.find((service) => service.code === "sms")?.requires_any).toEqual(["crm"]);
