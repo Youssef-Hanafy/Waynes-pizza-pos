@@ -73,7 +73,12 @@ export default async function WorkspaceLayout({ children, params }: Readonly<{ c
           <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
             <div className="flex flex-col gap-1">
               <span className="px-1 text-[10px] font-black uppercase tracking-[0.18em] text-wayne-muted">Home</span>
-              <Link className="rounded-lg px-2.5 py-1.5 text-sm font-bold hover:bg-wayne-cream-deep" href={`/w/${context.workspace.slug}`}>Overview</Link>
+              <div className="flex flex-wrap gap-1">
+                <Link className="rounded-lg px-2.5 py-1.5 text-sm font-bold hover:bg-wayne-cream-deep" href={`/w/${context.workspace.slug}`}>Overview</Link>
+                {context.permissions.includes("settings.manage") ? (
+                  <Link className="rounded-lg px-2.5 py-1.5 text-sm font-bold hover:bg-wayne-cream-deep" href={`/w/${context.workspace.slug}/billing`}>Hanafy bill</Link>
+                ) : null}
+              </div>
             </div>
             {navigation.map((group) => (
               <div className="flex flex-col gap-1" key={group.name}>

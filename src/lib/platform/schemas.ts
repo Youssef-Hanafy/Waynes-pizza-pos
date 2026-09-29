@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { billingTotalsSchema, dashboardBillingSchema } from "./billing";
 
 /**
  * Hanafy Platform Admin (Phase 6) response shapes.  Every value comes from a
@@ -102,7 +103,7 @@ export const workspaceSummarySchema = z.object({
     never_seen: count.default(0),
   }),
   health: workspaceHealthSchema,
-  billing: z.null(),
+  billing: billingTotalsSchema.nullable(),
 });
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 
@@ -140,7 +141,7 @@ export const platformDashboardSchema = z.object({
   issues: z.array(healthIssueSchema.extend({ workspace_slug: z.string(), workspace_name: z.string() })),
   support_sessions: z.array(liveSupportSessionSchema),
   recent_audit: z.array(platformAuditEntrySchema),
-  billing: z.null(),
+  billing: dashboardBillingSchema.nullable(),
 });
 export type PlatformDashboard = z.infer<typeof platformDashboardSchema>;
 
@@ -337,8 +338,28 @@ export function platformErrorMessage(message: string | undefined) {
     "Only a payment terminal device",
     "That card terminal does not belong",
     "Caller lines can only be served",
+    "Amounts ",
+    "more than the",
+    "draft",
+    "Add at least one line",
+    "Void the payments",
+    "already void",
+    "Enter the amount",
+    "Enter the charge",
+    "A credit cannot",
+    "Plan not found",
+    "Agreement not found",
+    "Invoice not found",
+    "Equipment not found",
+    "That device does not belong",
+    "Payment not found",
+    "Payments can only be recorded",
+    "Unknown service",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
+  if (message?.includes("workspace_subscriptions_one_base")) return "This business already has a live base agreement. Change or cancel it, or add this as an add-on.";
+  if (message?.includes("platform_plans_code_key")) return "A plan with that code already exists.";
+  if (message?.includes("equipment_assets_one_per_device")) return "That device already has an equipment record.";
   if (message?.includes("hardware_devices_asset_tag_unique")) return "That asset tag is already used by another device of this business.";
   if (message?.includes("payment_connections_one_live")) return "This location already has a live payment connection for that purpose. Turn the old one off first.";
   if (message && known.some((part) => message.includes(part))) return message;

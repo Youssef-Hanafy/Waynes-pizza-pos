@@ -31,7 +31,7 @@ export default async function PlatformLayout({ children }: Readonly<{ children: 
               <span className="text-[11px] font-bold uppercase tracking-widest text-wayne-muted">Platform Admin</span>
             </span>
           </Link>
-          <PlatformTabs exact={["/platform"]} label="Platform Admin" tabs={[["/platform", "Dashboard"], ["/platform/workspaces", "Businesses"], ["/platform/audit", "Audit log"]]} />
+          <PlatformTabs exact={["/platform"]} label="Platform Admin" tabs={[["/platform", "Dashboard"], ["/platform/workspaces", "Businesses"], ["/platform/billing", "Billing"], ["/platform/audit", "Audit log"]]} />
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-bold leading-tight">{me.display_name}</p>

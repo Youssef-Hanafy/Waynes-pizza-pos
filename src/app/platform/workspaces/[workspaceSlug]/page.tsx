@@ -3,6 +3,7 @@ import { Flash, first, serviceName, when } from "@/components/platform/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getPlatformWorkspace } from "@/lib/platform/queries";
+import { formatMoney } from "@/lib/platform/money";
 
 export const metadata: Metadata = { title: "Business overview" };
 export const dynamic = "force-dynamic";
@@ -40,7 +41,16 @@ export default async function PlatformWorkspaceOverviewPage({ params, searchPara
         </Card>
         <Card className="p-5">
           <h2 className="text-xl font-black">Hanafy billing</h2>
-          <p className="mt-3 text-sm text-wayne-muted">Plan, balance and equipment balance are added in Phase 11. Nothing is billed from here yet.</p>
+          {workspace.billing ? (
+            <dl className="mt-3 grid gap-2 text-sm">
+              <div className="flex justify-between gap-3"><dt>Agreement</dt><dd className="text-right font-bold">{workspace.billing.agreement ? workspace.billing.agreement.label : "None recorded"}</dd></div>
+              <div className="flex justify-between gap-3"><dt>Monthly recurring</dt><dd className="font-bold">{formatMoney(workspace.billing.monthly_recurring_cents)}</dd></div>
+              <div className="flex justify-between gap-3"><dt>Unpaid invoices</dt><dd className="font-bold">{formatMoney(workspace.billing.open_balance_cents)} ({workspace.billing.open_invoices})</dd></div>
+              <div className="flex justify-between gap-3"><dt>Overdue</dt><dd className={`font-bold ${workspace.billing.overdue_balance_cents ? "text-wayne-alert" : ""}`}>{formatMoney(workspace.billing.overdue_balance_cents)}</dd></div>
+              <div className="flex justify-between gap-3"><dt>Owed on equipment</dt><dd className="font-bold">{formatMoney(workspace.billing.equipment_balance_cents)}</dd></div>
+            </dl>
+          ) : <p className="mt-3 text-sm text-wayne-muted">Billing could not be loaded.</p>}
+          <a className="mt-3 inline-block text-sm font-bold underline" href={`/platform/workspaces/${workspace.slug}/billing`}>Open billing</a>
         </Card>
       </div>
 

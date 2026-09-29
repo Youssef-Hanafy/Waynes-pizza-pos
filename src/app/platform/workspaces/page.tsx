@@ -4,6 +4,7 @@ import { z } from "zod";
 import { first, HealthBadge, serviceName, when, WorkspaceStatus } from "@/components/platform/format";
 import { Button } from "@/components/ui/button";
 import { getPlatformWorkspaces } from "@/lib/platform/queries";
+import { formatMoney } from "@/lib/platform/money";
 
 export const metadata: Metadata = { title: "Businesses" };
 export const dynamic = "force-dynamic";
@@ -60,8 +61,8 @@ export default async function PlatformWorkspacesPage({ searchParams }: { searchP
                 <td className="px-4 py-3">{workspace.owner ? <>{workspace.owner.name}<span className="block text-xs text-wayne-muted">{workspace.owner.email}</span></> : "No owner"}</td>
                 <td className="px-4 py-3">{workspace.messaging ? <>{workspace.messaging.sender_address}<span className="block text-xs text-wayne-muted">{workspace.messaging.provider}{workspace.messaging.active ? "" : " · off"}</span></> : "Not set up"}</td>
                 <td className="px-4 py-3">{workspace.payment ? <>{workspace.payment.provider}<span className="block text-xs text-wayne-muted">{[workspace.payment.environment, workspace.payment.online_card_enabled ? "online cards" : null, workspace.payment.terminal_card_enabled ? "terminal" : null].filter(Boolean).join(" · ") || "cards off"}</span></> : "Not set up"}</td>
-                <td className="px-4 py-3">{workspace.hardware.registers} register{workspace.hardware.registers === 1 ? "" : "s"}<span className="block text-xs text-wayne-muted">{workspace.hardware.caller_lines} caller-ID line{workspace.hardware.caller_lines === 1 ? "" : "s"}</span></td>
-                <td className="px-4 py-3 text-wayne-muted">Phase 11</td>
+                <td className="px-4 py-3">{workspace.hardware.devices} device{workspace.hardware.devices === 1 ? "" : "s"}<span className={`block text-xs ${workspace.hardware.problems ? "font-bold text-wayne-alert" : "text-wayne-muted"}`}>{workspace.hardware.problems ? `${workspace.hardware.problems} with a problem` : `${workspace.hardware.caller_lines} caller-ID line${workspace.hardware.caller_lines === 1 ? "" : "s"}`}</span></td>
+                <td className="px-4 py-3">{workspace.billing?.agreement ? <>{formatMoney(workspace.billing.monthly_recurring_cents)}/mo<span className="block text-xs text-wayne-muted">{workspace.billing.open_balance_cents ? `${formatMoney(workspace.billing.open_balance_cents)} unpaid` : "nothing unpaid"}{workspace.billing.overdue_balance_cents ? " · overdue" : ""}</span></> : <span className="text-wayne-muted">No agreement</span>}</td>
                 <td className="px-4 py-3"><HealthBadge level={workspace.health.level} /></td>
                 <td className="px-4 py-3">{when(workspace.created_at)}</td>
               </tr>

@@ -19,6 +19,7 @@ import {
 import { platformIntegrationsSchema } from "./integrations";
 import { platformMessagingSchema } from "./messaging";
 import { platformHardwareSchema } from "./hardware";
+import { platformBillingOverviewSchema, platformWorkspaceBillingSchema } from "./billing";
 
 /** The signed-in Hanafy platform user, or null for everyone else. */
 export const getPlatformMe = cache(async (): Promise<PlatformMe | null> => {
@@ -38,16 +39,20 @@ export const getPlatformMe = cache(async (): Promise<PlatformMe | null> => {
  * platform staff gets a plain 404, so the console does not advertise itself
  * to business owners.  The database checks the role again on every call.
  */
-export async function requirePlatformUser(options: { manage?: boolean; support?: boolean; nextPath?: string } = {}): Promise<PlatformMe> {
+export async function requirePlatformUser(options: { manage?: boolean; support?: boolean; billing?: boolean; nextPath?: string } = {}): Promise<PlatformMe> {
   const supabase = await createServerSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) redirect(`/login?next=${encodeURIComponent(options.nextPath ?? "/platform")}`);
   const me = await getPlatformMe();
   if (!me) notFound();
   if (options.manage && !me.can_manage) redirect("/platform?error=" + encodeURIComponent("Your platform role can view but not change businesses."));
+  if (options.billing && !canBill(me)) redirect("/platform?error=" + encodeURIComponent("Only Hanafy owners, admins and billing staff can change billing."));
   if (options.support && !me.can_support) redirect("/platform?error=" + encodeURIComponent("Your platform role cannot open support sessions."));
   return me;
 }
+
+/** Hanafy owners, admins and billing staff record agreements, invoices and payments. */
+export const canBill = (me: PlatformMe) => ["platform_owner", "platform_admin", "platform_billing"].includes(me.platform_role);
 
 /** The caller's live support session (any business), for banners. */
 export const getMySupportSession = cache(async (): Promise<MySupportSession | null> => {
@@ -103,4 +108,12 @@ export function getPlatformWorkspaceIntegrations(slug: string) {
 
 export function getPlatformWorkspaceHardware(slug: string) {
   return call("hanafy_platform_workspace_hardware", { target_workspace_slug: slug }, (data) => platformHardwareSchema.parse(data));
+}
+
+export function getPlatformWorkspaceBilling(slug: string) {
+  return call("hanafy_platform_workspace_billing", { target_workspace_slug: slug }, (data) => platformWorkspaceBillingSchema.parse(data));
+}
+
+export function getPlatformBillingOverview() {
+  return call("hanafy_platform_billing_overview", undefined, (data) => platformBillingOverviewSchema.parse(data));
 }

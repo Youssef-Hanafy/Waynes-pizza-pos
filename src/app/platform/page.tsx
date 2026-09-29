@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getPlatformDashboard, requirePlatformUser } from "@/lib/platform/queries";
+import { formatMoney } from "@/lib/platform/money";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -42,9 +43,16 @@ export default async function PlatformDashboardPage({ searchParams }: { searchPa
         <Stat label="Business staff accounts" value={dashboard.totals.members} />
         <Stat label="Hanafy platform staff" value={dashboard.totals.platform_users} />
         <Card className="p-5">
-          <p className="text-sm text-wayne-muted">Billing & equipment balances</p>
-          <strong className="mt-1 block text-lg">Not set up yet</strong>
-          <p className="mt-1 text-xs text-wayne-muted">Hanafy plans, invoices and equipment balances arrive in Phase 11.</p>
+          <p className="text-sm text-wayne-muted">Hanafy billing</p>
+          {dashboard.billing ? (
+            <>
+              <strong className="mt-1 block text-2xl">{formatMoney(dashboard.billing.monthly_recurring_cents)}<span className="text-sm font-normal text-wayne-muted"> / month</span></strong>
+              <p className="mt-1 text-sm">Unpaid {formatMoney(dashboard.billing.open_balance_cents)}{dashboard.billing.overdue_balance_cents ? <strong className="text-wayne-alert"> · {formatMoney(dashboard.billing.overdue_balance_cents)} overdue</strong> : null}</p>
+              <p className="text-sm">Equipment owed {formatMoney(dashboard.billing.equipment_balance_cents)}</p>
+              {dashboard.billing.without_agreement ? <p className="text-xs text-wayne-warn">{dashboard.billing.without_agreement} business{dashboard.billing.without_agreement === 1 ? "" : "es"} with no agreement recorded</p> : null}
+              <Link className="mt-1 inline-block text-xs font-bold underline" href="/platform/billing">Open billing</Link>
+            </>
+          ) : <strong className="mt-1 block text-lg">Not available</strong>}
         </Card>
       </div>
 

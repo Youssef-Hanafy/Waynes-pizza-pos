@@ -68,7 +68,7 @@ export default async function PlatformWorkspaceLayout({ children, params }: Read
       </Card>
 
       <div className="mt-6">
-        <PlatformTabs exact={[base]} label={`${workspace.name} sections`} tabs={[[base, "Overview"], [`${base}/services`, "Services"], [`${base}/users`, "Users"], [`${base}/messaging`, "Messaging"], [`${base}/integrations`, "Payments & integrations"], [`${base}/hardware`, "Hardware"], [`${base}/health`, "Health"], [`${base}/audit`, "Audit"]]} />
+        <PlatformTabs exact={[base]} label={`${workspace.name} sections`} tabs={[[base, "Overview"], [`${base}/services`, "Services"], [`${base}/users`, "Users"], [`${base}/messaging`, "Messaging"], [`${base}/integrations`, "Payments & integrations"], [`${base}/hardware`, "Hardware"], [`${base}/billing`, "Billing"], [`${base}/equipment`, "Equipment"], [`${base}/health`, "Health"], [`${base}/audit`, "Audit"]]} />
       </div>
       {children}
     </main>

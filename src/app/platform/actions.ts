@@ -17,6 +17,9 @@ import {
 } from "@/lib/platform/schemas";
 import { saveMessagingInputSchema, saveMessagingResultSchema } from "@/lib/platform/messaging";
 import { saveHardwareInputSchema } from "@/lib/platform/hardware";
+import { billingIntervals, billingResultSchema, paymentMethods } from "@/lib/platform/billing";
+import { parseDollarsToCents } from "@/lib/platform/money";
+import { z } from "zod";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
 import { zonedLocalToUtcIso } from "@/lib/time/zoned";
@@ -429,4 +432,199 @@ export async function saveHardwareDevice(form: FormData) {
   if (error) back(path, platformErrorMessage(error.message));
   revalidatePath(`/platform/workspaces/${parsed.data.workspace}`, "layout");
   back(path, cleaned.status === "retired" ? "Device retired. Its history is kept." : "Device saved.", "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Hanafy billing + equipment (Phase 11).  Money typed as dollars is parsed as
+// text into integer cents; the database re-checks every amount.
+// ---------------------------------------------------------------------------
+const reasonSchema = z.string().trim().min(5, "Give a reason (at least 5 characters).").max(500);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a full date.");
+const optionalIsoDate = z.union([isoDate, z.literal("")]).optional();
+
+function dollars(form: FormData, key: string, path: string, options: { required?: boolean; allowNegative?: boolean } = {}): number | undefined {
+  const raw = text(form, key).trim();
+  if (!raw) {
+    if (options.required) back(path, "Enter an amount.");
+    return undefined;
+  }
+  const value = parseDollarsToCents(raw);
+  if (value === null || (!options.allowNegative && value < 0)) back(path, `"${raw}" is not an amount in dollars and cents.`);
+  return value;
+}
+
+async function billingRpc(path: string, name: string, args: Record<string, unknown>) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = billingResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check.");
+  return result.data;
+}
+
+function billingPath(form: FormData) {
+  const workspace = text(form, "workspace");
+  const tab = text(form, "tab") === "equipment" ? "/equipment" : "/billing";
+  return { workspace, path: workspacePath(workspace, tab) };
+}
+
+export async function saveSubscription(form: FormData) {
+  const { workspace, path } = billingPath(form);
+  await requirePlatformUser({ billing: true, nextPath: path });
+  const parsed = z.object({
+    id: z.union([z.uuid(), z.literal("")]),
+    plan_id: z.union([z.uuid(), z.literal("")]),
+    kind: z.enum(["base", "addon"]).or(z.literal("")),
+    label: z.string().trim().max(120),
+    status: z.enum(["trial", "active", "paused", "cancelled"]).or(z.literal("")),
+    billing_interval: z.enum(billingIntervals).or(z.literal("")),
+    start_date: optionalIsoDate,
+    end_date: optionalIsoDate,
+    custom_terms: z.string().max(2000),
+    reason: reasonSchema,
+  }).safeParse(Object.fromEntries(["id", "plan_id", "kind", "label", "status", "billing_interval", "start_date", "end_date", "custom_terms", "reason"].map((key) => [key, text(form, key)])));
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the agreement.");
+  const input = parsed.data;
+  const payload: Record<string, unknown> = {};
+  for (const key of ["id", "plan_id", "kind", "label", "status", "billing_interval", "start_date"] as const) if (input[key]) payload[key] = input[key];
+  if (form.has("end_date")) payload.end_date = input.end_date ?? "";
+  if (form.has("custom_terms")) payload.custom_terms = input.custom_terms;
+  if (form.has("plan_id") && input.id) payload.plan_id = input.plan_id;
+  const price = dollars(form, "price", path, { required: !input.id });
+  if (price !== undefined) payload.price_cents = price;
+  await billingRpc(path, "hanafy_platform_save_subscription", { target_workspace_slug: workspace, payload, change_reason: input.reason });
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  revalidatePath("/platform");
+  back(path, "Agreement saved.", "saved");
+}
+
+export async function saveInvoice(form: FormData) {
+  const { workspace, path } = billingPath(form);
+  await requirePlatformUser({ billing: true, nextPath: path });
+  const action = text(form, "action") || "create";
+  if (!["create", "update", "issue", "void"].includes(action)) back(path, "Unknown invoice action.");
+  const reason = reasonSchema.safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const payload: Record<string, unknown> = { action };
+  const id = text(form, "id");
+  if (id) payload.id = id;
+  for (const key of ["period_start", "period_end", "issue_date", "due_date"] as const) {
+    const value = text(form, key);
+    if (value && !isoDate.safeParse(value).success) back(path, "Use full dates.");
+    if (value) payload[key] = value;
+  }
+  if (form.has("notes")) payload.notes = text(form, "notes").slice(0, 2000);
+  if (action === "create") payload.include_agreements = text(form, "include_agreements") === "yes";
+  if (action === "create" || action === "update") {
+    // Up to five free-form lines from the form.
+    const items: Record<string, unknown>[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const description = text(form, `item_${index}_description`).trim();
+      const kind = text(form, `item_${index}_kind`) || "service";
+      const amount = dollars(form, `item_${index}_amount`, path, { allowNegative: kind === "adjustment" });
+      if (!description && amount === undefined) continue;
+      if (!description || amount === undefined) back(path, "Each line needs a description and an amount.");
+      const quantity = Number(text(form, `item_${index}_quantity`) || "1");
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) back(path, "Quantity is a whole number from 1.");
+      items.push({ kind, description: description.slice(0, 300), quantity, unit_price_cents: amount });
+    }
+    if (items.length || action === "update") payload.items = items;
+  }
+  const result = await billingRpc(path, "hanafy_platform_save_invoice", { target_workspace_slug: workspace, payload, change_reason: reason.data });
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  revalidatePath("/platform");
+  const messages: Record<string, string> = {
+    create: `Draft ${result.invoice_number ?? "invoice"} created. Check the lines, then issue it.`,
+    update: "Draft updated.",
+    issue: `${result.invoice_number ?? "Invoice"} issued. It now counts as unpaid until payments are recorded.`,
+    void: "Invoice voided (a draft is discarded).",
+  };
+  back(path, messages[action] ?? "Saved.", "saved");
+}
+
+export async function recordBillingPayment(form: FormData) {
+  const { workspace, path } = billingPath(form);
+  await requirePlatformUser({ billing: true, nextPath: path });
+  const reason = reasonSchema.safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const target = text(form, "target");
+  if (target !== "invoice" && target !== "equipment") back(path, "Unknown payment target.");
+  const payload: Record<string, unknown> = { target };
+  const voidId = text(form, "void_payment_id");
+  if (voidId) {
+    payload.void_payment_id = voidId;
+  } else {
+    const method = z.enum(paymentMethods).safeParse(text(form, "method"));
+    if (!method.success) back(path, "Choose how it was paid.");
+    const paidOn = text(form, "paid_on");
+    if (paidOn && !isoDate.safeParse(paidOn).success) back(path, "Use a full date.");
+    Object.assign(payload, {
+      target_id: text(form, "target_id"),
+      amount_cents: dollars(form, "amount", path, { required: true }),
+      method: method.data,
+      paid_on: paidOn,
+      reference: text(form, "reference").slice(0, 120),
+      notes: text(form, "notes").slice(0, 500),
+    });
+  }
+  await billingRpc(path, "hanafy_platform_record_payment", { target_workspace_slug: workspace, payload, change_reason: reason.data });
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  revalidatePath("/platform");
+  back(path, voidId ? "Payment voided. The balance is owed again." : "Payment recorded.", "saved");
+}
+
+export async function saveEquipment(form: FormData) {
+  const { workspace, path } = billingPath(form);
+  await requirePlatformUser({ billing: true, nextPath: path });
+  const reason = reasonSchema.safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const payload: Record<string, unknown> = {};
+  for (const key of ["id", "hardware_device_id", "name", "vendor", "model", "serial_number", "ownership_type", "payment_schedule", "purchased_at", "assigned_at", "status", "notes", "charged_on", "charge_description"] as const) {
+    if (form.has(key)) payload[key] = text(form, key).slice(0, key === "notes" ? 1000 : 300);
+  }
+  if (payload.ownership_type && !["customer_owned", "hanafy_owned", "financed", "leased"].includes(String(payload.ownership_type))) back(path, "Choose who owns it.");
+  for (const key of ["purchased_at", "assigned_at", "charged_on"] as const) {
+    if (payload[key] && !isoDate.safeParse(payload[key]).success) back(path, "Use full dates.");
+  }
+  const cost = dollars(form, "hanafy_cost", path);
+  if (cost !== undefined) payload.hanafy_cost_cents = cost;
+  const price = dollars(form, "customer_price", path);
+  if (price !== undefined) payload.customer_price_cents = price;
+  if (form.has("charge")) {
+    const charge = dollars(form, "charge", path, { required: true, allowNegative: true });
+    payload.charge_cents = charge;
+  }
+  if (!payload.id && !payload.hardware_device_id && !payload.name) back(path, "Name the equipment or pick its device.");
+  await billingRpc(path, "hanafy_platform_save_equipment", { target_workspace_slug: workspace, payload, change_reason: reason.data });
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  revalidatePath("/platform");
+  back(path, payload.charge_cents !== undefined ? "Charge recorded." : "Equipment saved.", "saved");
+}
+
+export async function savePlan(form: FormData) {
+  const path = "/platform/billing";
+  await requirePlatformUser({ billing: true, nextPath: path });
+  const parsed = z.object({
+    id: z.union([z.uuid(), z.literal("")]),
+    code: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/, "Code is lowercase letters, numbers and underscores.").or(z.literal("")),
+    name: z.string().trim().max(120),
+    description: z.string().max(1000),
+    reason: reasonSchema,
+  }).safeParse(Object.fromEntries(["id", "code", "name", "description", "reason"].map((key) => [key, text(form, key)])));
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the plan.");
+  const input = parsed.data;
+  if (!input.id && (!input.code || !input.name)) back(path, "A new plan needs a code and a name.");
+  const payload: Record<string, unknown> = form.has("services_present") ? { services: form.getAll("services").map(String) } : {};
+  if (input.id) payload.id = input.id;
+  if (input.code) payload.code = input.code;
+  if (input.name) payload.name = input.name;
+  if (form.has("description")) payload.description = input.description;
+  if (form.has("active")) payload.active = text(form, "active") === "yes";
+  if (form.has("price")) {
+    const price = dollars(form, "price", path);
+    payload.base_monthly_price_cents = price ?? null;
+  }
+  await billingRpc(path, "hanafy_platform_save_plan", { payload, change_reason: input.reason });
+  revalidatePath(path);
+  back(path, "Plan saved.", "saved");
 }
