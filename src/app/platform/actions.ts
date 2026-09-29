@@ -12,6 +12,7 @@ import {
   setServiceResultSchema,
   startSupportInputSchema,
 } from "@/lib/platform/schemas";
+import { saveMessagingInputSchema, saveMessagingResultSchema } from "@/lib/platform/messaging";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
 import { zonedLocalToUtcIso } from "@/lib/time/zoned";
@@ -201,4 +202,74 @@ export async function endSupportSession(form: FormData) {
   }
   revalidatePath("/", "layout");
   back(path, "Support session ended.", "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Messaging (Phase 7)
+// ---------------------------------------------------------------------------
+export async function saveWorkspaceMessaging(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/messaging");
+  await requirePlatformUser({ manage: true, nextPath: path });
+
+  // The confirmation step re-posts the first submission as JSON.
+  let payload: Record<string, unknown>;
+  const pendingJson = text(form, "pending_payload");
+  if (pendingJson) {
+    try {
+      payload = JSON.parse(pendingJson) as Record<string, unknown>;
+    } catch {
+      back(path, "The confirmation expired. Make the change again.");
+    }
+  } else {
+    const bool = (key: string) => (text(form, key) === "yes" ? true : text(form, key) === "no" ? false : undefined);
+    const identityFields = ["identity_id", "phone_number", "provider_identity_arn", "identity_type", "identity_message_type", "identity_status"];
+    const hasIdentity = identityFields.some((key) => text(form, key).trim() !== "");
+    payload = {
+      status: text(form, "status") || undefined,
+      aws_region: text(form, "aws_region"),
+      provider_account_ref: text(form, "provider_account_ref"),
+      registration_status: text(form, "registration_status"),
+      production_access_status: text(form, "production_access_status"),
+      dispatch_mode: text(form, "dispatch_mode") || undefined,
+      live_sending: bool("live_sending"),
+      secret_reference: text(form, "secret_reference"),
+      ...(hasIdentity
+        ? {
+            identity: {
+              id: text(form, "identity_id"),
+              phone_number: text(form, "phone_number"),
+              provider_identity_arn: text(form, "provider_identity_arn"),
+              identity_type: text(form, "identity_type"),
+              message_type: text(form, "identity_message_type") || undefined,
+              status: text(form, "identity_status") || undefined,
+              is_default: bool("identity_default"),
+            },
+          }
+        : {}),
+    };
+  }
+  const parsed = saveMessagingInputSchema.safeParse({ workspace, reason: text(form, "reason"), confirmed: text(form, "confirmed") === "yes", payload });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the messaging details.");
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_save_messaging", {
+    target_workspace_slug: parsed.data.workspace,
+    payload: parsed.data.payload,
+    change_reason: parsed.data.reason,
+    confirmed: parsed.data.confirmed,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = saveMessagingResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check.");
+  if (result.data.status === "needs_confirmation") {
+    back(path, "Confirm this change", "error", {
+      confirm: "messaging",
+      reason: parsed.data.reason,
+      pending_payload: JSON.stringify(parsed.data.payload),
+      warnings: JSON.stringify(result.data.warnings.slice(0, 8)),
+    });
+  }
+  revalidatePath(path);
+  back(path, "Messaging saved.", "saved");
 }

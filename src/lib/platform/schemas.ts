@@ -309,7 +309,11 @@ export function platformErrorMessage(message: string | undefined) {
     "archived",
     "Only a platform owner",
     "Support session not found",
+    "Sending number not found",
+    "Enter the new number",
+    "messaging_identities_number_owner",
   ];
+  if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
   if (message && known.some((part) => message.includes(part))) return message;
   return "The change could not be saved. Refresh and try again.";
 }

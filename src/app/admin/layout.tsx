@@ -45,6 +45,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         hasPermission(access, "customers.view") && ["/admin/customers", "Customers"],
         hasPermission(access, "segments.manage") && ["/admin/segments", "Segments"],
         hasPermission(access, "promotions.manage") && ["/admin/promotions", "Promotions"],
+        hasPermission(access, "campaigns.view") && ["/admin/marketing", "Campaigns"],
       ],
     },
     {

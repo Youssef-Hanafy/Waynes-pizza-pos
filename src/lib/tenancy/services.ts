@@ -65,6 +65,7 @@ const routeServices: ReadonlyArray<readonly [string, readonly ServiceCode[]]> = 
   ["/admin/hardware", ["hardware_management"]],
   ["/admin/pilot", ["pos"]],
   ["/admin/integrations", ["crm"]],
+  ["/admin/marketing", ["sms", "email"]],
   ["/admin/staff", ["staff_management"]],
 ];
 
