@@ -12,8 +12,13 @@ export async function getCheckoutPaymentConfig() {
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase.rpc("wayne_payment_checkout_config");
     if (error) return null;
-    const parsed = checkoutPaymentConfigSchema.safeParse(data);
-    return parsed.success && parsed.data.online_card_enabled ? parsed.data : null;
+    if (!data || typeof data !== "object" || !("online_card_enabled" in data) || data.online_card_enabled !== true) return null;
+    const raw = data as Record<string, unknown>;
+    const candidate = raw.provider === "stripe"
+      ? { provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true }
+      : raw;
+    const parsed = checkoutPaymentConfigSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

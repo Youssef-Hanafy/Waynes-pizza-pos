@@ -82,6 +82,14 @@ export function createSquareProvider(config: SquareConfig): PaymentProvider {
       return mapSquarePayment(body.payment);
     },
 
+    async createOnlinePaymentIntent() {
+      throw new PaymentProviderError("Square does not use Stripe PaymentIntents.", "UNSUPPORTED_OPERATION");
+    },
+
+    async getOnlinePaymentIntent() {
+      throw new PaymentProviderError("Square does not use Stripe PaymentIntents.", "UNSUPPORTED_OPERATION");
+    },
+
     async createCardPresentPayment({ amountCents, idempotencyKey, deviceId, referenceId, note }) {
       const body = await call<{ checkout?: { id?: string; status?: string; amount_money?: { amount?: number }; payment_ids?: string[] } }>(
         "/v2/terminals/checkouts",

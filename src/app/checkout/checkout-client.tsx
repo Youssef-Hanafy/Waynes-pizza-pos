@@ -22,12 +22,15 @@ import {
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
 import {
   cardCheckoutResultSchema,
+  stripeConfirmResultSchema,
+  stripeIntentResultSchema,
   type CheckoutPaymentConfig,
 } from "@/lib/payments/schemas";
 import {
   SquareCardField,
   type Tokenizer,
 } from "@/components/payments/square-card-field";
+import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 
 type Fulfillment = "pickup" | "delivery";
@@ -62,6 +65,7 @@ export function CheckoutClient({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const tokenizer = useRef<Tokenizer | null>(null);
+  const stripeConfirm = useRef<StripeCardConfirm | null>(null);
   const [cardReady, setCardReady] = useState(false);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
@@ -89,6 +93,10 @@ export function CheckoutClient({
 
   const handleTokenizer = useCallback((next: Tokenizer | null) => {
     tokenizer.current = next;
+    setCardReady(Boolean(next));
+  }, []);
+  const handleStripeConfirm = useCallback((next: StripeCardConfirm | null) => {
+    stripeConfirm.current = next;
     setCardReady(Boolean(next));
   }, []);
 
@@ -130,7 +138,58 @@ export function CheckoutClient({
       })),
     };
     try {
-      if (paymentConfig) {
+      if (paymentConfig?.provider === "stripe") {
+        if (!stripeConfirm.current) {
+          setError("Card entry is still loading. Wait a moment and try again.");
+          return;
+        }
+        const response = await fetch("/api/payments/intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok) {
+          setError(typeof body === "object" && body !== null && "error" in body ? String(body.error) : "The payment could not be prepared.");
+          return;
+        }
+        const intent = stripeIntentResultSchema.safeParse(body);
+        if (!intent.success) {
+          setError("The payment setup was invalid. Please call Wayne's Pizza before paying again.");
+          return;
+        }
+        if (intent.data.payment_status !== "captured") {
+          const confirmation = await stripeConfirm.current({
+            clientSecret: intent.data.client_secret,
+            name: `${payload.first_name} ${payload.last_name}`.trim(),
+            email: payload.email || undefined,
+            phone: payload.phone,
+            postalCode: payload.address.postal_code || undefined,
+          });
+          const settledResponse = await fetch("/api/payments/intent/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ payment_id: intent.data.payment_id }),
+          });
+          const settledBody: unknown = await settledResponse.json();
+          const settled = stripeConfirmResultSchema.safeParse(settledBody);
+          if (confirmation.error || !settledResponse.ok || !settled.success || settled.data.payment_status === "failed") {
+            window.sessionStorage.removeItem("wayne-order-idempotency-v1");
+            setError(confirmation.error?.message ?? (typeof settledBody === "object" && settledBody !== null && "error" in settledBody ? String(settledBody.error) : "The card was not charged. Try another card."));
+            return;
+          }
+          window.localStorage.removeItem(CART_STORAGE_KEY);
+          window.sessionStorage.removeItem("wayne-order-idempotency-v1");
+          router.push(`/order/${settled.data.id}?token=${settled.data.public_access_token}`);
+          return;
+        }
+        window.localStorage.removeItem(CART_STORAGE_KEY);
+        window.sessionStorage.removeItem("wayne-order-idempotency-v1");
+        router.push(`/order/${intent.data.id}?token=${intent.data.public_access_token}`);
+        return;
+      }
+
+      if (paymentConfig?.provider === "square") {
         if (!tokenizer.current) {
           setError("Card entry is still loading. Wait a moment and try again.");
           return;
@@ -284,11 +343,11 @@ export function CheckoutClient({
               order.
             </p>
             <div className="mt-4">
-              <SquareCardField
-                config={paymentConfig}
-                onReady={handleTokenizer}
-                onStatus={setError}
-              />
+              {paymentConfig.provider === "stripe" ? (
+                <StripeCardField config={paymentConfig} onReady={handleStripeConfirm} onStatus={setError} />
+              ) : (
+                <SquareCardField config={paymentConfig} onReady={handleTokenizer} onStatus={setError} />
+              )}
             </div>
           </section>
         ) : (

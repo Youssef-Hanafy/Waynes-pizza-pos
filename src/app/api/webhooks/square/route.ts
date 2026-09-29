@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get("x-square-hmacsha256-signature");
 
   const resolved = await resolveWebhookProvider();
-  if (!resolved) {
+  if (!resolved || resolved.settings.provider !== "square") {
     logger.warn("square_webhook.unconfigured", { length: rawBody.length });
     // 200 so Square stops retrying into a deployment that has no processor at all.
     return new Response(null, { status: 200 });

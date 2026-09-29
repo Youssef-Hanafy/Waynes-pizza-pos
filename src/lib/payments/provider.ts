@@ -18,6 +18,9 @@ export type ProviderPayment = {
 
 export type ProviderTerminalCheckout = ProviderPayment & { checkoutId: string };
 
+/** A server-created intent whose client secret is safe to give Stripe.js. */
+export type ProviderOnlinePaymentIntent = ProviderPayment & { clientSecret: string };
+
 export type ProviderRefund = {
   providerRefundId: string | null;
   status: RefundLedgerStatus;
@@ -41,6 +44,9 @@ export interface PaymentProvider {
   readonly code: string;
   /** Charge a card tokenized in the browser. */
   createOnlinePayment(input: { amountCents: number; idempotencyKey: string; sourceId: string; referenceId: string; note: string; verificationToken?: string | null }): Promise<ProviderPayment>;
+  /** Create an online PaymentIntent before Stripe.js collects the card details. */
+  createOnlinePaymentIntent(input: { amountCents: number; idempotencyKey: string; referenceId: string; note: string; paymentId: string; receiptEmail?: string | null }): Promise<ProviderOnlinePaymentIntent>;
+  getOnlinePaymentIntent(providerPaymentId: string): Promise<ProviderOnlinePaymentIntent>;
   /** Ask a paired card reader to collect a card-present payment. */
   createCardPresentPayment(input: { amountCents: number; idempotencyKey: string; deviceId: string; referenceId: string; note: string }): Promise<ProviderTerminalCheckout>;
   getCardPresentPayment(checkoutId: string): Promise<ProviderTerminalCheckout>;

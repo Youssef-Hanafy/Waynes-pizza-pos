@@ -2,7 +2,7 @@ import { z } from "zod";
 import { checkoutInputSchema } from "@/lib/orders/schemas";
 import { spokenDatabaseMessage } from "@/lib/errors/database";
 
-/** The Web Payments SDK script the browser loads. Sandbox and production differ. */
+/** The legacy Square SDK script. Kept while historical Square configurations exist. */
 export function squareWebSdkUrl(environment: string) {
   return environment === "production"
     ? "https://web.squarecdn.com/v1/square.js"
@@ -10,17 +10,14 @@ export function squareWebSdkUrl(environment: string) {
 }
 
 /** Non-secret configuration the storefront needs to start a card payment. */
-export const checkoutPaymentConfigSchema = z.object({
-  provider: z.string(),
-  environment: z.string(),
-  application_id: z.string(),
-  location_id: z.string(),
-  online_card_enabled: z.boolean(),
-});
+export const checkoutPaymentConfigSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("square"), environment: z.enum(["sandbox", "production"]), application_id: z.string(), location_id: z.string(), online_card_enabled: z.literal(true) }),
+  z.object({ provider: z.literal("stripe"), publishable_key: z.string().startsWith("pk_"), online_card_enabled: z.literal(true) }),
+]);
 export type CheckoutPaymentConfig = z.infer<typeof checkoutPaymentConfigSchema>;
 
 export const paymentProviderSettingsSchema = z.object({
-  provider: z.enum(["none", "square"]),
+  provider: z.enum(["none", "square", "stripe"]),
   environment: z.enum(["sandbox", "production"]),
   application_id: z.string(),
   location_id: z.string(),
@@ -94,6 +91,26 @@ export const cardCheckoutResultSchema = z.object({
   order_number: z.string(),
   total_cents: z.number().int(),
   payment_status: z.enum(["captured", "pending"]),
+});
+
+/** The first Stripe step creates the held order and its PaymentIntent. */
+export const stripeIntentRequestSchema = checkoutInputSchema;
+export const stripeIntentResultSchema = z.object({
+  id: z.uuid(),
+  public_access_token: z.uuid(),
+  order_number: z.string(),
+  total_cents: z.number().int(),
+  payment_id: z.uuid(),
+  provider_payment_id: z.string().startsWith("pi_"),
+  client_secret: z.string().min(20),
+  payment_status: z.enum(["pending", "captured"]),
+});
+export const stripeConfirmRequestSchema = z.object({
+  payment_id: z.uuid(),
+});
+export const stripeConfirmResultSchema = z.object({
+  id: z.uuid(), public_access_token: z.uuid(), order_number: z.string(), total_cents: z.number().int(),
+  payment_status: z.enum(["captured", "pending", "failed"]),
 });
 
 export const terminalActionSchema = z.object({

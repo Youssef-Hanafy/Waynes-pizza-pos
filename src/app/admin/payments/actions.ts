@@ -23,7 +23,7 @@ export async function savePaymentSettings(form: FormData) {
   const { error } = await supabase.rpc("wayne_save_payment_settings", { payload });
   if (error) {
     back(error.message.includes("payment_provider_settings_ready")
-      ? "Enter the application ID and location ID before switching card payment on."
+      ? "Finish the selected processor setup before switching card payment on. Stripe supports online payment only for now."
       : paymentErrorMessage(error));
   }
   revalidatePath("/admin/payments");

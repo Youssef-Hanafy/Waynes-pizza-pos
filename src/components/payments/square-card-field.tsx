@@ -42,7 +42,7 @@ function loadSquareSdk(environment: string) {
  * Wayne's database — the server only ever sees a single-use token.
  */
 export function SquareCardField({ config, onReady, onStatus }: {
-  config: CheckoutPaymentConfig;
+  config: Extract<CheckoutPaymentConfig, { provider: "square" }>;
   onReady: (tokenizer: Tokenizer | null) => void;
   onStatus?: (message: string) => void;
 }) {
