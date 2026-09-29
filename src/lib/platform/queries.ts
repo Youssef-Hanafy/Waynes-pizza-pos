@@ -20,6 +20,7 @@ import { platformIntegrationsSchema } from "./integrations";
 import { platformMessagingSchema } from "./messaging";
 import { platformHardwareSchema } from "./hardware";
 import { platformBillingOverviewSchema, platformWorkspaceBillingSchema } from "./billing";
+import { workspaceSetupSchema } from "./provisioning";
 
 /** The signed-in Hanafy platform user, or null for everyone else. */
 export const getPlatformMe = cache(async (): Promise<PlatformMe | null> => {
@@ -116,4 +117,8 @@ export function getPlatformWorkspaceBilling(slug: string) {
 
 export function getPlatformBillingOverview() {
   return call("hanafy_platform_billing_overview", undefined, (data) => platformBillingOverviewSchema.parse(data));
+}
+
+export function getPlatformWorkspaceSetup(slug: string) {
+  return call("hanafy_platform_workspace_setup", { target_workspace_slug: slug }, (data) => workspaceSetupSchema.parse(data));
 }

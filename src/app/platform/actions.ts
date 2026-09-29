@@ -19,6 +19,7 @@ import { saveMessagingInputSchema, saveMessagingResultSchema } from "@/lib/platf
 import { saveHardwareInputSchema } from "@/lib/platform/hardware";
 import { billingIntervals, billingResultSchema, paymentMethods } from "@/lib/platform/billing";
 import { parseDollarsToCents } from "@/lib/platform/money";
+import { provisionInputSchema, provisionResultSchema, statusResultSchema, weekDays } from "@/lib/platform/provisioning";
 import { z } from "zod";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
@@ -627,4 +628,63 @@ export async function savePlan(form: FormData) {
   await billingRpc(path, "hanafy_platform_save_plan", { payload, change_reason: input.reason });
   revalidatePath(path);
   back(path, "Plan saved.", "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Add Business / provisioning (Phase 12)
+// ---------------------------------------------------------------------------
+export async function provisionWorkspace(form: FormData) {
+  const path = "/platform/workspaces/new";
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const parsed = provisionInputSchema.safeParse({
+    reason: text(form, "reason"),
+    services: form.getAll("services").map(String),
+    service_source: text(form, "service_source") || "manual",
+    business: {
+      name: text(form, "name"), slug: text(form, "slug"), legal_name: text(form, "legal_name"), industry: text(form, "industry"),
+      timezone: text(form, "timezone"), currency_code: text(form, "currency_code") || "USD",
+      contact_name: text(form, "contact_name"), contact_email: text(form, "contact_email"), contact_phone: text(form, "contact_phone"),
+      is_test: text(form, "is_test") === "yes",
+    },
+    location: {
+      name: text(form, "location_name"), address_line_1: text(form, "address_line_1"), address_line_2: text(form, "address_line_2"),
+      city: text(form, "city"), state_region: text(form, "state_region"), postal_code: text(form, "postal_code"),
+      phone: text(form, "location_phone"), email: text(form, "location_email"), timezone: text(form, "location_timezone"),
+      hours: { open: text(form, "opens") || "11:00", close: text(form, "closes") || "21:00", closed_days: form.getAll("closed_days").map(String).filter((day) => (weekDays as readonly string[]).includes(day)) },
+    },
+  });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the business details.");
+  if (!parsed.data.business.is_test && text(form, "real_client_confirmed") !== "yes") {
+    back(path, "Creating a real client's workspace needs the owner's go-ahead: tick the box that says it was authorized, or mark it as a test.");
+  }
+  const { reason, ...payload } = parsed.data;
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_provision_workspace", { payload, change_reason: reason });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = provisionResultSchema.safeParse(data);
+  if (!result.success) back(path, "The business could not be confirmed. Check Businesses before trying again.");
+  revalidatePath("/platform", "layout");
+  redirect(`/platform/workspaces/${result.data.slug}/setup?saved=${encodeURIComponent(`${parsed.data.business.name} is set up in provisioning. Work through the checklist, then activate it.`)}`);
+}
+
+export async function setWorkspaceStatus(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/setup");
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const status = z.enum(["active", "suspended", "archived"]).safeParse(text(form, "status"));
+  if (!status.success) back(path, "Choose a status.");
+  const reason = z.string().trim().min(5, "Give a reason (at least 5 characters).").max(500).safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_set_workspace_status", {
+    target_workspace_slug: workspace, new_status: status.data, change_reason: reason.data, confirmed: text(form, "confirmed") === "yes",
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = statusResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check.");
+  if (result.data.status === "needs_confirmation") {
+    back(path, "Confirm this change", "error", { confirm: status.data, reason: reason.data, warnings: JSON.stringify(result.data.warnings.slice(0, 8)) });
+  }
+  revalidatePath("/platform", "layout");
+  back(path, result.data.status === "unchanged" ? "Nothing changed." : `Business is now ${status.data}.`, "saved");
 }

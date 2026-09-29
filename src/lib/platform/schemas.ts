@@ -355,6 +355,20 @@ export function platformErrorMessage(message: string | undefined) {
     "Payment not found",
     "Payments can only be recorded",
     "Unknown service",
+    "Enter the business name",
+    "The web name",
+    "That web name is reserved",
+    "already uses the web name",
+    "Unknown time zone",
+    "Currency is",
+    "first location",
+    "needs ",
+    "Opening time",
+    "Closing time",
+    "Not ready to go live",
+    "stays archived",
+    "cannot be archived",
+    "Choose active",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
   if (message?.includes("workspace_subscriptions_one_base")) return "This business already has a live base agreement. Change or cancel it, or add this as an add-on.";

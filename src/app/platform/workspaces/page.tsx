@@ -27,7 +27,8 @@ export default async function PlatformWorkspacesPage({ searchParams }: { searchP
     <main className="mx-auto max-w-7xl px-5 py-10">
       <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">Hanafy Platform</p>
       <h1 className="mt-3 text-4xl font-black">Businesses</h1>
-      <p className="mt-3 max-w-3xl text-wayne-muted">Every business on the platform. New businesses are added through provisioning (Phase 12); this list never creates one.</p>
+      <p className="mt-3 max-w-3xl text-wayne-muted">Every business on the platform. New businesses start in provisioning and go live from their setup checklist.</p>
+      <div className="mt-4"><Button asChild variant="brand"><Link href="/platform/workspaces/new">Add business</Link></Button></div>
 
       <form className="mt-6 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-2 text-sm font-bold">Status
