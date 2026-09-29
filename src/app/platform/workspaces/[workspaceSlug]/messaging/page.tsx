@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { z } from "zod";
-import { saveWorkspaceMessaging } from "../../../actions";
+import { adoptLegacyAutomations, saveWorkspaceMessaging } from "../../../actions";
 import { Flash, first, when } from "@/components/platform/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,6 +176,19 @@ export default async function PlatformWorkspaceMessagingPage({ params, searchPar
             </fieldset>
             <Input className="md:col-span-2" label="Reason (recorded in both audit logs)" maxLength={500} minLength={5} name="reason" required />
             <div className="flex items-end"><Button variant="brand">Save messaging</Button></div>
+          </form>
+        </Card>
+      ) : null}
+
+      {messaging.can_manage && !confirming && connection?.dispatch_mode === "platform" ? (
+        <Card className="mt-6 p-5">
+          <h2 className="text-xl font-black">Move old-CRM automations to the platform</h2>
+          <p className="mt-1 text-sm text-wayne-muted">Automations mirrored from the old Hanafy CRM are only shown until this step. After it, the platform worker runs them (each one still has to be switched on). Pause them in the old CRM first so no customer gets two texts.</p>
+          <form action={adoptLegacyAutomations} className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+            <input name="workspace" type="hidden" value={workspace.slug} />
+            <Input label="Reason" minLength={5} name="reason" required />
+            <Button variant="danger">Move automations</Button>
+            <label className="flex items-center gap-2 text-sm font-bold md:col-span-2"><input name="confirmed" type="checkbox" value="yes" /> The old CRM automations for {workspace.name} are paused.</label>
           </form>
         </Card>
       ) : null}

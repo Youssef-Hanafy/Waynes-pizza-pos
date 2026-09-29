@@ -19,5 +19,7 @@ describe("service route map", () => {
   it("names the service a blocked route needs", () => {
     expect(missingServiceForPath("/driver", ["pos"])).toBe("delivery");
     expect(missingServiceForPath("/driver", ["delivery"])).toBeNull();
+    expect(missingServiceForPath("/admin/automations/abc", ["sms"])).toBe("automations");
+    expect(missingServiceForPath("/admin/marketing", ["email"])).toBeNull();
   });
 });

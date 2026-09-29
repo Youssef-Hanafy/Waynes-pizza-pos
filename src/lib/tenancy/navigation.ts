@@ -38,6 +38,7 @@ const groups: ReadonlyArray<{ name: string; items: Candidate[] }> = [
     items: [
       { href: "/admin/promotions", label: "Promotions", permission: "promotions.manage", operational: true },
       { href: "/admin/marketing", label: "Campaigns", permission: "campaigns.view", operational: true },
+      { href: "/admin/automations", label: "Automations", permission: "automations.view", operational: true },
       { href: HANAFY_CRM_CONSOLE_URL, label: "Hanafy CRM console", external: true, permission: "admin.access", services: ["sms", "automations", "email"] },
     ],
   },

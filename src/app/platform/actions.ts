@@ -273,3 +273,20 @@ export async function saveWorkspaceMessaging(form: FormData) {
   revalidatePath(path);
   back(path, "Messaging saved.", "saved");
 }
+
+// ---------------------------------------------------------------------------
+// Automations cut-over (Phase 8)
+// ---------------------------------------------------------------------------
+export async function adoptLegacyAutomations(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/messaging");
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const reason = text(form, "reason").trim();
+  if (reason.length < 5) back(path, "Give a reason (at least 5 characters).");
+  if (text(form, "confirmed") !== "yes") back(path, "Tick the box to confirm the old CRM automations are paused.");
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_adopt_legacy_automations", { target_workspace_slug: workspace, change_reason: reason });
+  if (error) back(path, platformErrorMessage(error.message));
+  revalidatePath(path);
+  back(path, `${Number(data ?? 0)} automations now run on the platform. Switch each one on in the business's Automations screen.`, "saved");
+}

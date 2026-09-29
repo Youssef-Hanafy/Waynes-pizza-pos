@@ -311,6 +311,7 @@ export function platformErrorMessage(message: string | undefined) {
     "Support session not found",
     "Sending number not found",
     "Enter the new number",
+    "Switch this business",
     "messaging_identities_number_owner",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
