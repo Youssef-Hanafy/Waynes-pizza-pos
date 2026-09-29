@@ -16,10 +16,14 @@ import {
   CART_STORAGE_KEY,
   cartLineUnitCents,
   cartSubtotalCents,
+  describeLineModifiers,
   findMenuItem,
   readCart,
 } from "@/lib/orders/cart";
 import { orderCreatedSchema, type CartLine } from "@/lib/orders/schemas";
+import { rewardsConsentText } from "@/lib/wayne/rewards";
+import { useStorefrontBrand } from "@/components/site/storefront-brand";
+import { SAVED_PROMO_STORAGE_KEY } from "@/lib/promotions/member-offers";
 import {
   cardCheckoutResultSchema,
   stripeConfirmResultSchema,
@@ -32,6 +36,12 @@ import {
 } from "@/components/payments/square-card-field";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { GoogleAddressInput } from "@/components/checkout/google-address-input";
+import {
+  ORDER_DETAILS_STORAGE_KEY,
+  readOrderDetails,
+  residenceLabels,
+  type OrderDetails,
+} from "@/lib/orders/order-details";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
@@ -59,6 +69,7 @@ export function CheckoutClient({
   settings,
 }: Props) {
   const router = useRouter();
+  const brand = useStorefrontBrand();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
   const [tipCents, setTipCents] = useState(0);
@@ -67,6 +78,24 @@ export function CheckoutClient({
   const tokenizer = useRef<Tokenizer | null>(null);
   const stripeConfirm = useRef<StripeCardConfirm | null>(null);
   const [cardReady, setCardReady] = useState(false);
+  /* Whatever the customer told us before they started ordering — their name, and
+     for delivery the address — is filled in here so nobody types it twice. */
+  const [details, setDetails] = useState<OrderDetails | null>(null);
+  /* A code picked with "Use this code" on the member's offers page. */
+  const [promoCode, setPromoCode] = useState("");
+  useEffect(() => {
+    const savedDetails = readOrderDetails(window.localStorage.getItem(ORDER_DETAILS_STORAGE_KEY));
+    let savedPromo = "";
+    try {
+      savedPromo = (window.localStorage.getItem(SAVED_PROMO_STORAGE_KEY) ?? "").slice(0, 60);
+    } catch {
+      savedPromo = "";
+    }
+    queueMicrotask(() => {
+      setDetails(savedDetails);
+      setPromoCode(savedPromo);
+    });
+  }, []);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
@@ -100,6 +129,19 @@ export function CheckoutClient({
     setCardReady(Boolean(next));
   }, []);
 
+  /**
+   * Whether it is a house or a third-floor apartment is the single most useful
+   * thing a driver can be told, and it is asked for before the order starts. It
+   * would be lost if it stayed in the browser, so it rides along on the line the
+   * driver actually reads.
+   */
+  function deliveryInstructions(typed: string) {
+    if (fulfillment !== "delivery" || !details) return typed;
+    const residence = residenceLabels[details.residence_type];
+    if (!residence || typed.toLowerCase().includes(residence.toLowerCase())) return typed;
+    return [residence, typed.trim()].filter(Boolean).join(" · ");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -127,7 +169,9 @@ export function CheckoutClient({
         city: String(form.get("city") ?? ""),
         state: String(form.get("state") ?? ""),
         postal_code: String(form.get("postal_code") ?? ""),
-        delivery_instructions: String(form.get("delivery_instructions") ?? ""),
+        delivery_instructions: deliveryInstructions(
+          String(form.get("delivery_instructions") ?? ""),
+        ),
       },
       items: cart.map((line) => ({
         menu_item_id: line.menu_item_id,
@@ -135,8 +179,29 @@ export function CheckoutClient({
         quantity: line.quantity,
         special_instructions: line.special_instructions,
         modifiers: line.modifiers,
+        lists_included: true,
       })),
     };
+    // Keep the saved copy in step with whatever they actually submitted, so the
+    // address on the menu page is the one the order went to, and their next
+    // order starts from the corrected version rather than the old one.
+    try {
+      window.localStorage.setItem(
+        ORDER_DETAILS_STORAGE_KEY,
+        JSON.stringify({
+          ...(details ?? {}),
+          fulfillment,
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          phone: payload.phone,
+          residence_type: details?.residence_type ?? "house",
+          ...payload.address,
+        }),
+      );
+    } catch {
+      // Storage being unavailable is not a reason to fail an order.
+    }
+
     try {
       if (paymentConfig?.provider === "stripe") {
         if (!stripeConfirm.current) {
@@ -225,11 +290,12 @@ export function CheckoutClient({
         const paid = cardCheckoutResultSchema.safeParse(body);
         if (!paid.success) {
           setError(
-            "The payment confirmation was invalid. Please call Wayne's Pizza before paying again.",
+            `The payment confirmation was invalid. Please call ${brand.storeName} before paying again.`,
           );
           return;
         }
         window.localStorage.removeItem(CART_STORAGE_KEY);
+        window.localStorage.removeItem(SAVED_PROMO_STORAGE_KEY);
         window.sessionStorage.removeItem("wayne-order-idempotency-v1");
         router.push(
           `/order/${paid.data.id}?token=${paid.data.public_access_token}`,
@@ -253,10 +319,11 @@ export function CheckoutClient({
       }
       const result = orderCreatedSchema.safeParse(body);
       if (!result.success) {
-        setError("Order confirmation was invalid. Please call Wayne's Pizza.");
+        setError(`Order confirmation was invalid. Please call ${brand.storeName}.`);
         return;
       }
       window.localStorage.removeItem(CART_STORAGE_KEY);
+      window.localStorage.removeItem(SAVED_PROMO_STORAGE_KEY);
       window.sessionStorage.removeItem("wayne-order-idempotency-v1");
       router.push(
         `/order/${result.data.id}?token=${result.data.public_access_token}`,
@@ -293,23 +360,80 @@ export function CheckoutClient({
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
           <h2 className="text-2xl font-black">Your details</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Input label="First name" name="first_name" required />
-            <Input label="Last name" name="last_name" required />
-            <Input label="Phone" name="phone" required type="tel" />
+            <Input
+              defaultValue={details?.first_name ?? ""}
+              key={`first-${details?.first_name ?? ""}`}
+              label="First name"
+              name="first_name"
+              required
+            />
+            <Input
+              defaultValue={details?.last_name ?? ""}
+              key={`last-${details?.last_name ?? ""}`}
+              label="Last name"
+              name="last_name"
+              required
+            />
+            <Input
+              defaultValue={details?.phone ?? ""}
+              key={`phone-${details?.phone ?? ""}`}
+              label="Phone"
+              name="phone"
+              required
+              type="tel"
+            />
             <Input label="Email (optional)" name="email" type="email" />
           </div>
         </section>
         {fulfillment === "delivery" ? (
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Delivery address</h2>
+            {details?.address1 ? (
+              /* The address they gave before they started ordering, shown back to
+                 them here so a wrong street is caught now and not by a driver. */
+              <p className="mt-3 rounded-xl bg-wayne-ok-soft p-3 text-sm font-semibold">
+                Delivering to {details.address1}
+                {details.address2 ? `, ${details.address2}` : ""} —{" "}
+                {residenceLabels[details.residence_type].toLowerCase()}. Change
+                anything below if it is not right.
+              </p>
+            ) : null}
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <GoogleAddressInput />
-              <Input label="Apartment / unit (optional)" name="address2" />
-              <Input label="City" name="city" required />
-              <Input defaultValue="MA" label="State" name="state" required />
-              <Input label="Postal code" name="postal_code" required />
+              <GoogleAddressInput
+                defaultValue={details?.address1 ?? ""}
+                key={`address1-${details?.address1 ?? ""}`}
+              />
+              <Input
+                defaultValue={details?.address2 ?? ""}
+                key={`address2-${details?.address2 ?? ""}`}
+                label="Apartment / unit (optional)"
+                name="address2"
+              />
+              <Input
+                defaultValue={details?.city ?? ""}
+                key={`city-${details?.city ?? ""}`}
+                label="City"
+                name="city"
+                required
+              />
+              <Input
+                defaultValue={details?.state || brand.state}
+                key={`state-${details?.state ?? ""}`}
+                label="State"
+                name="state"
+                required
+              />
+              <Input
+                defaultValue={details?.postal_code ?? ""}
+                key={`zip-${details?.postal_code ?? ""}`}
+                label="Postal code"
+                name="postal_code"
+                required
+              />
             </div>
             <TextArea
+              defaultValue={details?.delivery_instructions ?? ""}
+              key={`instructions-${details?.delivery_instructions ?? ""}`}
               label="Delivery instructions (optional)"
               name="delivery_instructions"
             />
@@ -318,13 +442,20 @@ export function CheckoutClient({
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
           <h2 className="text-2xl font-black">Deals & order notes</h2>
           <p className="mt-2 text-sm text-wayne-muted">
-            Keep up with Wayne’s deals if you’d like. These choices are optional
+            Keep up with {brand.shortName} deals if you’d like. These choices are optional
             and do not affect your order updates.
           </p>
           <div className="mt-4 grid gap-3">
-            <Check label="Send me Wayne's Pizza text deals" name="sms_opt_in" />
+            {brand.services.includes("sms") ? <>
+              <Check label={`Send me ${brand.brandName} text deals`} name="sms_opt_in" />
+              <p className="-mt-1 pl-8 text-xs leading-5 text-wayne-muted">
+                {rewardsConsentText(brand.brandName)} See our{" "}
+                <Link className="underline" href="/terms">Terms</Link> and{" "}
+                <Link className="underline" href="/privacy">Privacy Policy</Link>.
+              </p>
+            </> : null}
             <Check
-              label="Send me Wayne's Pizza email deals"
+              label={`Send me ${brand.brandName} email deals`}
               name="email_opt_in"
             />
           </div>
@@ -403,6 +534,8 @@ export function CheckoutClient({
           <input
             className="min-h-11 rounded-lg border px-3"
             name="promo_code"
+            onChange={(event) => setPromoCode(event.target.value)}
+            value={promoCode}
           />
         </label>
         <p className="mt-2 text-xs text-wayne-muted">
@@ -483,16 +616,7 @@ function CartLineOptions({
   line: CartLine;
 }) {
   if (!item) return null;
-  const options = line.modifiers.flatMap((modifier) =>
-    item.modifier_groups.flatMap((group) =>
-      group.choices
-        .filter((choice) => choice.id === modifier.choice_id)
-        .map(
-          (choice) =>
-            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
-        ),
-    ),
-  );
+  const options = describeLineModifiers(item, line).map((note) => note.label);
   return (
     <>
       {options.length ? (
@@ -515,12 +639,13 @@ function Check({ label, name }: { label: string; name: string }) {
     </label>
   );
 }
-function TextArea({ label, name }: { label: string; name: string }) {
+function TextArea({ defaultValue = "", label, name }: { defaultValue?: string; label: string; name: string }) {
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
       <textarea
         className="rounded-xl border p-3 font-normal"
+        defaultValue={defaultValue}
         maxLength={1000}
         name={name}
         rows={3}

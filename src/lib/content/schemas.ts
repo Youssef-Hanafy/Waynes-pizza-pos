@@ -81,6 +81,7 @@ export const storeSettingsSchema = z.object({
   canonical_url: z.string(),
   facebook_url: z.string(),
   instagram_url: z.string(),
+  tiktok_url: z.string(),
   logo_path: z.string().nullable(),
   logo_alt: z.string(),
   announcement_text: z.string(),
@@ -106,24 +107,28 @@ export const storeSettingsSchema = z.object({
   seo_contact_description: z.string(),
   faq_items: z.array(faqItemSchema),
   special_hours: z.array(specialHoursSchema),
+  // Phase 4.1 brand names used in storefront copy (empty → derived from store_name).
+  brand_name: z.string().max(80).default(""),
+  brand_short_name: z.string().max(60).default(""),
+  rewards_program_name: z.string().max(80).default(""),
 });
 
 export type BusinessHours = z.infer<typeof businessHoursSchema>;
 export type StoreSettings = z.infer<typeof storeSettingsSchema>;
 
+/** Safe failure state. It is deliberately not a tenant's branding or data. */
 export const defaultSettings: StoreSettings = {
   id: true,
-  store_name: "Wayne's Pizza",
+  store_name: "Store unavailable",
   owner_name: "",
-  story:
-    "Wayne's Pizza is a longtime Worcester neighborhood pizza shop that has been serving the community for over 50 years. The restaurant specializes in Greek- and Italian-style pizza along with calzones, subs, salads, pasta, fried foods, and other classic pizza-shop favorites.",
+  story: "This storefront has not been configured for this domain.",
   owner_story: "",
-  address_line1: "93 West Boylston St.",
+  address_line1: "",
   address_line2: "",
-  city: "Worcester",
-  state: "MA",
-  postal_code: "01606",
-  public_phone: "(508) 852-6326",
+  city: "",
+  state: "",
+  postal_code: "",
+  public_phone: "",
   public_email: "",
   timezone: "America/New_York",
   business_hours: Object.fromEntries(
@@ -143,55 +148,42 @@ export const defaultSettings: StoreSettings = {
   suggested_tip_percentages: [15, 20, 25],
   pickup_prep_minutes: 25,
   delivery_estimate_minutes: 45,
-  delivery_area_text: "Delivery eligibility is confirmed at checkout.",
+  delivery_area_text: "",
   delivery_postal_codes: [],
   test_ordering_enabled: true,
-  service_area_text: "Serving Worcester and the surrounding neighborhood.",
-  canonical_url: "https://waynespizzaofworcester.com",
+  service_area_text: "",
+  canonical_url: "",
   facebook_url: "",
   instagram_url: "",
+  tiktok_url: "",
   logo_path: null,
-  logo_alt: "Wayne's Pizza logo",
+  logo_alt: "Store logo",
   announcement_text: "",
-  homepage_eyebrow: "Worcester's neighborhood pizza shop",
-  homepage_heading: "Hot pizza. Your way.",
-  homepage_description:
-    "Choose pickup or delivery, then explore Wayne's current menu.",
+  homepage_eyebrow: "",
+  homepage_heading: "Storefront unavailable",
+  homepage_description: "This domain is not configured.",
   pickup_heading: "Pickup",
-  pickup_description: "Order ahead and pick it up fresh at Wayne's.",
+  pickup_description: "",
   delivery_heading: "Delivery",
-  delivery_description:
-    "See delivery availability and bring Wayne's to your door.",
-  about_heading: "A Worcester favorite for over 50 years",
-  contact_heading: "Visit or call Wayne's",
-  ordering_instructions:
-    "Choose pickup or delivery, customize your meal, and place a clearly labeled test/manual order. No card payment is collected.",
+  delivery_description: "",
+  about_heading: "About",
+  contact_heading: "Contact",
+  ordering_instructions: "",
   general_notice: "",
-  footer_text: "Wayne's Pizza — Worcester, Massachusetts",
-  seo_home_title: "Wayne's Pizza | Worcester, MA",
-  seo_home_description:
-    "Explore Wayne's Pizza in Worcester, Massachusetts—serving Greek- and Italian-style pizza and classic pizza-shop favorites for over 50 years.",
+  footer_text: "",
+  seo_home_title: "Store unavailable",
+  seo_home_description: "This domain is not configured.",
   seo_menu_title: "Menu",
-  seo_menu_description:
-    "Browse the current Wayne's Pizza menu for pickup or delivery in Worcester.",
-  seo_about_title: "About Wayne's Pizza",
-  seo_about_description:
-    "Learn about Wayne's Pizza, a longtime Worcester neighborhood pizza shop serving the community for over 50 years.",
-  seo_contact_title: "Contact Wayne's Pizza",
-  seo_contact_description:
-    "Find Wayne's Pizza hours, phone number, and location at 93 West Boylston St. in Worcester, Massachusetts.",
-  faq_items: [
-    {
-      question: "Do you offer pickup?",
-      answer: "Yes. Choose Pickup above to browse the current menu.",
-    },
-    {
-      question: "Do you offer delivery?",
-      answer:
-        "Delivery availability and service area are shown before ordering.",
-    },
-  ],
+  seo_menu_description: "",
+  seo_about_title: "About",
+  seo_about_description: "",
+  seo_contact_title: "Contact",
+  seo_contact_description: "",
+  faq_items: [],
   special_hours: [],
+  brand_name: "",
+  brand_short_name: "",
+  rewards_program_name: "",
 };
 
 export function formatTime(value: string) {
@@ -212,4 +204,18 @@ export function formatAddress(settings: StoreSettings) {
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+export type BrandNames = { storeName: string; brandName: string; shortName: string; rewardsName: string };
+
+/**
+ * The names storefront copy uses.  Each is workspace configuration with a
+ * sensible derivation, so a new business reads correctly with no code change.
+ */
+export function brandNames(settings: Pick<StoreSettings, "store_name" | "brand_name" | "brand_short_name" | "rewards_program_name">): BrandNames {
+  const storeName = settings.store_name.trim() || "Our store";
+  const brandName = settings.brand_name.trim() || storeName;
+  const shortName = settings.brand_short_name.trim() || brandName;
+  const rewardsName = settings.rewards_program_name.trim() || `${shortName} Rewards`;
+  return { storeName, brandName, shortName, rewardsName };
 }

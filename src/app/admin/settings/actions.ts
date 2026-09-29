@@ -15,6 +15,9 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const contentSchema = z.object({
   store_name: z.string().trim().min(1).max(120),
+  brand_name: z.string().trim().max(80),
+  brand_short_name: z.string().trim().max(60),
+  rewards_program_name: z.string().trim().max(80),
   owner_name: z.string().trim().max(120),
   story: z.string().trim().min(1).max(8000),
   owner_story: z.string().trim().max(8000),
@@ -30,6 +33,7 @@ const contentSchema = z.object({
   canonical_url: z.union([z.literal(""), z.url()]),
   facebook_url: z.union([z.literal(""), z.url()]),
   instagram_url: z.union([z.literal(""), z.url()]),
+  tiktok_url: z.union([z.literal(""), z.url()]),
   logo_alt: z.string().trim().max(300),
   announcement_text: z.string().trim().max(500),
   homepage_eyebrow: z.string().trim().max(200),
@@ -81,7 +85,7 @@ function moneyField(formData: FormData, name: string) {
 }
 
 export async function updateWebsiteSettings(formData: FormData) {
-  await requirePermission("content.manage", "/admin/settings");
+  const access = await requirePermission("content.manage", "/admin/settings");
   const businessHours = Object.fromEntries(
     dayKeys.map((day) => [
       day,
@@ -103,6 +107,9 @@ export async function updateWebsiteSettings(formData: FormData) {
     .filter((item) => item.question || item.answer);
   const fieldNames = [
     "store_name",
+    "brand_name",
+    "brand_short_name",
+    "rewards_program_name",
     "owner_name",
     "story",
     "owner_story",
@@ -118,6 +125,7 @@ export async function updateWebsiteSettings(formData: FormData) {
     "canonical_url",
     "facebook_url",
     "instagram_url",
+    "tiktok_url",
     "logo_alt",
     "announcement_text",
     "homepage_eyebrow",
@@ -193,10 +201,7 @@ export async function updateWebsiteSettings(formData: FormData) {
   const payload = logoPath
     ? { ...parsed.data, logo_path: logoPath }
     : parsed.data;
-  const { error } = await supabase
-    .from("store_settings")
-    .update(payload)
-    .eq("id", true);
+  const { error } = await supabase.rpc("hanafy_save_location_settings", { payload, target_workspace_slug: access.workspace_slug ?? null });
   if (error)
     redirect(`/admin/settings?error=${encodeURIComponent(error.message)}`);
   revalidatePath("/", "layout");

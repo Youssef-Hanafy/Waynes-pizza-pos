@@ -10,14 +10,14 @@ import {
 } from "@/lib/delivery/schemas";
 import { formatCents } from "@/lib/menu/schemas";
 
-type Props = { initialBoard: DriverBoard; initialError: string; staffName: string; canOpenAdmin: boolean; canOpenPos: boolean };
+type Props = { initialBoard: DriverBoard; initialError: string; staffName: string; businessName: string; canOpenAdmin: boolean; canOpenPos: boolean };
 
 /**
  * One-thumb driver screen. Every delivery shows exactly one next action, the address
  * opens the phone's map app, and cash owed at the door must be recorded before the
  * delivery can be closed. Card-at-door is intentionally absent until Phase 11.
  */
-export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdmin, canOpenPos }: Props) {
+export function DriverScreen({ initialBoard, initialError, staffName, businessName, canOpenAdmin, canOpenPos }: Props) {
   const [board, setBoard] = useState(initialBoard);
   const [error, setError] = useState(initialError);
   const [notice, setNotice] = useState("");
@@ -107,7 +107,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, canOpenAdm
   return <div className="min-h-screen bg-wayne-cream-deep pb-16">
     <header className="bg-wayne-green px-5 py-4 text-wayne-cream">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div><p className="text-sm font-bold text-wayne-gold">Wayne&apos;s Pizza</p><h1 className="text-3xl font-black">Deliveries</h1><p className="text-sm text-wayne-cream/70">{staffName}</p></div>
+        <div><p className="text-sm font-bold text-wayne-gold">{businessName}</p><h1 className="text-3xl font-black">Deliveries</h1><p className="text-sm text-wayne-cream/70">{staffName}</p></div>
         <nav className="flex flex-wrap gap-2">
           {canOpenPos ? <Button asChild variant="secondary"><Link href="/pos">Front POS</Link></Button> : null}
           {canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin/delivery">Dispatch</Link></Button> : null}

@@ -14,6 +14,14 @@ export const cartLineSchema = z.object({
   modifiers: z.array(cartModifierSchema).max(100),
 });
 
+// What an order screen sends for one line.  `lists_included` says the screen
+// pre-selects what the item comes with, so an included option missing from
+// `modifiers` was taken off on purpose and prints as "NO <option>".  Screens
+// built before that (and old saved carts) send false and never print a NO.
+export const orderLineSchema = cartLineSchema.omit({ line_id: true }).extend({
+  lists_included: z.boolean().default(false),
+});
+
 export const checkoutInputSchema = z
   .object({
     idempotency_key: z.string().min(16).max(160),
@@ -35,10 +43,7 @@ export const checkoutInputSchema = z
       postal_code: z.string().trim().max(20),
       delivery_instructions: z.string().trim().max(1000),
     }),
-    items: z
-      .array(cartLineSchema.omit({ line_id: true }))
-      .min(1)
-      .max(50),
+    items: z.array(orderLineSchema).min(1).max(50),
   })
   .superRefine((value, context) => {
     if (value.fulfillment_type === "delivery") {

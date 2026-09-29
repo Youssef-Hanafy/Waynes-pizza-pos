@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 type Props = {
   /** Fallback polling interval. Realtime (when the viewer can receive it) refreshes sooner. */
@@ -29,8 +30,8 @@ export function AutoRefresh({ intervalMs = 30_000, live = false, label = "Update
       pending.current = window.setTimeout(() => { pending.current = null; router.refresh(); }, 750);
     };
     const client = live ? createBrowserSupabaseClient() : null;
-    const channel = client?.channel(`wayne-auto-refresh-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets" }, refresh)
+    const channel = client?.channel(`hanafy-auto-refresh-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, refresh)
       .subscribe((state) => setStatus(state === "SUBSCRIBED" ? "Live" : label));
     const timer = window.setInterval(refresh, intervalMs);
     const visible = () => { if (document.visibilityState === "visible") refresh(); };

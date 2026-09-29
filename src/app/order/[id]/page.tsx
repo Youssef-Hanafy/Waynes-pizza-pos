@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { Button } from "@/components/ui/button";
-import { getStoreSettings } from "@/lib/content/queries";
+import { storefrontSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { getPublicOrderStatus } from "@/lib/orders/queries";
 
@@ -25,7 +25,7 @@ export default async function OrderStatusPage({
   const [{ id }, query, settings] = await Promise.all([
     params,
     searchParams,
-    getStoreSettings(),
+    storefrontSettings(),
   ]);
   if (
     !z.uuid().safeParse(id).success ||

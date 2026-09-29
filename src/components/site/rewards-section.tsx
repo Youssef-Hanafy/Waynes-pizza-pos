@@ -1,11 +1,14 @@
+import { getStorefront } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
 import { RewardsButton } from "./rewards-experience";
 import styles from "./rewards.module.css";
 
-export function RewardsSection() {
+export async function RewardsSection() {
+  const brand = brandNames((await getStorefront()).settings);
   return (
     <section className={styles.rewardsBand} id="rewards">
       <div>
-        <span className={styles.eyebrow}>WAYNE’S REWARDS</span>
+        <span className={styles.eyebrow}>{brand.rewardsName.toUpperCase()}</span>
         <h2>
           You bring the appetite.
           <br />
@@ -20,13 +23,13 @@ export function RewardsSection() {
         <small>No purchase needed to join. Opt out anytime.</small>
       </div>
       <div className={styles.memberCard}>
-        <span>WAYNE’S PIZZA ★</span>
+        <span>{brand.brandName.toUpperCase()} ★</span>
         <strong>
           Officially
           <br />a pizza person.
         </strong>
         <div>
-          <span>WAYNE’S REWARDS</span>
+          <span>{brand.rewardsName.toUpperCase()}</span>
           <span>MEMBER CLUB ↗</span>
         </div>
       </div>

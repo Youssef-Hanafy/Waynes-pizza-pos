@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requirePermission } from "@/lib/auth/access";
 import { auditPageSize, getAuditLog, getRecentServerErrors, type AuditEntry } from "@/lib/audit/queries";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 
 export const metadata: Metadata = { title: "Audit log" };
@@ -28,7 +28,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   await requirePermission("audit.view", "/admin/audit");
   const raw = await searchParams;
   const filters = filtersSchema.parse(Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value])));
-  const settings = await getStoreSettings();
+  const settings = await getWorkspaceStoreSettings();
   const link = (next: Partial<typeof filters>) => { const params = new URLSearchParams(Object.entries({ ...filters, ...next }).filter(([, value]) => value !== "" && value !== 1 && value !== "log").map(([key, value]) => [key, String(value)])); const text = params.toString(); return `/admin/audit${text ? `?${text}` : ""}`; };
 
   return <main className="mx-auto max-w-6xl px-5 py-10">

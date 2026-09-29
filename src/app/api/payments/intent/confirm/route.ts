@@ -2,15 +2,21 @@ import { logger } from "@/lib/logging/logger";
 import { resolvePaymentProvider } from "@/lib/payments/config";
 import { stripeConfirmRequestSchema } from "@/lib/payments/schemas";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { requirePublicService } from "@/lib/tenancy/public-service";
 
 /** Re-reads the intent from Stripe; no browser-supplied payment outcome is trusted. */
 export async function POST(request: Request) {
   const parsed = stripeConfirmRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid payment confirmation." }, { status: 400 });
-  const resolved = await resolvePaymentProvider("online");
+  const service = await requirePublicService("online_ordering");
+  if (!service.ok) return service.response;
+  const resolved = await resolvePaymentProvider("online", {
+    workspaceId: service.storefront.workspace!.workspace_id,
+    locationId: service.storefront.workspace!.location_id,
+  });
   if (!resolved.ok || resolved.value.provider.code !== "stripe") return Response.json({ error: "Online card payment is not available right now." }, { status: 503 });
   const supabase = createServiceSupabaseClient();
-  const { data: payment } = await supabase.from("payments").select("id, provider, provider_payment_id, status, order:orders(id, public_access_token, order_number, total_cents)").eq("id", parsed.data.payment_id).eq("provider", "stripe").maybeSingle();
+  const { data: payment } = await supabase.from("payments").select("id, provider, provider_payment_id, status, order:orders!inner(id, public_access_token, order_number, total_cents, workspace_id)").eq("id", parsed.data.payment_id).eq("provider", "stripe").eq("orders.workspace_id", service.storefront.workspace!.workspace_id).maybeSingle();
   if (!payment?.provider_payment_id || !payment.order) return Response.json({ error: "Payment not found." }, { status: 404 });
   try {
     const result = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);

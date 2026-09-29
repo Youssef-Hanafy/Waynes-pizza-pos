@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatAdminDateTime, titleCase } from "@/lib/orders/admin-format";
 import { getAdminOrderDetail } from "@/lib/orders/admin-queries";
@@ -34,7 +34,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const [{ id }, notice] = await Promise.all([params, searchParams]);
   const access = await requirePermission("orders.view", `/admin/orders/${id}`);
   if (!z.uuid().safeParse(id).success) notFound();
-  const [order, settings, payments] = await Promise.all([getAdminOrderDetail(id), getStoreSettings(), getOrderPayments(id)]);
+  const [order, settings, payments] = await Promise.all([getAdminOrderDetail(id), getWorkspaceStoreSettings(), getOrderPayments(id)]);
   if (!order) notFound();
   const canManagePayments = hasPermission(access, "payments.manage");
   const address = order.delivery_address_snapshot as Record<string, string> | null;

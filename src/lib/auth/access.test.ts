@@ -35,3 +35,31 @@ describe("hasPermission", () => {
     expect(parsed.permissions).toEqual(["admin.access", "orders.cancel"]);
   });
 });
+
+describe("Hanafy support access", () => {
+  it("parses a support-session access and keeps it separate from workspace roles", () => {
+    const parsed = accessSchema.parse({
+      profile_id: owner.profile_id,
+      display_name: "Youssef (Hanafy support)",
+      role: "hanafy_support",
+      permissions: ["admin.access", "orders.view"],
+      support_session: { id: "30000000-0000-4000-8000-000000000009", expires_at: "2026-10-01T15:00:00+00:00", platform_role: "platform_support", reason: "Missing order" },
+    });
+    expect(parsed.role).toBe("hanafy_support");
+    expect(parsed.support_session?.platform_role).toBe("platform_support");
+    expect(() => accessSchema.parse({ ...parsed, role: "platform_owner" })).toThrow();
+  });
+});
+
+describe("workspace-aware access", () => {
+  it("withholds legacy operations from a workspace the wayne_* functions do not serve", async () => {
+    const { forLegacyOperations, hasService } = await import("./permissions");
+    const other = { ...owner, legacy_operations: false, enabled_services: ["pos"] };
+    expect(forLegacyOperations(other).permissions).toEqual([]);
+    expect(forLegacyOperations({ ...owner, legacy_operations: true }).permissions).toEqual(owner.permissions);
+    expect(forLegacyOperations(owner).permissions).toEqual(owner.permissions);
+    expect(hasService(other, "pos")).toBe(true);
+    expect(hasService(other, "sms")).toBe(false);
+    expect(hasService(null, "pos")).toBe(false);
+  });
+});

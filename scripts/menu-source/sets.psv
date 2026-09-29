@@ -1,0 +1,383 @@
+# LIST|name|a,b,c              (names only; referenced as @name=PRICE for a uniform price)
+# MAP|name|a:1.00,b:2.00       (explicit prices; referenced as @name)
+# SET|Mx|Tier|Category|tokens  (tokens = comma list of "Name:price" or "@MAP" or "@LIST=price"; later token wins)
+MAP|APP_VEG_L|Black Olives:2,Peppers:2,Spinach:2,Mushrooms:2,Jalapenos:2,Onion:2,Pickles:2,Lettuce:2,Tomato:2
+MAP|APP_MEAT_L|Salami:2.50,Ham:2.50,Steak:3,Bacon:2.50,Grilled Chicken:3
+MAP|APP_SAU_L|Ketchup:0,Marinara Sauce:1.50,Ranch:1.50,Hot Sauce:1.50,No Sauce:0,Bleu Cheese:1.50,Sweet and Sour:1.50,Honey Mustard:1.50,BBQ Sauce:1.50,Teriyaki Sauce:1.50,Sour Cream:1.50,Salsa:1.50,Cheesy Sauce:2
+MAP|APP_MEAT_S|Bacon:2.25,Grilled Chicken:0
+MAP|APP_SAU_S|Ketchup:0,Marinara Sauce:1,Ranch:1,Hot Sauce:1,No Sauce:0,Bleu Cheese:1,Sweet and Sour:1,Honey Mustard:1,BBQ Sauce:1,Teriyaki Sauce:1,Sour Cream:1,Salsa:1,Cheesy Sauce:1.25
+LIST|PZ_VEG|Peppers,Spinach,Broccoli,Mushrooms,Grilled Onions,Artichoke,Tomato,Lettuce,Black Olives,Jalapenos,Pineapple,Eggplant,Grilled Peppers,Banana Peppers,Garlic,Onion,Pickles
+LIST|PZ_MEAT_FULL|Anchovies,Pepperoni,Salami,Meatball,Sausage,Ham,Hamburger,Bacon,Crispy Chicken,Grilled Chicken,Bologna,Pastrami,Extra Meat
+LIST|PZ_MEAT_BASIC|Anchovies,Pepperoni,Salami,Meatball,Sausage,Ham,Hamburger,Bacon,Bologna
+LIST|PZ_MEAT_M11|Anchovies,Pepperoni,Salami,Meatball,Sausage,Ham,Hamburger,Bacon,Bologna,Extra Meat
+LIST|PZ_CHEESE_3|Extra Cheese,Light Cheese,No Cheese
+LIST|PZ_CHEESE_4|Extra Cheese,Light Cheese,Feta,No Cheese
+LIST|PZ_CHEESE_6|Provolone Cheese,Extra Cheese,Light Cheese,Feta,No Cheese,Parmesan Cheese
+LIST|PZ_CHEESE_8|Provolone Cheese,Extra Cheese,Light Cheese,Mozzarella Cheese,Feta,No Cheese,Parmesan Cheese,Pizza Cheese
+LIST|COOK_PZ|Well Done,Double Cut
+MAP|PZ_SAU_BASIC|Ranch:1.10,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+LIST|CZ_VEG|Peppers,Broccoli,Spinach,Mushrooms,Artichoke,Tomato,Black Olives,Jalapenos,Pineapple,Eggplant,Banana Peppers,Garlic,Grilled Mushrooms,Onion
+LIST|CZ_MEAT|Anchovies,Pepperoni,Salami,Meatball,Sausage,Ham,Hamburger,Bacon
+MAP|CZ_SAU|Marinara Sauce:1.25,Ranch:1.25,No Sauce:0,Bleu Cheese:1.25,BBQ Sauce:1.25
+LIST|CZ_CHEESE|Light Cheese,Extra Cheese,Mozzarella Cheese,No Cheese,Pizza Cheese
+SET|M1|Large|Vegetables|@APP_VEG_L
+SET|M1|Large|Meats|@APP_MEAT_L
+SET|M1|Large|Sauces|@APP_SAU_L
+SET|M1|Large|Cheese|Mozzarella Cheese:2.50
+SET|M1|Large|Extras|Croutons:1.50
+SET|M1|Small|Meats|@APP_MEAT_S
+SET|M1|Small|Sauces|@APP_SAU_S
+SET|M1|Small|Extras|Croutons:0
+SET|M2|Large|Vegetables|@APP_VEG_L
+SET|M2|Large|Meats|@APP_MEAT_L
+SET|M2|Large|Sauces|@APP_SAU_L
+SET|M2|Large|Extras|Croutons:1.50
+SET|M3|Large|Vegetables|@APP_VEG_L
+SET|M3|Large|Meats|@APP_MEAT_L
+SET|M3|Large|Sauces|@APP_SAU_L
+SET|M3|Large|Cheese|Mozzarella Cheese:2.50
+SET|M3|Large|Extras|Croutons:1.50
+SET|M4|Small|Meats|@APP_MEAT_S
+SET|M4|Small|Sauces|@APP_SAU_S
+SET|M5|Italian Style|Sauces|Ranch:1.10,Olive Oil:0,No Sauce:0,Light Sauce:0,Bleu Cheese:3
+SET|M5|Italian Style|Cheese|@PZ_CHEESE_3=0
+SET|M5|Italian Style|Cooking Instructions|@COOK_PZ=0
+SET|M5|Small|Sauces|Ranch:1.10,Olive Oil:0,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+SET|M5|Small|Cheese|@PZ_CHEESE_3=1
+SET|M5|Small|Cooking Instructions|@COOK_PZ=0
+SET|M5|Gluten Free|Sauces|Ranch:1.10,Olive Oil:0,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+SET|M5|Gluten Free|Cheese|@PZ_CHEESE_3=1.50
+SET|M5|Gluten Free|Cooking Instructions|@COOK_PZ=0
+SET|M5|Large|Sauces|Ranch:1.10,Olive Oil:0,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+SET|M5|Large|Cheese|@PZ_CHEESE_3=2
+SET|M5|Large|Cooking Instructions|@COOK_PZ=0
+SET|M6|Italian Style|Vegetables|@PZ_VEG=0
+SET|M6|Italian Style|Meats|@PZ_MEAT_BASIC=0
+SET|M6|Italian Style|Sauces|Alfredo Sauce:3,Ranch:1.10,Olive Oil:0,Hot Sauce:3,No Sauce:0,Light Sauce:0,Bleu Cheese:3,BBQ Sauce:3
+SET|M6|Italian Style|Cheese|@PZ_CHEESE_6=0
+SET|M6|Italian Style|Cooking Instructions|@COOK_PZ=0
+SET|M6|Small|Vegetables|@PZ_VEG=1
+SET|M6|Small|Meats|@PZ_MEAT_BASIC=1
+SET|M6|Small|Sauces|Alfredo Sauce:1.50,Ranch:1.10,Olive Oil:0,Hot Sauce:1.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50,BBQ Sauce:1.50
+SET|M6|Small|Cheese|@PZ_CHEESE_6=1
+SET|M6|Small|Cooking Instructions|@COOK_PZ=0
+SET|M6|Gluten Free|Vegetables|@PZ_VEG=1.50
+SET|M6|Gluten Free|Meats|@PZ_MEAT_BASIC=1.50
+SET|M6|Gluten Free|Sauces|Alfredo Sauce:2.50,Ranch:1.10,Olive Oil:0,Hot Sauce:2.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50,BBQ Sauce:2.50
+SET|M6|Gluten Free|Cheese|@PZ_CHEESE_6=1.50
+SET|M6|Gluten Free|Cooking Instructions|@COOK_PZ=0
+SET|M6|Large|Vegetables|@PZ_VEG=2
+SET|M6|Large|Meats|@PZ_MEAT_BASIC=2
+SET|M6|Large|Sauces|Alfredo Sauce:2.50,Ranch:1.10,Olive Oil:0,Hot Sauce:2.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50,BBQ Sauce:2.50
+SET|M6|Large|Cheese|@PZ_CHEESE_6=2
+SET|M6|Large|Cooking Instructions|@COOK_PZ=0
+SET|M7|Small|Vegetables|@PZ_VEG=1
+SET|M7|Small|Meats|@PZ_MEAT_FULL=1
+SET|M7|Small|Sauces|@PZ_SAU_BASIC
+SET|M7|Small|Cheese|@PZ_CHEESE_3=1
+SET|M7|Small|Cooking Instructions|@COOK_PZ=0
+SET|M7|Large|Vegetables|@PZ_VEG=2
+SET|M7|Large|Meats|@PZ_MEAT_FULL=2
+SET|M7|Large|Sauces|@PZ_SAU_BASIC
+SET|M7|Large|Cheese|@PZ_CHEESE_3=2
+SET|M7|Large|Cooking Instructions|@COOK_PZ=0
+SET|M8|Small|Vegetables|@PZ_VEG=1
+SET|M8|Small|Meats|@PZ_MEAT_FULL=1
+SET|M8|Small|Sauces|@PZ_SAU_BASIC
+SET|M8|Small|Cheese|@PZ_CHEESE_4=1
+SET|M8|Small|Cooking Instructions|@COOK_PZ=0
+SET|M8|Large|Vegetables|@PZ_VEG=2
+SET|M8|Large|Meats|@PZ_MEAT_FULL=2
+SET|M8|Large|Sauces|@PZ_SAU_BASIC
+SET|M8|Large|Cheese|@PZ_CHEESE_4=2
+SET|M8|Large|Cooking Instructions|@COOK_PZ=0
+SET|M9|Small|Vegetables|@PZ_VEG=1
+SET|M9|Small|Meats|@PZ_MEAT_FULL=1
+SET|M9|Small|Sauces|@PZ_SAU_BASIC,BBQ Sauce:1.50
+SET|M9|Small|Cheese|@PZ_CHEESE_3=1
+SET|M9|Small|Cooking Instructions|@COOK_PZ=0
+SET|M9|Large|Vegetables|@PZ_VEG=2
+SET|M9|Large|Meats|@PZ_MEAT_FULL=2
+SET|M9|Large|Sauces|@PZ_SAU_BASIC,BBQ Sauce:2.50
+SET|M9|Large|Cheese|@PZ_CHEESE_3=2
+SET|M9|Large|Cooking Instructions|@COOK_PZ=0
+SET|M10|Small|Vegetables|@PZ_VEG=1
+SET|M10|Small|Meats|@PZ_MEAT_FULL=1
+SET|M10|Small|Sauces|Ranch:1.10,Hot Sauce:1.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+SET|M10|Small|Cheese|@PZ_CHEESE_3=1
+SET|M10|Small|Cooking Instructions|@COOK_PZ=0
+SET|M10|Large|Vegetables|@PZ_VEG=2
+SET|M10|Large|Meats|@PZ_MEAT_FULL=2
+SET|M10|Large|Sauces|Ranch:1.10,Hot Sauce:2.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50
+SET|M10|Large|Cheese|@PZ_CHEESE_3=2
+SET|M10|Large|Cooking Instructions|@COOK_PZ=0
+SET|M11|Small|Vegetables|@PZ_VEG=1
+SET|M11|Small|Meats|@PZ_MEAT_M11=1
+SET|M11|Small|Sauces|@PZ_SAU_BASIC
+SET|M11|Small|Cheese|@PZ_CHEESE_3=1
+SET|M11|Small|Cooking Instructions|@COOK_PZ=0
+SET|M11|Large|Vegetables|@PZ_VEG=2
+SET|M11|Large|Meats|@PZ_MEAT_M11=2
+SET|M11|Large|Sauces|@PZ_SAU_BASIC
+SET|M11|Large|Cheese|@PZ_CHEESE_3=2
+SET|M11|Large|Cooking Instructions|@COOK_PZ=0
+SET|M12|Italian Style|Vegetables|@PZ_VEG=0
+SET|M12|Italian Style|Meats|@PZ_MEAT_FULL=0
+SET|M12|Italian Style|Sauces|Ranch:1.10,No Sauce:0,Light Sauce:0,Bleu Cheese:3
+SET|M12|Italian Style|Cheese|@PZ_CHEESE_6=0
+SET|M12|Italian Style|Cooking Instructions|@COOK_PZ=0
+SET|M12|Small|Vegetables|@PZ_VEG=1
+SET|M12|Small|Meats|@PZ_MEAT_FULL=1
+SET|M12|Small|Sauces|@PZ_SAU_BASIC
+SET|M12|Small|Cheese|@PZ_CHEESE_6=1
+SET|M12|Small|Cooking Instructions|@COOK_PZ=0
+SET|M12|Gluten Free|Vegetables|@PZ_VEG=1.50
+SET|M12|Gluten Free|Meats|@PZ_MEAT_FULL=1.50
+SET|M12|Gluten Free|Sauces|@PZ_SAU_BASIC
+SET|M12|Gluten Free|Cheese|@PZ_CHEESE_6=1.50
+SET|M12|Gluten Free|Cooking Instructions|@COOK_PZ=0
+SET|M12|Large|Vegetables|@PZ_VEG=2
+SET|M12|Large|Meats|@PZ_MEAT_FULL=2
+SET|M12|Large|Sauces|@PZ_SAU_BASIC
+SET|M12|Large|Cheese|@PZ_CHEESE_6=2
+SET|M12|Large|Cooking Instructions|@COOK_PZ=0
+SET|M13|Small|Vegetables|@PZ_VEG=1
+SET|M13|Small|Meats|@PZ_MEAT_FULL=1
+SET|M13|Small|Sauces|Pizza Sauce:1,Alfredo Sauce:1.50,Ranch:1.10,Olive Oil:0,Hot Sauce:1.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50,BBQ Sauce:1.50
+SET|M13|Small|Cheese|@PZ_CHEESE_8=1
+SET|M13|Small|Cooking Instructions|@COOK_PZ=0
+SET|M13|Large|Vegetables|@PZ_VEG=2
+SET|M13|Large|Meats|@PZ_MEAT_FULL=2
+SET|M13|Large|Sauces|Pizza Sauce:1.50,Alfredo Sauce:2.50,Ranch:1.10,Olive Oil:0,Hot Sauce:2.50,No Sauce:0,Light Sauce:0,Bleu Cheese:1.50,BBQ Sauce:2.50
+SET|M13|Large|Cheese|@PZ_CHEESE_8=2
+SET|M13|Large|Cooking Instructions|@COOK_PZ=0
+SET|M14|Small|Vegetables|@CZ_VEG=1,Jalapenos:0
+SET|M14|Small|Meats|@CZ_MEAT=1
+SET|M14|Small|Sauces|@CZ_SAU
+SET|M14|Small|Cheese|@CZ_CHEESE=1
+SET|M14|Small|Cooking Instructions|Well Done:0
+SET|M14|Large|Vegetables|@CZ_VEG=1.50
+SET|M14|Large|Meats|@CZ_MEAT=1.50
+SET|M14|Large|Sauces|@CZ_SAU
+SET|M14|Large|Cheese|@CZ_CHEESE=1.50
+SET|M14|Large|Cooking Instructions|Well Done:0
+MAP|SUB_VEG_15|Hot Pepper:0.50,Lettuce:0,Tomato:0,Black Olives:0.50,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+MAP|SUB_MEAT_15|Ham:0,Steak:4.50,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0,Extra Meat:3.50
+MAP|SUB_SAU_FULL|Vinegar:0,Mayo:0,Mustard:0,Ketchup:0,Oil:0,Caesar Dressing:1.10,Ranch:1.10,Hot Sauce:1.10,No Sauce:0,Light Sauce:0,Bleu Cheese:1.10,Honey Mustard:1.10,BBQ Sauce:1.10,Teriyaki Sauce:1.10,Hot Pepper Relish:0
+MAP|SUB_SAU_PLAIN|Vinegar:0,Mayo:0,Mustard:0,Ketchup:0,Oil:0,No Sauce:0,Light Sauce:0,Hot Pepper Relish:0
+LIST|SUB_CHEESE_A|Provolone Cheese,Light Cheese,American Cheese,Mozzarella Cheese,Feta,No Cheese,Pizza Cheese,Parmesan Cheese
+LIST|SUB_CHEESE_H|Provolone Cheese,Light Cheese,American Cheese,Feta,Pizza Cheese,Parmesan Cheese
+LIST|SUB_CHEESE_I|Provolone Cheese,Light Cheese,American Cheese,Mozzarella Cheese,Feta,No Cheese,Parmesan Cheese
+LIST|SUB_COOK_A|Well Done,Lightly Cooked,Lightly Toasted,Toasted,Not Toasted
+LIST|SUB_COOK_B|Well Done,Lightly Toasted,Toasted,Not Toasted
+MAP|SUB_VEG_FULL|Peppers:0,Hot Pepper:0.50,Broccoli:0.50,Spinach:0.50,Mushrooms:0.50,Grilled Onions:0.75,Lettuce:0,Tomato:0,Cucumbers:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+MAP|SUB_MEAT_FULL|Pepperoni:2,Meatball:2,Sausage:2,Ham:0,Steak:4.50,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0,Extra Meat:3.50
+MAP|PARM_VEG|Hot Pepper:0.50,Peppers:0.50,Broccoli:0.50,Spinach:0.50,Mushrooms:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Cucumbers:0,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0.50,Onion:0.50
+MAP|PARM_MEAT|Pepperoni:2,Salami:3.50,Meatball:3.50,Sausage:3.50,Steak:0,Bacon:2,Grilled Chicken:0,Extra Meat:3.50
+MAP|PARM_MEAT_NX|Pepperoni:2,Salami:3.50,Meatball:3.50,Sausage:3.50,Steak:0,Bacon:2,Grilled Chicken:0
+MAP|PARM_SAU|Vinegar:0,Mayo:0,Mustard:0,Ketchup:0,Oil:0,Marinara Sauce:1,Ranch:1,Hot Sauce:1,No Sauce:0,Light Sauce:0,BBQ Sauce:1,Hot Pepper Relish:1
+MAP|PARM_CHEESE|Provolone Cheese:1,Light Cheese:1,Extra Cheese:1,American Cheese:1,Mozzarella Cheese:0,Feta:1,No Cheese:0,Parmesan Cheese:1,Pizza Cheese:1
+MAP|EGG_CHEESE|Provolone Cheese:1,Light Cheese:1,Extra Cheese:1,American Cheese:1,Mozzarella Cheese:0,Feta:1,No Cheese:0,Parmesan Cheese:1
+MAP|EGG_SAU|Vinegar:0,Ketchup:0,Marinara Sauce:1,Hot Sauce:1,No Sauce:0,Light Sauce:0,BBQ Sauce:1,Hot Pepper Relish:1
+MAP|STK_SAU|Vinegar:0,Mayo:0,Mustard:0,Ketchup:0,Oil:0,Caesar Dressing:1,Marinara Sauce:1,Ranch:1,Hot Sauce:1,No Sauce:0,Light Sauce:0,Bleu Cheese:1,Honey Mustard:1,BBQ Sauce:1,Teriyaki Sauce:1,Hot Pepper Relish:1
+MAP|STK_CHEESE|Provolone Cheese:1,Light Cheese:1,Extra Cheese:1,American Cheese:1,No Cheese:0
+MAP|WRAP_MEAT|Ham:0,Steak:4.50,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0
+SET|M15|ALL SIZES|Vegetables|@SUB_VEG_15
+SET|M15|ALL SIZES|Meats|@SUB_MEAT_15
+SET|M15|ALL SIZES|Sauces|@SUB_SAU_FULL
+SET|M15|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M15|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M16|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0,Tomato:0,Black Olives:0.50,Banana Peppers:0.50,Onion:0,Pickles:0
+SET|M16|ALL SIZES|Meats|Bacon:2,Crispy Chicken:3.50,Extra Meat:3.50
+SET|M16|ALL SIZES|Sauces|@SUB_SAU_FULL
+SET|M16|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M16|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M17|ALL SIZES|Vegetables|@SUB_VEG_15
+SET|M17|ALL SIZES|Meats|@SUB_MEAT_15
+SET|M17|ALL SIZES|Sauces|@SUB_SAU_PLAIN
+SET|M17|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M17|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M18|ALL SIZES|Vegetables|@SUB_VEG_15
+SET|M18|ALL SIZES|Meats|Ham:0,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0,Extra Meat:3.50
+SET|M18|ALL SIZES|Sauces|@SUB_SAU_PLAIN,Hot Sauce:1.10
+SET|M18|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M18|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M19|One Size|Vegetables|@SUB_VEG_FULL
+SET|M19|One Size|Meats|@SUB_MEAT_FULL
+SET|M19|One Size|Sauces|@SUB_SAU_FULL,Marinara Sauce:1.10
+SET|M19|One Size|Cheese|@SUB_CHEESE_A=1.50
+SET|M19|One Size|Cooking Instructions|@SUB_COOK_A=0
+SET|M20|ALL SIZES|Vegetables|@PARM_VEG
+SET|M20|ALL SIZES|Meats|@PARM_MEAT
+SET|M20|ALL SIZES|Sauces|@PARM_SAU
+SET|M20|ALL SIZES|Cheese|@PARM_CHEESE
+SET|M20|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M20|Wheat Wrap|Meats|@PARM_MEAT,Extra Meat:0
+SET|M21|ALL SIZES|Vegetables|@SUB_VEG_FULL
+SET|M21|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M21|ALL SIZES|Sauces|@SUB_SAU_FULL,Marinara Sauce:1.10
+SET|M21|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M21|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M21|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M22|ALL SIZES|Vegetables|@PARM_VEG
+SET|M22|ALL SIZES|Meats|@PARM_MEAT_NX
+SET|M22|ALL SIZES|Sauces|@PARM_SAU
+SET|M22|ALL SIZES|Cheese|@PARM_CHEESE
+SET|M22|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M23|ALL SIZES|Vegetables|@PARM_VEG
+SET|M23|ALL SIZES|Meats|@PARM_MEAT
+SET|M23|ALL SIZES|Sauces|@STK_SAU
+SET|M23|ALL SIZES|Cheese|@PARM_CHEESE
+SET|M23|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M23|Wheat Wrap|Meats|@PARM_MEAT,Extra Meat:0
+SET|M24|ALL SIZES|Vegetables|@PARM_VEG
+SET|M24|ALL SIZES|Meats|@PARM_MEAT_NX
+SET|M24|ALL SIZES|Sauces|@EGG_SAU,Bleu Cheese:1
+SET|M24|ALL SIZES|Cheese|@EGG_CHEESE
+SET|M24|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M25|ALL SIZES|Vegetables|@PARM_VEG
+SET|M25|ALL SIZES|Meats|@PARM_MEAT
+SET|M25|ALL SIZES|Sauces|@EGG_SAU
+SET|M25|ALL SIZES|Cheese|@EGG_CHEESE
+SET|M25|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M25|Wheat Wrap|Meats|@PARM_MEAT,Extra Meat:0
+SET|M26|ALL SIZES|Vegetables|@PARM_VEG
+SET|M26|ALL SIZES|Meats|@PARM_MEAT_NX
+SET|M26|ALL SIZES|Sauces|@EGG_SAU
+SET|M26|ALL SIZES|Cheese|Provolone Cheese:1,Light Cheese:1,Extra Cheese:1,American Cheese:1,Mozzarella Cheese:0,Feta:1,No Cheese:0
+SET|M26|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M27|ALL SIZES|Vegetables|@PARM_VEG
+SET|M27|ALL SIZES|Meats|@PARM_MEAT_NX
+SET|M27|ALL SIZES|Sauces|@EGG_SAU
+SET|M27|ALL SIZES|Cheese|@EGG_CHEESE
+SET|M27|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M28|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Banana Peppers:0.50,Pickles:0.50
+SET|M28|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M28|ALL SIZES|Sauces|@STK_SAU
+SET|M28|ALL SIZES|Cheese|@STK_CHEESE
+SET|M28|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M28|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M29|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0.50,Tomato:0.50,Jalapenos:0.50,Banana Peppers:0.50,Pickles:0.50
+SET|M29|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M29|ALL SIZES|Sauces|@STK_SAU
+SET|M29|ALL SIZES|Cheese|@STK_CHEESE
+SET|M29|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M29|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M30|ALL SIZES|Vegetables|Hot Pepper:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Banana Peppers:0.50,Pickles:0.50
+SET|M30|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M30|ALL SIZES|Sauces|@STK_SAU
+SET|M30|ALL SIZES|Cheese|Provolone Cheese:1,Extra Cheese:1,American Cheese:1,No Cheese:0
+SET|M30|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M30|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M31|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Pickles:0.50
+SET|M31|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M31|ALL SIZES|Sauces|@STK_SAU
+SET|M31|ALL SIZES|Cheese|@STK_CHEESE
+SET|M31|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M31|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M32|ALL SIZES|Vegetables|Hot Pepper:0.50,Mushrooms:0.50,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0.50
+SET|M32|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M32|ALL SIZES|Sauces|@STK_SAU
+SET|M32|ALL SIZES|Cheese|Provolone Cheese:1,Extra Cheese:1,American Cheese:1,No Cheese:0,Parmesan Cheese:1,Pizza Cheese:1
+SET|M32|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M32|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M33|ALL SIZES|Vegetables|Hot Pepper:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0.50
+SET|M33|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M33|ALL SIZES|Sauces|@STK_SAU
+SET|M33|ALL SIZES|Cheese|@STK_CHEESE
+SET|M33|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M33|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M34|ALL SIZES|Vegetables|Hot Pepper:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0.50
+SET|M34|ALL SIZES|Meats|Salami:3.50,Bacon:2,Extra Meat:3.50
+SET|M34|ALL SIZES|Sauces|@STK_SAU
+SET|M34|ALL SIZES|Cheese|@STK_CHEESE
+SET|M34|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M34|Wheat Wrap|Meats|Salami:3.50,Bacon:2,Extra Meat:0
+SET|M35|ALL SIZES|Vegetables|Hot Pepper:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Pickles:0.50
+SET|M35|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M35|ALL SIZES|Sauces|@STK_SAU
+SET|M35|ALL SIZES|Cheese|@STK_CHEESE
+SET|M35|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M35|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M36|ALL SIZES|Vegetables|Hot Pepper:0.50,Grilled Onions:0.75,Lettuce:0.50,Tomato:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0.50
+SET|M36|ALL SIZES|Meats|Bacon:2,Extra Meat:3.50
+SET|M36|ALL SIZES|Sauces|@STK_SAU
+SET|M36|ALL SIZES|Cheese|@STK_CHEESE
+SET|M36|ALL SIZES|Cooking Instructions|@SUB_COOK_B=0
+SET|M36|Wheat Wrap|Meats|Bacon:2,Extra Meat:0
+SET|M37|ALL SIZES|Vegetables|Peppers:0,Hot Pepper:0.50,Lettuce:0,Tomato:0,Black Olives:0.50,Jalapenos:0.50,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M37|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M37|ALL SIZES|Sauces|@SUB_SAU_PLAIN
+SET|M37|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M37|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M37|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M38|ALL SIZES|Vegetables|Hot Pepper:0.50,Broccoli:0.50,Mushrooms:0.50,Grilled Onions:0.75,Lettuce:0,Tomato:0,Cucumbers:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Pickles:0
+SET|M38|ALL SIZES|Meats|Pepperoni:2,Meatball:2,Sausage:2,Ham:0,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0,Extra Meat:3.50
+SET|M38|ALL SIZES|Sauces|@SUB_SAU_PLAIN
+SET|M38|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M38|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M38|Wheat Wrap|Meats|Pepperoni:2,Meatball:2,Sausage:0,Ham:0,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0,Extra Meat:3.50
+SET|M39|ALL SIZES|Vegetables|Peppers:0,Hot Pepper:0.50,Mushrooms:0.50,Grilled Onions:0.75,Lettuce:0,Tomato:0,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M39|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M39|ALL SIZES|Sauces|Vinegar:0,Ranch:1.10,No Sauce:0,Light Sauce:0,Bleu Cheese:1.10,Hot Pepper Relish:0
+SET|M39|ALL SIZES|Cheese|@SUB_CHEESE_H=1.50
+SET|M39|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M39|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M40|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0,Tomato:0,Cucumbers:0.50,Jalapenos:0.50,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M40|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M40|ALL SIZES|Sauces|@SUB_SAU_PLAIN,Honey Mustard:1.10
+SET|M40|ALL SIZES|Cheese|@SUB_CHEESE_H=1.50
+SET|M40|ALL SIZES|Cooking Instructions|Well Done:0,Lightly Cooked:0,Toasted:0,Not Toasted:0
+SET|M40|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M41|ALL SIZES|Vegetables|Peppers:0,Hot Pepper:0.50,Mushrooms:0.50,Grilled Onions:0.75,Lettuce:0,Tomato:0,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M41|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M41|ALL SIZES|Sauces|Vinegar:0,Marinara Sauce:1.10,No Sauce:0,Light Sauce:0,Hot Pepper Relish:0
+SET|M41|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M41|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M41|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M42|ALL SIZES|Vegetables|Hot Pepper:0.50,Lettuce:0,Tomato:0,Cucumbers:0.50,Black Olives:0.50,Jalapenos:0.50,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0
+SET|M42|ALL SIZES|Meats|@SUB_MEAT_FULL
+SET|M42|ALL SIZES|Sauces|@SUB_SAU_PLAIN
+SET|M42|ALL SIZES|Cheese|@SUB_CHEESE_A=1.50
+SET|M42|ALL SIZES|Cooking Instructions|@SUB_COOK_A=0
+SET|M42|Wheat Wrap|Meats|@SUB_MEAT_FULL,Sausage:0
+SET|M43|One Size|Vegetables|@SUB_VEG_FULL
+SET|M43|One Size|Meats|@WRAP_MEAT
+SET|M43|One Size|Sauces|@SUB_SAU_FULL,Marinara Sauce:1.10
+SET|M43|One Size|Cheese|@SUB_CHEESE_A=1.50
+SET|M43|One Size|Cooking Instructions|@SUB_COOK_A=0
+SET|M44|ALL SIZES|Vegetables|Peppers:0,Hot Pepper:0.50,Broccoli:0.50,Spinach:0.50,Mushrooms:0.50,Grilled Onions:0.75,Tomato:0,Cucumbers:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M44|ALL SIZES|Meats|@WRAP_MEAT
+SET|M44|ALL SIZES|Sauces|Vinegar:0,Mayo:0,Mustard:0,Oil:0,Caesar Dressing:1.10,Ranch:1.10,Hot Sauce:1.10,No Sauce:0,Bleu Cheese:1.10,Honey Mustard:1.10,BBQ Sauce:1.10,Teriyaki Sauce:1.10,Hot Pepper Relish:0
+SET|M44|ALL SIZES|Cheese|@SUB_CHEESE_I=1.50
+SET|M44|ALL SIZES|Cooking Instructions|Well Done:0,Lightly Cooked:0
+SET|M45|ALL SIZES|Vegetables|Peppers:0,Hot Pepper:0.50,Broccoli:0.50,Spinach:0.50,Mushrooms:0.50,Grilled Onions:0.75,Tomato:0,Cucumbers:0.50,Black Olives:0.50,Jalapenos:0.50,Grilled Peppers:0.75,Banana Peppers:0.50,Grilled Mushrooms:0.75,Onion:0,Pickles:0
+SET|M45|ALL SIZES|Meats|Ham:0,Bacon:2,Crispy Chicken:3.50,Grilled Chicken:3.50,Bologna:0
+SET|M45|ALL SIZES|Sauces|@SUB_SAU_FULL,Marinara Sauce:1.10
+SET|M45|ALL SIZES|Cheese|@SUB_CHEESE_I=1.50
+SET|M45|ALL SIZES|Cooking Instructions|Well Done:0,Lightly Cooked:0
+SET|M46|ALL SIZES|Vegetables|@SUB_VEG_FULL
+SET|M46|ALL SIZES|Meats|@WRAP_MEAT
+SET|M46|ALL SIZES|Sauces|@SUB_SAU_FULL,Marinara Sauce:1.10
+SET|M46|ALL SIZES|Cheese|@SUB_CHEESE_I=1.50
+SET|M46|ALL SIZES|Cooking Instructions|Well Done:0,Lightly Cooked:0
+SET|M47|One Size|Vegetables|Black Olives:1,Peppers:0,Mushrooms:1,Jalapenos:1,Banana Peppers:1,Onion:0,Pickles:1,Cucumbers:1,Tomato:1
+SET|M47|One Size|Salad Dressings|Balsamic Vinaigrette Dressing:1.10,BBQ Dressing:1.10,Hot Sauce Dressing:1.10,French Dressing:1.10,Blue Cheese Dressing:1.10,Ranch Dressing:1.10,Honey Mustard Dressing:1.10,Oil & Vinegar:1.10,Parmesan Peppercorn Dressing:1.10,Light Italian Dressing:1.10,Thousand Island Dressing:1.10,Caesar Dressing:1.10,Greek Dressing:1.10,Italian Dressing:1.10,Extra Dressing:1.10
+SET|M47|One Size|Cheese|Provolone Cheese:2.50,Extra Cheese:2,Light Cheese:0,Feta:2.50,No Cheese:0,Pizza Cheese:2.50
+SET|M47|One Size|Extras|Croutons:0.50
+SET|M48|One Size|Vegetables|Mushrooms:2,Eggplant:3
+SET|M48|One Size|Meats|Meatball:3,Sausage:3,Grilled Chicken:3,Extra Meat:3
+SET|M48|One Size|Sauces|extra sauce:1.75,Alfredo Sauce:1.75,Marinara Sauce:0,No Sauce:0
+SET|M48|One Size|Cheese|Extra Cheese:2,No Cheese:0
+SET|M49|One Size|Vegetables|Black Olives:1,Peppers:1,Spinach:1,Mushrooms:1,Jalapenos:1,Onion:0,Pickles:0,Lettuce:0,Tomato:0
+SET|M49|One Size|Meats|Salami:1,Ham:1,Steak:1,Grilled Chicken:1
+SET|M49|One Size|Sauces|Mayo:0,Mustard:0,Ketchup:0,Marinara Sauce:1,Ranch:1,Hot Sauce:1,Bleu Cheese:1,Sweet and Sour:1,Honey Mustard:1,BBQ Sauce:1,Teriyaki Sauce:1,Sour Cream:1,Salsa:1,Cheesy Sauce:1.25
+SET|M49|One Size|Cheese|Extra Cheese:1,Light Cheese:0,Mozzarella Cheese:1,No Cheese:0
+SET|M50|One Size|Vegetables|Black Olives:1,Peppers:1,Spinach:1,Mushrooms:1,Jalapenos:1,Onion:0,Pickles:0,Lettuce:0,Tomato:0
+SET|M50|One Size|Meats|Grilled Chicken:1
+SET|M50|One Size|Sauces|Mayo:0,Mustard:0,Ketchup:0
+SET|M50|One Size|Cheese|Extra Cheese:1,Light Cheese:0,Mozzarella Cheese:1,No Cheese:0
+SET|M51|One Size|Vegetables|Onion:0,Pickles:0,Lettuce:0,Tomato:0
+SET|M51|One Size|Sauces|Mayo:0,Mustard:0,Ketchup:0,Sweet and Sour:1
+SET|M52|One Size|Vegetables|Onion:0,Pickles:0,Lettuce:0,Tomato:0
+SET|M52|One Size|Sauces|Mayo:0,Mustard:0,Ketchup:0

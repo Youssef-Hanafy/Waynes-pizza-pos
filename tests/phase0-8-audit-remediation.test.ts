@@ -94,7 +94,9 @@ describe("Phase 0–8 audit remediation", () => {
 
   it("exposes no SECURITY DEFINER function or table write to anonymous callers beyond the storefront", async () => {
     const definers = await database.query<{ proname: string }>(`select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') order by 1`);
-    expect(definers.rows.map((row) => row.proname)).toEqual(["wayne_has_permission", "wayne_public_menu", "wayne_public_order_status", "wayne_public_store_settings", "wayne_store_is_open"]);
+    // Phase 3 adds a tenant-aware overload of wayne_has_permission. The
+    // allow-list remains unchanged at the public function-name boundary.
+    expect([...new Set(definers.rows.map((row) => row.proname))].sort()).toEqual(["wayne_has_permission", "wayne_public_menu", "wayne_public_order_status", "wayne_public_store_settings", "wayne_store_is_open"]);
     const anonWrites = await database.query<{ table_name: string }>(`select table_name from information_schema.role_table_grants where table_schema='public' and grantee='anon' and privilege_type <> 'SELECT'`);
     expect(anonWrites.rows).toEqual([]);
     await expect(run("authenticated", managerId, "select signing_secret from public.integration_destinations")).rejects.toThrow(/permission denied/i);

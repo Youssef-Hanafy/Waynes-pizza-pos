@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { getStoreSettings } from "@/lib/content/queries";
-import { isStoreOpenNow } from "@/lib/content/store-status";
+import { getStoreSettings, storefrontSettings } from "@/lib/content/queries";
+import { brandNames } from "@/lib/content/schemas";
+import { isOnlineOrderingAvailable } from "@/lib/payments/queries";
 import { getPublicMenu } from "@/lib/menu/queries";
 import { OrderMenuClient } from "./order-menu-client";
 
@@ -27,13 +28,12 @@ export default async function MenuPage({
   searchParams: Promise<{ fulfillment?: string; item?: string }>;
 }) {
   const [settings, menu, params] = await Promise.all([
-    getStoreSettings(),
+    storefrontSettings("online_ordering"),
     getPublicMenu(),
     searchParams,
   ]);
   const fulfillment = params.fulfillment === "delivery" ? "delivery" : "pickup";
-  const orderingOpen =
-    isStoreOpenNow(settings) && settings.test_ordering_enabled;
+  const orderingOpen = await isOnlineOrderingAvailable(settings);
   return (
     <div className="storefront flex min-h-screen flex-col">
       <SiteHeader settings={settings} />
@@ -41,7 +41,7 @@ export default async function MenuPage({
         <section className="menu-intro">
           <div className="site-container">
             <div>
-              <p className="eyebrow">FRESH FROM WAYNE’S</p>
+              <p className="eyebrow">FRESH FROM {brandNames(settings).shortName.toUpperCase()}</p>
               <h1>Good food. Great choices.</h1>
               <p>
                 Pick your favorites. Make them yours. We’ll take it from here.
@@ -71,7 +71,7 @@ export default async function MenuPage({
               The online menu is being prepared.
             </h2>
             <p className="mt-3 text-wayne-muted">
-              Please call {settings.public_phone || "Wayne's Pizza"} for current
+              Please call {settings.public_phone || settings.store_name} for current
               selections.
             </p>
           </div>

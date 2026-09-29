@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { staffDirectorySchema } from "@/lib/staff/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function StaffPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
   const access = await requirePermission("staff.view", "/admin/staff");
   const canManage = hasPermission(access, "staff.manage");
-  const [params, supabase, settings] = await Promise.all([searchParams, createServerSupabaseClient(), getStoreSettings()]);
+  const [params, supabase, settings] = await Promise.all([searchParams, createServerSupabaseClient(), getWorkspaceStoreSettings()]);
   const { data, error } = await supabase.rpc("wayne_admin_staff");
   if (error) throw new Error(`Staff directory failed: ${error.message}`);
   const directory = staffDirectorySchema.parse(data);

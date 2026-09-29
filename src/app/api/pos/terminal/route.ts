@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const parsed = terminalActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid card reader request." }, { status: 400 });
 
-  const resolved = await resolvePaymentProvider("terminal");
+  const resolved = await resolvePaymentProvider("terminal", access?.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) return Response.json({ error: resolved.reason }, { status: 503 });
 
   const userClient = await createServerSupabaseClient();
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         idempotencyKey: idempotency_key,
         deviceId: begun.device_id,
         referenceId: begun.order_number,
-        note: `Wayne's Pizza order ${begun.order_number}`,
+        note: `${access?.workspace_name ?? "Store"} order ${begun.order_number}`,
       });
       // The checkout id is what the counter polls and what the webhook matches on, so
       // it is recorded before the customer has touched the reader.

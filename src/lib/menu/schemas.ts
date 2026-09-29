@@ -11,11 +11,21 @@ export const variantSchema = z.object({
   sort_order: z.number().int().default(0)
 });
 
+// Phase 14: a choice's price can vary by size. `variant_prices` carries one
+// override per size the owner has set explicitly; a size with no entry here
+// falls back to `price_delta_cents` (also the only price used on items with
+// no sizes at all).
+export const modifierChoiceVariantPriceSchema = z.object({
+  variant_name: z.string().trim().min(1).max(120),
+  price_delta_cents: z.number().int().min(-100_000).max(1_000_000)
+});
+
 export const modifierChoiceSchema = z.object({
   id: z.uuid().optional(),
   name: z.string().trim().min(1).max(120),
   price_delta_cents: z.number().int().min(-100_000).max(1_000_000),
-  default_selected: z.boolean().default(false)
+  default_selected: z.boolean().default(false),
+  variant_prices: z.array(modifierChoiceVariantPriceSchema).max(100).default([])
 });
 
 export const modifierGroupSchema = z.object({
@@ -60,9 +70,28 @@ export const menuItemPayloadSchema = z.object({
   path: ["available_end"]
 });
 
-export const publicMenuChoiceSchema = modifierChoiceSchema.extend({ id: z.uuid() });
-export const publicMenuGroupSchema = modifierGroupSchema.safeExtend({
+export const publicMenuChoiceVariantPriceSchema = z.object({
+  variant_id: z.uuid(),
+  price_delta_cents: z.number().int()
+});
+export const publicMenuChoiceSchema = modifierChoiceSchema.extend({
   id: z.uuid(),
+  variant_prices: z.array(publicMenuChoiceVariantPriceSchema).default([])
+});
+// A fresh object (not .safeExtend on modifierGroupSchema) because that schema
+// is wrapped in .refine() for the admin-editor form, and TS's inference of
+// .safeExtend over a refined schema does not hold up once `choices` carries
+// the richer publicMenuChoiceSchema shape (variant_prices included). The two
+// refine() checks are input validation for the editor form and have no
+// bearing on trusted data read back from the database.
+export const publicMenuGroupSchema = z.object({
+  id: z.uuid(),
+  name: z.string().trim().min(1).max(120),
+  customer_label: z.string().trim().min(1).max(160),
+  min_select: z.number().int().min(0).max(100),
+  max_select: z.number().int().min(1).max(100),
+  required: z.boolean(),
+  allow_quantities: z.boolean(),
   choices: z.array(publicMenuChoiceSchema)
 });
 export const publicMenuVariantSchema = variantSchema.extend({ id: z.uuid() });

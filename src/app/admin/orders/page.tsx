@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatAdminDateTime, titleCase } from "@/lib/orders/admin-format";
 import { getAdminOrders } from "@/lib/orders/admin-queries";
@@ -36,7 +36,7 @@ export default async function AdminOrdersPage({
   const filters = filtersSchema.parse(Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value ?? ""])));
   const [result, settings] = await Promise.all([
     getAdminOrders({ search: filters.q, from: filters.from, through: filters.to, fulfillment: filters.fulfillment, source: filters.source, status: filters.status, payment: filters.payment, page: filters.page }),
-    getStoreSettings(),
+    getWorkspaceStoreSettings(),
   ]);
 
   return (

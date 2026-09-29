@@ -5,6 +5,7 @@ import { PaymentProviderError } from "@/lib/payments/provider";
 import { stripeIntentRequestSchema } from "@/lib/payments/schemas";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { tryGetServerSupabaseEnvironment } from "@/lib/supabase/env";
+import { requirePublicService } from "@/lib/tenancy/public-service";
 
 /**
  * Creates a held order and its Stripe PaymentIntent before the browser submits a
@@ -13,9 +14,14 @@ import { tryGetServerSupabaseEnvironment } from "@/lib/supabase/env";
 export async function POST(request: Request) {
   const parsed = stripeIntentRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Check the order details." }, { status: 400 });
+  const service = await requirePublicService("online_ordering");
+  if (!service.ok) return service.response;
   if (!tryGetServerSupabaseEnvironment()) return unavailable();
 
-  const resolved = await resolvePaymentProvider("online");
+  const resolved = await resolvePaymentProvider("online", {
+    workspaceId: service.storefront.workspace!.workspace_id,
+    locationId: service.storefront.workspace!.location_id,
+  });
   if (!resolved.ok || resolved.value.provider.code !== "stripe") return unavailable();
   const supabase = createServiceSupabaseClient();
   const { data: allowed, error: rateLimitError } = await supabase.rpc("wayne_consume_public_order_rate_limit", { client_key: checkoutRateLimitKey(request.headers) });

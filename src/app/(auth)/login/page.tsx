@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { safeNextPath } from "@/lib/auth/routes";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Owner sign in" };
+export const metadata: Metadata = { title: "Sign in", robots: { index: false, follow: false } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto grid min-h-screen max-w-lg place-items-center px-6 py-12">
       <section className="w-full rounded-2xl border border-wayne-border bg-white p-7 shadow-lg sm:p-10">
-        <p className="text-sm font-black uppercase tracking-widest text-wayne-red">Wayne&apos;s Pizza</p>
+        <p className="text-sm font-black uppercase tracking-widest text-wayne-muted">Hanafy Platform</p>
         <h1 className="mt-3 text-3xl font-black">Staff sign in</h1>
         <p className="mt-2 text-wayne-muted">Use the account assigned by the owner.</p>
         <LoginForm initialError={error} nextPath={nextPath} />

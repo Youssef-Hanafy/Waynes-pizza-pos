@@ -1,9 +1,10 @@
 import "server-only";
 
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
-import { createSquareProvider, type SquareConfig } from "./square";
-import { createStripeProvider, type StripeConfig } from "./stripe";
+import { paymentConnectionSchema, squarePublicConfig, type PaymentConnection } from "./capabilities";
+import { buildPaymentAdapter, buildWebhookProvider } from "./registry";
 import type { PaymentProvider } from "./provider";
 import { paymentProviderSettingsSchema, type PaymentProviderSettings } from "./schemas";
 
@@ -24,79 +25,120 @@ export function paymentSecretsPresent(provider?: "none" | "square" | "stripe"): 
   return paymentSecretsPresent("stripe") || paymentSecretsPresent("square");
 }
 
-export async function readPaymentSettings(): Promise<PaymentProviderSettings | null> {
+function normalizedHost(value: string) {
+  return value.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.+$/, "");
+}
+
+/**
+ * Whose payment connection to use.  Staff paths pass their signed-in
+ * workspace; public paths pass the storefront's workspace/location; the old
+ * host-routed webhook still resolves by host, and per-connection webhooks
+ * (/api/payments/webhooks/[key]) by their key.  There is never a fallback business.
+ */
+export type PaymentScope = { workspaceId: string; locationId?: string | null } | { host: string };
+
+export async function readPaymentSettings(scope?: PaymentScope): Promise<PaymentProviderSettings | null> {
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
-    .from("payment_provider_settings")
-    .select("provider, environment, application_id, location_id, notification_url, online_card_enabled, terminal_card_enabled, updated_at")
-    .eq("id", true)
-    .maybeSingle();
+  let workspaceId: string | null = null;
+  let locationId: string | null = null;
+  if (scope && "workspaceId" in scope) {
+    workspaceId = scope.workspaceId;
+    locationId = scope.locationId ?? null;
+  } else {
+    const requestHost = scope?.host ?? (await headers()).get("x-forwarded-host") ?? (await headers()).get("host") ?? "";
+    const { data: domain, error: domainError } = await supabase
+      .from("workspace_domains")
+      .select("workspace_id,location_id")
+      .eq("hostname", normalizedHost(requestHost))
+      .eq("active", true)
+      .maybeSingle();
+    if (domainError || !domain) return null;
+    workspaceId = domain.workspace_id;
+    locationId = domain.location_id;
+  }
+  let query = supabase
+    .from("location_payment_configurations")
+    .select("provider, environment, application_id, provider_location_id, notification_url, online_card_enabled, terminal_card_enabled, updated_at")
+    .eq("workspace_id", workspaceId);
+  if (locationId) query = query.eq("location_id", locationId);
+  const { data, error } = await query.order("created_at").limit(1).maybeSingle();
   if (error || !data) return null;
-  const parsed = paymentProviderSettingsSchema.safeParse(data);
+  const parsed = paymentProviderSettingsSchema.safeParse({ ...data, location_id: data.provider_location_id });
   return parsed.success ? parsed.data : null;
 }
 
-export type ResolvedProvider = { provider: PaymentProvider; settings: PaymentProviderSettings };
+export type ResolvedProvider = { provider: PaymentProvider; settings: PaymentProviderSettings; connection: PaymentConnection };
 
-/**
- * Returns a live provider only when everything a real charge needs is present:
- * a chosen provider, its identifiers, and the server-side secrets. Anything missing
- * means card payment simply does not exist for this deployment — nothing is faked.
- */
-export async function resolvePaymentProvider(channel: "online" | "terminal"): Promise<
-  { ok: true; value: ResolvedProvider } | { ok: false; reason: string }
-> {
-  const settings = await readPaymentSettings();
-  if (!settings || settings.provider === "none") return { ok: false, reason: "No payment provider is configured." };
-  if (channel === "online" && !settings.online_card_enabled) return { ok: false, reason: "Card payment is switched off." };
-  if (channel === "terminal" && !settings.terminal_card_enabled) return { ok: false, reason: "Card reader payment is switched off." };
-
-  if (settings.provider === "stripe") {
-    if (channel === "terminal") return { ok: false, reason: "Stripe Terminal is not configured yet." };
-    const secrets = stripeSecretsSchema.safeParse({ STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET });
-    if (!secrets.success) return { ok: false, reason: "Stripe credentials or the verified webhook secret are not installed on the server." };
-    const config: StripeConfig = { secretKey: secrets.data.STRIPE_SECRET_KEY, webhookSecret: secrets.data.STRIPE_WEBHOOK_SECRET };
-    return { ok: true, value: { provider: createStripeProvider(config), settings } };
-  }
-
-  const secrets = secretsSchema.safeParse({ SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN, SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY });
-  if (!secrets.success) return { ok: false, reason: "The processor credentials are not installed on the server." };
-  if (!settings.application_id || !settings.location_id) return { ok: false, reason: "The processor is not fully configured." };
-
-  const config: SquareConfig = {
-    accessToken: secrets.data.SQUARE_ACCESS_TOKEN,
-    environment: settings.environment,
-    applicationId: settings.application_id,
-    locationId: settings.location_id,
-    notificationUrl: settings.notification_url,
-    webhookSignatureKey: secrets.data.SQUARE_WEBHOOK_SIGNATURE_KEY,
-  };
-  return { ok: true, value: { provider: createSquareProvider(config), settings } };
+async function resolveScope(scope?: PaymentScope): Promise<{ workspaceId: string; locationId: string | null } | null> {
+  if (scope && "workspaceId" in scope) return { workspaceId: scope.workspaceId, locationId: scope.locationId ?? null };
+  const supabase = createServiceSupabaseClient();
+  const requestHost = scope?.host ?? (await headers()).get("x-forwarded-host") ?? (await headers()).get("host") ?? "";
+  const { data, error } = await supabase
+    .from("workspace_domains")
+    .select("workspace_id,location_id")
+    .eq("hostname", normalizedHost(requestHost))
+    .eq("active", true)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { workspaceId: data.workspace_id as string, locationId: (data.location_id as string | null) ?? null };
 }
 
-/** The webhook receiver needs the provider even when the switches are off. */
-export async function resolveWebhookProvider() {
-  const settings = await readPaymentSettings();
-  if (!settings || settings.provider === "none") return null;
-  if (settings.provider === "stripe") {
-    const secrets = stripeSecretsSchema.safeParse({ STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET });
-    if (!secrets.success) return null;
-    return { settings, provider: createStripeProvider({ secretKey: secrets.data.STRIPE_SECRET_KEY, webhookSecret: secrets.data.STRIPE_WEBHOOK_SECRET }) };
-  }
-  const secrets = secretsSchema.safeParse({
-    SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN,
-    SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
+/**
+ * The workspace's payment connection for a purpose (Phase 9).  Location
+ * specific beats workspace-wide; there is never another workspace's
+ * connection and never a fallback.
+ */
+export async function readPaymentConnection(purpose: "online" | "counter", scope?: PaymentScope): Promise<PaymentConnection | null> {
+  const resolved = await resolveScope(scope);
+  if (!resolved) return null;
+  const supabase = createServiceSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_payment_connection_for", {
+    target_workspace_id: resolved.workspaceId,
+    target_location_id: resolved.locationId,
+    target_purpose: purpose,
   });
-  if (!secrets.success) return null;
+  if (error || !data) return null;
+  const parsed = paymentConnectionSchema.safeParse(data);
+  return parsed.success ? parsed.data : null;
+}
+
+function settingsFromConnection(connection: PaymentConnection): PaymentProviderSettings {
+  const config = squarePublicConfig(connection);
   return {
-    settings,
-    provider: createSquareProvider({
-      accessToken: secrets.data.SQUARE_ACCESS_TOKEN,
-      environment: settings.environment,
-      applicationId: settings.application_id,
-      locationId: settings.location_id,
-      notificationUrl: settings.notification_url,
-      webhookSignatureKey: secrets.data.SQUARE_WEBHOOK_SIGNATURE_KEY,
-    }),
+    provider: connection.provider === "square" || connection.provider === "stripe" ? connection.provider : "none",
+    environment: connection.environment,
+    application_id: config.applicationId,
+    location_id: config.locationId,
+    notification_url: config.notificationUrl,
+    online_card_enabled: connection.capabilities.online_card && connection.public_configuration.online_card_enabled === true,
+    terminal_card_enabled: connection.capabilities.card_present_integrated && connection.public_configuration.terminal_card_enabled === true,
+    updated_at: new Date(0).toISOString(),
   };
+}
+
+/**
+ * Returns a live provider only when the workspace's connection can do this
+ * kind of payment, it is switched on, and the server holds that
+ * connection's secrets.  The provider is chosen by the adapter registry;
+ * callers only see the PaymentProvider interface.  A manual external
+ * terminal (e.g. the store's own processor terminal) never returns a
+ * provider: the POS asks a person to run the amount and confirm.
+ */
+export async function resolvePaymentProvider(channel: "online" | "terminal", scope?: PaymentScope): Promise<
+  { ok: true; value: ResolvedProvider } | { ok: false; reason: string; manual?: true }
+> {
+  const connection = await readPaymentConnection(channel === "online" ? "online" : "counter", scope);
+  if (!connection) return { ok: false, reason: "No payment provider is configured." };
+  const built = buildPaymentAdapter(connection, channel);
+  if (!built.ok) return built;
+  return { ok: true, value: { provider: built.value.provider, settings: settingsFromConnection(connection), connection } };
+}
+
+/** Legacy host-routed webhook (/api/webhooks/square): the host's online connection. */
+export async function resolveWebhookProvider(host?: string) {
+  const connection = await readPaymentConnection("online", host === undefined ? undefined : { host });
+  if (!connection) return null;
+  const provider = buildWebhookProvider(connection);
+  if (!provider) return null;
+  return { settings: settingsFromConnection(connection), provider, connection };
 }

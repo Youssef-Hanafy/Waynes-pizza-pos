@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { dayKeys, type StoreSettings } from "@/lib/content/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
@@ -23,7 +23,7 @@ export default async function SettingsPage({
 }) {
   await requirePermission("content.manage", "/admin/settings");
   const [settings, params] = await Promise.all([
-    getStoreSettings(),
+    getWorkspaceStoreSettings(),
     searchParams,
   ]);
   const supabase = await createServerSupabaseClient();
@@ -53,6 +53,24 @@ export default async function SettingsPage({
               label="Business name"
               name="store_name"
               required
+            />
+            <Input
+              defaultValue={settings.brand_name}
+              hint="How the business is named in texts and on the site. Leave blank to use the business name."
+              label="Brand name"
+              name="brand_name"
+            />
+            <Input
+              defaultValue={settings.brand_short_name}
+              hint="The short name used in site copy, e.g. “Wayne’s”."
+              label="Short name"
+              name="brand_short_name"
+            />
+            <Input
+              defaultValue={settings.rewards_program_name}
+              hint="The name of the text club. Leave blank for “<short name> Rewards”."
+              label="Rewards program name"
+              name="rewards_program_name"
             />
             <Input
               defaultValue={settings.owner_name}
@@ -202,7 +220,7 @@ export default async function SettingsPage({
         <SettingsSection title="Online ordering operations">
           <p className="rounded-xl border border-wayne-warn/30 bg-wayne-warn-soft p-4 text-sm font-semibold text-wayne-warn">
             Phase 2 accepts TEST / MANUAL orders only. No card payment is
-            collected. Confirm the tax rate with Wayne&apos;s accountant before
+            collected. Confirm the tax rate with your accountant before
             production use.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
@@ -287,7 +305,7 @@ export default async function SettingsPage({
           />
           <TextArea
             defaultValue={settings.story}
-            label="About Wayne's"
+            label="About the business"
             name="story"
             required
             rows={8}
@@ -322,7 +340,17 @@ export default async function SettingsPage({
               name="instagram_url"
               type="url"
             />
+            <Input
+              defaultValue={settings.tiktok_url}
+              label="TikTok URL (optional)"
+              name="tiktok_url"
+              type="url"
+            />
           </div>
+          <p className="text-sm text-wayne-muted">
+            Each link you fill in shows as an icon at the top of every page.
+            Clear one to take it down.
+          </p>
         </SettingsSection>
         <SettingsSection title="Regular hours">
           <div className="grid gap-3">

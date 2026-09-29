@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { getPublicSupabaseEnvironment } from "@/lib/supabase/env";
 import { logger } from "@/lib/logging/logger";
+import { requestHost } from "@/lib/content/queries";
 
 /** Only what a customer needs to decide. Usage counts and limits stay private. */
 export const publicPromotionSchema = z.object({
@@ -34,12 +35,14 @@ export function dealCondition(promotion: Pick<PublicPromotion, "minimum_order_ce
   return parts.join(" · ");
 }
 
+/** Public deals of the business that owns the request host (Phase 13). */
 export async function getPublicPromotions(): Promise<PublicPromotion[]> {
+  const host = await requestHost();
   const environment = getPublicSupabaseEnvironment();
   const supabase = createClient(environment.NEXT_PUBLIC_SUPABASE_URL, environment.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data, error } = await supabase.rpc("wayne_public_promotions");
+  const { data, error } = await supabase.rpc("hanafy_public_promotions", { target_hostname: host });
   if (error) {
     // A storefront with no deals still sells pizza, so this never takes the page
     // down — but it is written down rather than vanishing.

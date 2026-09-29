@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SupportPill } from "@/components/ops/support-banner";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getDriverBoard } from "@/lib/delivery/queries";
@@ -13,11 +14,12 @@ export default async function DriverPage() {
   let board: DriverBoard = { assignments: [], available: [] };
   let initialError = "";
   try { board = await getDriverBoard(); } catch { initialError = "Deliveries are unavailable. Checking connection…"; }
-  return <DriverScreen
+  return <><DriverScreen
+    businessName={access.workspace_name ?? "Deliveries"}
     initialBoard={board}
     initialError={initialError}
     staffName={access.display_name}
     canOpenAdmin={hasPermission(access, "admin.access")}
     canOpenPos={hasPermission(access, "pos.access")}
-  />;
+  /><SupportPill access={access} /></>;
 }

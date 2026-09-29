@@ -3,6 +3,7 @@ import { logger } from "@/lib/logging/logger";
 import { tryGetServerSupabaseEnvironment } from "@/lib/supabase/env";
 import { checkoutInputSchema, orderCreatedSchema } from "@/lib/orders/schemas";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
+import { requirePublicService } from "@/lib/tenancy/public-service";
 
 export async function POST(request: Request) {
   let input: unknown;
@@ -18,13 +19,19 @@ export async function POST(request: Request) {
       { status: 400 },
     );
 
+  // The order belongs to the business that owns this web address, and only
+  // while it offers online ordering (never a fallback business).
+  const service = await requirePublicService("online_ordering");
+  if (!service.ok) return service.response;
+  const storeName = service.storefront.settings.store_name;
+
   // Checkout and its rate limiter are not callable with the public anon key, so a
   // browser cannot skip the limiter by calling the database directly. Only this
   // server route, holding the service-role key, can place online orders.
   const environment = tryGetServerSupabaseEnvironment();
   if (!environment)
     return Response.json(
-      { error: "Online ordering is temporarily unavailable. Please call Wayne's Pizza." },
+      { error: `Online ordering is temporarily unavailable. Please call ${storeName}.` },
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   const supabase = createClient(
@@ -55,7 +62,7 @@ export async function POST(request: Request) {
   const result = orderCreatedSchema.safeParse(data);
   if (!result.success)
     return Response.json(
-      { error: "The order could not be confirmed. Please call Wayne's Pizza." },
+      { error: `The order could not be confirmed. Please call ${storeName}.` },
       { status: 500 },
     );
   return Response.json(result.data, {

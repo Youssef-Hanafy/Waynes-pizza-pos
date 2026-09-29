@@ -1,22 +1,29 @@
 import "server-only";
 
+import { getCurrentAccess } from "@/lib/auth/access";
+import { isStoreOpenNow } from "@/lib/content/store-status";
+import { getStorefront } from "@/lib/content/queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   checkoutPaymentConfigSchema, orderPaymentSchema, paymentConsoleSchema,
   paymentReconciliationSchema, type OrderPayment,
 } from "./schemas";
+import { paymentConnectionSummarySchema } from "./capabilities";
+import { resolvePaymentProvider } from "./config";
 
 /** Non-secret card configuration for the storefront. Never throws: no card, no checkout change. */
 export async function getCheckoutPaymentConfig() {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase.rpc("wayne_payment_checkout_config");
-    if (error) return null;
-    if (!data || typeof data !== "object" || !("online_card_enabled" in data) || data.online_card_enabled !== true) return null;
-    const raw = data as Record<string, unknown>;
-    const candidate = raw.provider === "stripe"
+    const storefront = await getStorefront();
+    if (!storefront.known || !storefront.workspace || !storefront.services.includes("online_ordering")) return null;
+    const resolved = await resolvePaymentProvider("online", {
+      workspaceId: storefront.workspace.workspace_id,
+      locationId: storefront.workspace.location_id,
+    });
+    if (!resolved.ok) return null;
+    const candidate = resolved.value.provider.code === "stripe"
       ? { provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true }
-      : raw;
+      : resolved.value.settings;
     const parsed = checkoutPaymentConfigSchema.safeParse(candidate);
     return parsed.success ? parsed.data : null;
   } catch {
@@ -62,10 +69,34 @@ export async function getOrderPayments(orderId: string): Promise<OrderPayment[]>
 /** Card readers the counter may charge. Returns nothing when reader payment is off. */
 export async function getPosTerminals() {
   const supabase = await createServerSupabaseClient();
+  const access = await getCurrentAccess();
+  if (!access?.workspace_id) return [];
   const [settings, terminals] = await Promise.all([
-    supabase.from("payment_provider_settings").select("terminal_card_enabled").eq("id", true).maybeSingle(),
-    supabase.from("payment_terminals").select("id, label, device_id, status").eq("status", "active").order("label"),
+    supabase.from("location_payment_configurations").select("terminal_card_enabled").eq("workspace_id", access.workspace_id).order("created_at").limit(1).maybeSingle(),
+    supabase.from("payment_terminals").select("id, label, device_id, status").eq("workspace_id", access.workspace_id).eq("status", "active").eq("terminal_type", "provider_reader").order("label"),
   ]);
   if (!settings.data?.terminal_card_enabled) return [];
   return (terminals.data ?? []).map((terminal) => ({ id: terminal.id, label: terminal.label }));
+}
+
+/**
+ * Whether customers can order online right now.  Online ordering is open when
+ * the store is open and there is a way to take the order: card payment is
+ * live, or TEST / MANUAL (no-payment) ordering is switched on.  Turning TEST
+ * ordering off at go-live must not close the storefront while cards are live.
+ */
+export async function isOnlineOrderingAvailable(settings: Parameters<typeof isStoreOpenNow>[0] & { test_ordering_enabled: boolean }, paymentConfig?: Awaited<ReturnType<typeof getCheckoutPaymentConfig>>) {
+  if (!isStoreOpenNow(settings)) return false;
+  if (settings.test_ordering_enabled) return true;
+  const card = paymentConfig === undefined ? await getCheckoutPaymentConfig() : paymentConfig;
+  return card !== null;
+}
+
+/** The business's payment connections (Phase 9), without secrets or webhook keys. */
+export async function getPaymentConnectionsSummary(workspaceSlug: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_payment_connections_summary", { target_workspace_slug: workspaceSlug });
+  if (error) return [];
+  const parsed = paymentConnectionSummarySchema.array().safeParse(data ?? []);
+  return parsed.success ? parsed.data : [];
 }

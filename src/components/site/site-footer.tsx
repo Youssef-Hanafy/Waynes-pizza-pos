@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { formatAddress, type StoreSettings } from "@/lib/content/schemas";
+import { brandNames, formatAddress, type StoreSettings } from "@/lib/content/schemas";
 import { BrandMark } from "./brand-mark";
 import { SiteIcon } from "./site-icon";
+import { SocialLinks } from "./social-links";
 export function SiteFooter({ settings }: { settings: StoreSettings }) {
   return (
     <footer className="site-footer">
@@ -9,38 +10,29 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
       <div className="site-container footer-grid">
         <div>
           <Link href="/" className="footer-brand">
-            <BrandMark />
+            <BrandMark badgeLabel={brandNames(settings).shortName} name={settings.store_name} city={[settings.city, settings.state].filter(Boolean).join(", ")} />
           </Link>
           <p>
-            Big flavor. Local love.
-            <br />
-            Your neighborhood pizza place for over 50 years.
+            {settings.story}
           </p>
         </div>
         <nav aria-label="Footer navigation">
           <h2>COME HUNGRY</h2>
           <Link href="/menu">Explore the menu</Link>
-          <Link href="/rewards">Wayne’s Rewards</Link>
-          <Link href="/about">The Wayne&apos;s story</Link>
+          <Link href="/rewards">Rewards</Link>
+          <Link href="/about">Our story</Link>
           <Link href="/contact">Hours & location</Link>
+          <Link href="/terms">Text messaging terms</Link>
+          <Link href="/privacy">Privacy policy</Link>
         </nav>
         <div>
-          <h2>FIND YOUR WAYNE’S</h2>
+          <h2>FIND US</h2>
           <address>{formatAddress(settings)}</address>
           <a className="footer-phone" href={`tel:${settings.public_phone}`}>
             <SiteIcon name="phone" size={17} />
             {settings.public_phone}
           </a>
-          {settings.facebook_url && (
-            <a href={settings.facebook_url} target="_blank" rel="noreferrer">
-              Facebook ↗
-            </a>
-          )}
-          {settings.instagram_url && (
-            <a href={settings.instagram_url} target="_blank" rel="noreferrer">
-              Instagram ↗
-            </a>
-          )}
+          <SocialLinks settings={settings} />
         </div>
         <div className="footer-cta">
           <SiteIcon name="pizza" size={37} />
@@ -59,7 +51,7 @@ export function SiteFooter({ settings }: { settings: StoreSettings }) {
           © {new Date().getFullYear()} {settings.store_name}. All rights
           reserved.
         </span>
-        <span>Made for Worcester. Made for you.</span>
+        <span>{[settings.city, settings.state].filter(Boolean).join(", ")}</span>
       </div>
     </footer>
   );

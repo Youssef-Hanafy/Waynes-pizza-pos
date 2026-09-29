@@ -1,5 +1,6 @@
 "use client";
 
+import { useStorefrontBrand } from "@/components/site/storefront-brand";
 import { RewardsButton } from "@/components/site/rewards-experience";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,13 +10,27 @@ import { MenuImage } from "@/components/site/menu-image";
 import { Button } from "@/components/ui/button";
 import { isMenuItemAvailableNow } from "@/lib/menu/availability";
 import {
+  choiceAllowsExtra,
   CART_STORAGE_KEY,
   cartLineUnitCents,
   cartSubtotalCents,
+  choicePriceDeltaCents,
+  describeLineModifiers,
   findMenuItem,
+  includedSelection,
+  isIncludedChoice,
   readCart,
 } from "@/lib/orders/cart";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
+import { OrderStartGate } from "@/components/site/order-start-gate";
+import {
+  ORDER_DETAILS_STORAGE_KEY,
+  estimateRange,
+  orderDetailsComplete,
+  readOrderDetails,
+  residenceLabels,
+  type OrderDetails,
+} from "@/lib/orders/order-details";
 import type { CartLine } from "@/lib/orders/schemas";
 
 type Fulfillment = "pickup" | "delivery";
@@ -44,6 +59,7 @@ export function OrderMenuClient({
   deliveryMinutes,
 }: Props) {
   const router = useRouter();
+  const brand = useStorefrontBrand();
   const [fulfillment, setFulfillment] = useState<Fulfillment>(
     initialFulfillment === "delivery" && deliveryEnabled
       ? "delivery"
@@ -85,7 +101,23 @@ export function OrderMenuClient({
     return () => window.removeEventListener("hashchange", followHash);
   }, [menu]);
   const [editingLine, setEditingLine] = useState<CartLine | null>(null);
+  /* Delivery cannot be quoted without an address and pickup cannot be called
+     out without a name, so both are asked for before the first item goes in the
+     cart rather than at the end. */
+  const [details, setDetails] = useState<OrderDetails | null>(null);
+  const [detailsReady, setDetailsReady] = useState(false);
+  /* null means "decide from what we know": the gate opens by itself when the
+     details for this fulfillment are missing. Opening or dismissing it by hand
+     overrides that until the fulfillment changes. */
+  const [gateManual, setGateManual] = useState<boolean | null>(null);
 
+  useEffect(() => {
+    const saved = readOrderDetails(window.localStorage.getItem(ORDER_DETAILS_STORAGE_KEY));
+    queueMicrotask(() => {
+      setDetails(saved);
+      setDetailsReady(true);
+    });
+  }, []);
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
@@ -105,8 +137,32 @@ export function OrderMenuClient({
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   function changeFulfillment(next: Fulfillment) {
     setFulfillment(next);
+    // Delivery and pickup ask for different things, so the question is open again.
+    setGateManual(null);
     router.replace(`/menu?fulfillment=${next}`, { scroll: false });
   }
+
+  function saveDetails(next: OrderDetails) {
+    setDetails(next);
+    try {
+      window.localStorage.setItem(ORDER_DETAILS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // A browser with storage blocked still gets to order; checkout simply asks
+      // for the address again rather than failing here.
+    }
+    setGateManual(null);
+  }
+
+  function cancelGate() {
+    setGateManual(false);
+    // "Switch to pickup" is the honest way out of the delivery question: someone
+    // who cannot give an address can still come and get it.
+    if (fulfillment === "delivery" && pickupEnabled) changeFulfillment("pickup");
+  }
+
+  const detailsSet = orderDetailsComplete(details, fulfillment);
+  // Ask as soon as the choice is made, not when they try to leave with a cart.
+  const gateOpen = gateManual ?? (detailsReady && orderingOpen && !detailsSet);
 
   function chooseCategory(categoryId: string) {
     setActiveCategory(categoryId);
@@ -118,6 +174,29 @@ export function OrderMenuClient({
   return (
     <div className="site-container ordering-layout">
       <div className="menu-main">
+        {detailsSet && details ? (
+          <div className="order-gate-summary">
+            <SiteIcon name={fulfillment === "delivery" ? "truck" : "bag"} size={17} />
+            <span>
+              {fulfillment === "delivery" ? (
+                <>
+                  <strong>{details.address1}</strong>
+                  {details.address2 ? `, ${details.address2}` : ""} ·{" "}
+                  {residenceLabels[details.residence_type]} ·{" "}
+                  {estimateRange(deliveryMinutes)}
+                </>
+              ) : (
+                <>
+                  Pickup for <strong>{details.first_name}</strong> ·{" "}
+                  {estimateRange(pickupMinutes)}
+                </>
+              )}
+            </span>
+            <button onClick={() => setGateManual(true)} type="button">
+              Change
+            </button>
+          </div>
+        ) : null}
         <div className="fulfillment-toolbar">
           <div>
             <span className="eyebrow">YOUR ORDER, YOUR WAY</span>
@@ -419,13 +498,22 @@ export function OrderMenuClient({
               Delivery fee, discounts, tax, and optional tip are finalized
               securely at checkout.
             </p>
-            {canCheckout ? (
+            {canCheckout && detailsSet ? (
               <Link
                 className="order-button cart-checkout"
                 href={`/checkout?fulfillment=${fulfillment}`}
               >
                 Continue to checkout <SiteIcon name="arrow" size={18} />
               </Link>
+            ) : canCheckout ? (
+              <button
+                className="order-button cart-checkout"
+                onClick={() => setGateManual(true)}
+                type="button"
+              >
+                {fulfillment === "delivery" ? "Add your address" : "Add your name"}{" "}
+                <SiteIcon name="arrow" size={18} />
+              </button>
             ) : (
               <p className="site-notice">Checkout is currently closed.</p>
             )}
@@ -448,7 +536,7 @@ export function OrderMenuClient({
           <SiteIcon name="check" size={14} /> Customize every bite before
           checkout.
         </p>
-        <RewardsButton className="cart-rewards-link">Pizza person? Join Wayne’s Rewards →</RewardsButton>
+        {brand.services.includes("sms") ? <RewardsButton className="cart-rewards-link">Pizza person? Join {brand.rewardsName} →</RewardsButton> : null}
       </aside>
 
       <div role="status" className={announcement ? "cart-toast" : "sr-only"}>
@@ -478,6 +566,15 @@ export function OrderMenuClient({
           </strong>
         </a>
       )}
+      <OrderStartGate
+        deliveryMinutes={deliveryMinutes}
+        fulfillment={fulfillment}
+        initial={details}
+        onCancel={cancelGate}
+        onSave={saveDetails}
+        open={gateOpen}
+        pickupMinutes={pickupMinutes}
+      />
       {selected ? (
         <ItemDialog
           item={selected}
@@ -533,6 +630,7 @@ function ItemDialog({
   onAdd: (line: CartLine) => void;
   onClose: () => void;
 }) {
+  const brand = useStorefrontBrand();
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -559,13 +657,7 @@ function ItemDialog({
             modifier.quantity,
           ]),
         )
-      : Object.fromEntries(
-          item.modifier_groups.flatMap((group) =>
-            group.choices
-              .filter((choice) => choice.default_selected)
-              .map((choice) => [choice.id, 1]),
-          ),
-        ),
+      : includedSelection(item),
   );
   const [quantity, setQuantity] = useState(initialLine?.quantity ?? 1);
   const [instructions, setInstructions] = useState(
@@ -595,6 +687,29 @@ function ItemDialog({
       items: [item],
     },
   ] as PublicMenu;
+  // What the item comes with, once each, for the summary at the top.
+  const comesWith = item.modifier_groups
+    .flatMap((group) =>
+      group.choices.filter(isIncludedChoice).map((choice) => ({ group, choice })),
+    )
+    .filter(
+      (entry, index, all) =>
+        all.findIndex((other) => other.choice.id === entry.choice.id) === index,
+    );
+
+  function setChoice(
+    group: MenuItem["modifier_groups"][number],
+    choiceId: string,
+    count: number,
+  ) {
+    setSelectedChoices({
+      ...selectedChoices,
+      ...(group.max_select === 1 && count > 0
+        ? Object.fromEntries(group.choices.map((option) => [option.id, 0]))
+        : {}),
+      [choiceId]: count,
+    });
+  }
 
   function add() {
     for (const group of item.modifier_groups) {
@@ -649,10 +764,37 @@ function ItemDialog({
         <div className="item-dialog-body">
           <p className="eyebrow">LET’S MAKE IT YOURS</p>
           <h2 id="item-dialog-title">{item.name}</h2>
-          <p className="item-dialog-description">
-            {item.description ||
-              "Your Wayne’s favorite. Choose your size and make it just right."}
-          </p>
+          {comesWith.length ? (
+            <div className="item-comes-with" aria-label="Comes with">
+              <p className="item-comes-with-title">Comes with</p>
+              <div className="item-comes-with-list">
+                {comesWith.map(({ group, choice }) => {
+                  const on = Boolean(selectedChoices[choice.id]);
+                  return (
+                    <button
+                      aria-pressed={on}
+                      className="item-comes-with-chip"
+                      data-on={on}
+                      key={choice.id}
+                      onClick={() => setChoice(group, choice.id, on ? 0 : 1)}
+                      type="button"
+                    >
+                      {on ? "✓ " : "No "}
+                      {choice.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="item-comes-with-hint">
+                Tap to take something off — it stays the same price.
+              </p>
+            </div>
+          ) : (
+            <p className="item-dialog-description">
+              {item.description ||
+                `Your ${brand.shortName} favorite. Choose your size and make it just right.`}
+            </p>
+          )}
           {item.variants.length ? (
             <fieldset className="mt-6">
               <legend className="font-black">Choose a size</legend>
@@ -688,11 +830,21 @@ function ItemDialog({
                 </span>
               </legend>
               <div className="mt-3 grid gap-2">
-                {group.choices.map((choice) => {
+                {[...group.choices]
+                  .sort(
+                    (a, b) =>
+                      Number(isIncludedChoice(b)) - Number(isIncludedChoice(a)),
+                  )
+                  .map((choice) => {
                   const count = selectedChoices[choice.id] ?? 0;
+                  // what this option costs on the size chosen above
+                  const delta = choicePriceDeltaCents(choice, variantId);
+                  const included = isIncludedChoice(choice);
                   return (
                     <div
                       className="item-choice"
+                      data-included={included}
+                      data-removed={included && count === 0}
                       data-selected={count > 0}
                       key={choice.id}
                     >
@@ -721,17 +873,23 @@ function ItemDialog({
                               : "checkbox"
                           }
                         />
-                        <span>
+                        <span className="item-choice-name">
                           {choice.name}
-                          {choice.price_delta_cents ? (
+                          {included ? (
+                            <small className="item-choice-tag">
+                              {count ? "Included" : "Removed"}
+                            </small>
+                          ) : null}
+                          {delta && (!included || count > 0) ? (
                             <small className="ml-2 text-wayne-muted">
-                              {choice.price_delta_cents > 0 ? "+" : ""}
-                              {formatCents(choice.price_delta_cents)}
+                              {delta > 0 ? "+" : ""}
+                              {formatCents(delta)}
+                              {included ? " extra" : ""}
                             </small>
                           ) : null}
                         </span>
                       </label>
-                      {group.allow_quantities && count > 0 ? (
+                      {choiceAllowsExtra(group, choice) && count > 0 ? (
                         <div className="flex items-center gap-2">
                           <button
                             aria-label={`Less ${choice.name}`}
@@ -826,16 +984,7 @@ function CartLineOptions({
   line: CartLine;
 }) {
   if (!item) return null;
-  const options = line.modifiers.flatMap((modifier) =>
-    item.modifier_groups.flatMap((group) =>
-      group.choices
-        .filter((choice) => choice.id === modifier.choice_id)
-        .map(
-          (choice) =>
-            `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`,
-        ),
-    ),
-  );
+  const options = describeLineModifiers(item, line).map((note) => note.label);
   return (
     <>
       {options.length ? (

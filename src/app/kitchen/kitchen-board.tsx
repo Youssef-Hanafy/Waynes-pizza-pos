@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { elapsedLabel, kitchenBoardSchema, nextKitchenAction, type KitchenTicket } from "@/lib/kitchen/schemas";
 import { nextHandOff } from "@/lib/orders/status";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
-type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; canOpenAdmin: boolean; canOpenPos: boolean; canManageOrders: boolean };
+type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; businessName: string; canOpenAdmin: boolean; canOpenPos: boolean; canManageOrders: boolean };
 
-export function KitchenBoard({ initialTickets, initialError, staffName, canOpenAdmin, canOpenPos, canManageOrders }: Props) {
+export function KitchenBoard({ initialTickets, initialError, staffName, businessName, canOpenAdmin, canOpenPos, canManageOrders }: Props) {
   const [tickets, setTickets] = useState(initialTickets);
   const [error, setError] = useState(initialError);
   const [connection, setConnection] = useState("Connecting");
@@ -42,8 +43,8 @@ export function KitchenBoard({ initialTickets, initialError, staffName, canOpenA
   useEffect(() => {
     mounted.current = true;
     const client = createBrowserSupabaseClient();
-    const channel = client?.channel("wayne-kitchen-board")
-      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets" }, () => { void refresh(); })
+    const channel = client?.channel(`hanafy-kitchen-board-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, () => { void refresh(); })
       .subscribe((status) => {
         if (!mounted.current) return;
         setConnection(status === "SUBSCRIBED" ? "Live" : "Reconnecting · backup refresh on");
@@ -100,7 +101,7 @@ export function KitchenBoard({ initialTickets, initialError, staffName, canOpenA
 
   return <div className="min-h-screen bg-wayne-cream-deep">
     <header className="bg-wayne-green px-5 py-4 text-wayne-cream"><div className="flex flex-wrap items-center justify-between gap-4">
-      <div><p className="text-sm font-bold text-wayne-gold">Wayne&apos;s Pizza</p><h1 className="text-3xl font-black">Kitchen</h1><p className="text-sm text-wayne-cream/70">{staffName}</p></div>
+      <div><p className="text-sm font-bold text-wayne-gold">{businessName}</p><h1 className="text-3xl font-black">Kitchen</h1><p className="text-sm text-wayne-cream/70">{staffName}</p></div>
       <nav className="flex gap-2">{canOpenPos ? <Button asChild variant="secondary"><Link href="/pos">Front POS</Link></Button> : null}{canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin">Admin</Link></Button> : null}<Button asChild variant="secondary"><Link href="/login?next=%2Fkitchen">Switch account</Link></Button></nav>
     </div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm"><p role="status">{connection}{lastSynced && now ? ` · refreshed ${Math.max(0, Math.floor((now - lastSynced) / 1000))}s ago` : " · loading tickets"}</p><Button onClick={() => { void refresh(); }} variant="secondary">Refresh tickets</Button></div></header>
     <main className="p-4 sm:p-6">

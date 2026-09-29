@@ -11,7 +11,7 @@ type GoogleWindow = Window & {
   google?: { maps?: { places?: { Autocomplete: new (input: HTMLInputElement, options: { componentRestrictions: { country: string }; fields: string[] }) => GoogleAutocomplete } } };
 };
 
-export function GoogleAddressInput() {
+export function GoogleAddressInput({ defaultValue = "" }: { defaultValue?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -46,5 +46,5 @@ export function GoogleAddressInput() {
     document.head.appendChild(script);
   }, [apiKey]);
 
-  return <div className="grid content-start gap-1.5 sm:col-span-2"><label className="text-sm font-bold tracking-tight" htmlFor="address1">{apiKey ? "Find your delivery address" : "Street address"}<span aria-hidden className="ml-1 text-wayne-red">*</span></label><input ref={inputRef} className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" id="address1" name="address1" required /><p className="text-xs text-wayne-muted">{apiKey ? "Choose a suggestion from Google Maps for accurate delivery." : "Google address suggestions appear after NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured."}</p></div>;
+  return <div className="grid content-start gap-1.5 sm:col-span-2"><label className="text-sm font-bold tracking-tight" htmlFor="address1">{apiKey ? "Find your delivery address" : "Street address"}<span aria-hidden className="ml-1 text-wayne-red">*</span></label><input ref={inputRef} className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" defaultValue={defaultValue} id="address1" name="address1" required /><p className="text-xs text-wayne-muted">{apiKey ? "Choose a suggestion from Google Maps for accurate delivery." : "Google address suggestions appear after NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured."}</p></div>;
 }

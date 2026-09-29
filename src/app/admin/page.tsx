@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePermission } from "@/lib/auth/access";
 import { hasPermission, type Permission } from "@/lib/auth/permissions";
-import { getStoreSettings } from "@/lib/content/queries";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { dashboardPresets, resolveDashboardRange } from "@/lib/dashboard/range";
 import { getDashboard, getSetupStatus } from "@/lib/dashboard/queries";
 import { goLiveChecklist, type Dashboard } from "@/lib/dashboard/schemas";
@@ -38,7 +38,7 @@ type Search = { range?: string; from?: string; to?: string };
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<Search> }) {
   const access = await requirePermission("admin.access", "/admin");
-  const [params, settings, setup] = await Promise.all([searchParams, getStoreSettings(), getSetupStatus()]);
+  const [params, settings, setup] = await Promise.all([searchParams, getWorkspaceStoreSettings(), getSetupStatus()]);
   const canReport = hasPermission(access, "reports.view");
   const range = resolveDashboardRange(params.range, businessDate(settings.timezone), params.from, params.to);
   const dashboard = canReport ? await getDashboard(range.from, range.to) : null;
@@ -53,7 +53,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   ].filter((item): item is { text: string; href: string } => item !== null);
 
   return <main className="mx-auto max-w-6xl px-5 py-10">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Dashboard</p><h1 className="mt-3 text-4xl font-black">Wayne&apos;s Pizza today</h1><p className="mt-2 text-wayne-muted">{setup.open_order_count} open order{setup.open_order_count === 1 ? "" : "s"} right now · all figures use the {settings.timezone} business day</p></div><AutoRefresh intervalMs={30_000} live /></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Dashboard</p><h1 className="mt-3 text-4xl font-black">{settings.store_name} today</h1><p className="mt-2 text-wayne-muted">{setup.open_order_count} open order{setup.open_order_count === 1 ? "" : "s"} right now · all figures use the {settings.timezone} business day</p></div><AutoRefresh intervalMs={30_000} live /></div>
 
     {remaining.length ? <Card className="mt-7 border-wayne-warn/40 p-5"><h2 className="text-xl font-black">Before going live · {checklist.length - remaining.length} of {checklist.length} done</h2><ul className="mt-3 grid gap-2 md:grid-cols-2">{checklist.map((item) => <li className="flex gap-3" key={item.label}><span aria-hidden="true" className={`mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs font-black ${item.done ? "bg-wayne-ok text-white" : "border-2 border-wayne-warn/60"}`}>{item.done ? "✓" : ""}</span><div><Link className="font-bold underline" href={item.href}>{item.label}</Link><span className="sr-only">{item.done ? " (done)" : " (to do)"}</span><p className="text-sm text-wayne-muted">{item.detail}</p></div></li>)}</ul></Card> : null}
 
