@@ -21,6 +21,7 @@ import { platformMessagingSchema } from "./messaging";
 import { platformHardwareSchema } from "./hardware";
 import { platformBillingOverviewSchema, platformWorkspaceBillingSchema } from "./billing";
 import { workspaceSetupSchema } from "./provisioning";
+import { platformDomainsSchema } from "./domains";
 
 /** The signed-in Hanafy platform user, or null for everyone else. */
 export const getPlatformMe = cache(async (): Promise<PlatformMe | null> => {
@@ -121,4 +122,8 @@ export function getPlatformBillingOverview() {
 
 export function getPlatformWorkspaceSetup(slug: string) {
   return call("hanafy_platform_workspace_setup", { target_workspace_slug: slug }, (data) => workspaceSetupSchema.parse(data));
+}
+
+export function getPlatformWorkspaceDomains(slug: string) {
+  return call("hanafy_platform_workspace_domains", { target_workspace_slug: slug }, (data) => platformDomainsSchema.parse(data));
 }

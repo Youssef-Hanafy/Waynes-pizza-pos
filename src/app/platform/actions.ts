@@ -20,6 +20,7 @@ import { saveHardwareInputSchema } from "@/lib/platform/hardware";
 import { billingIntervals, billingResultSchema, paymentMethods } from "@/lib/platform/billing";
 import { parseDollarsToCents } from "@/lib/platform/money";
 import { provisionInputSchema, provisionResultSchema, statusResultSchema, weekDays } from "@/lib/platform/provisioning";
+import { cleanHostname, domainResultSchema, storefrontFields } from "@/lib/platform/domains";
 import { z } from "zod";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
@@ -687,4 +688,64 @@ export async function setWorkspaceStatus(form: FormData) {
   }
   revalidatePath("/platform", "layout");
   back(path, result.data.status === "unchanged" ? "Nothing changed." : `Business is now ${status.data}.`, "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Domains & storefront (Phase 13)
+// ---------------------------------------------------------------------------
+export async function saveDomain(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/domains");
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const action = text(form, "action") || "add";
+  if (!["add", "canonical", "activate", "deactivate", "remove"].includes(action)) back(path, "Unknown action.");
+  const reason = z.string().trim().min(5, "Give a reason (at least 5 characters).").max(500).safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const payload: Record<string, unknown> = { action };
+  if (action === "add") {
+    const host = cleanHostname(text(form, "hostname"));
+    if (!host) back(path, "Enter a web address like orders.joesdeli.com.");
+    payload.hostname = host;
+    payload.location_id = text(form, "location_id");
+    payload.is_canonical = text(form, "is_canonical") === "yes";
+  } else {
+    payload.id = text(form, "id");
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_save_domain", {
+    target_workspace_slug: workspace, payload, change_reason: reason.data, confirmed: text(form, "confirmed") === "yes",
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = domainResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check.");
+  if (result.data.status === "needs_confirmation") {
+    back(path, "Confirm this change", "error", { confirm: action, id: String(payload.id ?? ""), reason: reason.data, warnings: JSON.stringify(result.data.warnings.slice(0, 8)) });
+  }
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  back(path, action === "add" ? `${String(payload.hostname)} added. Point its DNS at the app host so it starts answering.` : "Web address updated.", "saved");
+}
+
+export async function saveStorefront(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/domains");
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const reason = z.string().trim().min(5, "Give a reason (at least 5 characters).").max(500).safeParse(text(form, "reason"));
+  if (!reason.success) back(path, reason.error.issues[0]?.message ?? "Give a reason.");
+  const locationId = z.uuid().safeParse(text(form, "location_id"));
+  if (!locationId.success) back(path, "Pick a location.");
+  const payload: Record<string, unknown> = {};
+  for (const [key, , max] of storefrontFields) if (form.has(key)) payload[key] = text(form, key).slice(0, max);
+  if (form.has("ordering_open")) payload.ordering_open = text(form, "ordering_open") === "yes";
+  if (form.has("brand_primary")) {
+    const color = text(form, "brand_primary").trim();
+    if (color && !/^#[0-9a-f]{6}$/i.test(color)) back(path, "Brand colour looks like #b02222.");
+    payload.brand_primary = color;
+  }
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("hanafy_platform_save_storefront", {
+    target_workspace_slug: workspace, target_location_id: locationId.data, payload, change_reason: reason.data,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  revalidatePath(`/platform/workspaces/${workspace}`, "layout");
+  back(path, "Website basics saved. The website shows them on the next page load.", "saved");
 }

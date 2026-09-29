@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { MemberOffers } from "@/components/site/member-offers";
 import { OfferList, PersonalLink } from "@/components/site/offer-list";
 import { RewardsButton } from "@/components/site/rewards-experience";
-import { storefrontSettings } from "@/lib/content/queries";
+import { getStorefront, storefrontSettings } from "@/lib/content/queries";
 import { brandNames } from "@/lib/content/schemas";
 import { logger } from "@/lib/logging/logger";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
@@ -50,7 +51,10 @@ async function lookUp(key: string): Promise<Lookup> {
 }
 
 export default async function PersonalOffersPage({ params }: { params: Promise<{ key: string }> }) {
-  const [{ key }, settings] = await Promise.all([params, storefrontSettings("sms")]);
+  const [{ key }, settings, storefront] = await Promise.all([params, storefrontSettings("sms"), getStorefront()]);
+  // Personal offer links are served by the pre-platform offers functions, which
+  // belong to one business: any other web address gets a 404 (Phase 13).
+  if (!storefront.workspace?.legacy_operations) notFound();
   const brand = brandNames(settings);
   const lookup = await lookUp(decodeURIComponent(key).slice(0, 60));
   const result = lookup.state === "ok" ? lookup.result : null;

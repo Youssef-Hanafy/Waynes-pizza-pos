@@ -22,10 +22,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { settings, services } = await getStorefront();
+  const { settings, services, workspace } = await getStorefront();
+  // Tenant theme (Phase 13): a business's brand colour replaces the default accent.
+  const primary = workspace?.brand_colors?.primary;
+  const theme = primary ? ({ "--color-wayne-red": primary, "--color-wayne-red-dark": `color-mix(in srgb, ${primary} 80%, black)`, "--color-wayne-red-soft": `color-mix(in srgb, ${primary} 12%, white)` } as React.CSSProperties) : undefined;
   return (
     <html className={`${inter.variable} ${archivo.variable}`} lang="en">
-      <body className="font-sans antialiased"><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider></body>
+      <body className="font-sans antialiased" style={theme}><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider></body>
     </html>
   );
 }

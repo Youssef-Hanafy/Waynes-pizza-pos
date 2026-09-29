@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { getPublicSupabaseEnvironment } from "@/lib/supabase/env";
 import { publicOrderStatusSchema, type PublicOrderStatus } from "./schemas";
+import { requestHost } from "@/lib/content/queries";
 
 export async function getPublicOrderStatus(
   orderId: string,
@@ -14,7 +15,9 @@ export async function getPublicOrderStatus(
     environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
-  const { data, error } = await supabase.rpc("wayne_public_order_status", {
+  // Only the business that owns this web address can show its order (Phase 13).
+  const { data, error } = await supabase.rpc("hanafy_public_order_status", {
+    target_hostname: await requestHost(),
     target_order_id: orderId,
     access_token: token,
   });

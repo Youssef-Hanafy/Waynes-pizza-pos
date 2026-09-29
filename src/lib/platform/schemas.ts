@@ -369,6 +369,15 @@ export function platformErrorMessage(message: string | undefined) {
     "stays archived",
     "cannot be archived",
     "Choose active",
+    "Enter a web address",
+    "belongs to the Hanafy platform",
+    "is already used by",
+    "Web address not found",
+    "Switch the web address off",
+    "cannot be changed here",
+    "must be text",
+    "Links must start",
+    "Brand colour",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
   if (message?.includes("workspace_subscriptions_one_base")) return "This business already has a live base agreement. Change or cancel it, or add this as an add-on.";

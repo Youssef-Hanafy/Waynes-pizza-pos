@@ -23,6 +23,7 @@ const publicWorkspaceSchema = z.object({
   workspace_slug: z.string().min(1),
   enabled_services: z.array(z.string()),
   legacy_operations: z.boolean(),
+  brand_colors: z.object({ primary: z.string().regex(/^#[0-9a-f]{6}$/i).optional() }).catchall(z.unknown()).optional(),
 });
 export type PublicWorkspace = z.infer<typeof publicWorkspaceSchema>;
 
