@@ -62,7 +62,10 @@ export default async function PlatformWorkspaceHealthPage({ params, searchParams
           <Row label="Last real call" value={when(health.caller_id.last_ring_at, tz)} />
           <Row label="Active registers" value={workspace.hardware.registers} />
           <Row label="Caller-ID lines" value={workspace.hardware.caller_lines} />
-          <p className="mt-3 text-xs text-wayne-muted">Per-device last-seen and heartbeat health arrive with hardware administration in Phase 10.</p>
+          <Row label="Devices reporting health" value={workspace.hardware.monitored} />
+          <Row label="Devices reporting a problem" value={workspace.hardware.problems} tone={workspace.hardware.problems > 0 ? "alert" : undefined} />
+          <Row label="Devices never seen yet" value={workspace.hardware.never_seen} tone={workspace.hardware.never_seen > 0 ? "warn" : undefined} />
+          <a className="mt-3 inline-block text-sm font-bold underline" href={`/platform/workspaces/${workspace.slug}/hardware`}>Per-device health</a>
         </Card>
       </div>
     </div>

@@ -65,6 +65,7 @@ export const workspaceHealthSchema = z.object({
   payments: z.object({ webhook_problems_7d: count }),
   orders: z.object({ last_order_at: timestamp.nullable(), last_24h: count }),
   caller_id: z.object({ last_ring_at: timestamp.nullable() }),
+  hardware: z.object({ devices: count, monitored: count, problems: count, never_seen: count }).optional(),
 });
 export type WorkspaceHealth = z.infer<typeof workspaceHealthSchema>;
 
@@ -92,7 +93,14 @@ export const workspaceSummarySchema = z.object({
     online_card_enabled: z.boolean(),
     terminal_card_enabled: z.boolean(),
   }).nullable(),
-  hardware: z.object({ registers: count, caller_lines: count }),
+  hardware: z.object({
+    registers: count,
+    caller_lines: count,
+    devices: count.default(0),
+    monitored: count.default(0),
+    problems: count.default(0),
+    never_seen: count.default(0),
+  }),
   health: workspaceHealthSchema,
   billing: z.null(),
 });
@@ -319,8 +327,19 @@ export function platformErrorMessage(message: string | undefined) {
     "That location does not belong",
     "Payment connection not found",
     "messaging_identities_number_owner",
+    "HARDWARE_SECRET_REFUSED",
+    "Admin → Hardware",
+    "is not valid",
+    "Port must be",
+    "Pick a device type",
+    "Device not found",
+    "does not exist at that location",
+    "Only a payment terminal device",
+    "That card terminal does not belong",
+    "Caller lines can only be served",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
+  if (message?.includes("hardware_devices_asset_tag_unique")) return "That asset tag is already used by another device of this business.";
   if (message?.includes("payment_connections_one_live")) return "This location already has a live payment connection for that purpose. Turn the old one off first.";
   if (message && known.some((part) => message.includes(part))) return message;
   return "The change could not be saved. Refresh and try again.";

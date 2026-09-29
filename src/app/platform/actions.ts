@@ -16,6 +16,7 @@ import {
   startSupportInputSchema,
 } from "@/lib/platform/schemas";
 import { saveMessagingInputSchema, saveMessagingResultSchema } from "@/lib/platform/messaging";
+import { saveHardwareInputSchema } from "@/lib/platform/hardware";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions } from "@/lib/tenancy/active-workspace";
 import { zonedLocalToUtcIso } from "@/lib/time/zoned";
@@ -393,4 +394,39 @@ export async function testWorkspacePaymentConnection(form: FormData) {
   if (error) back(path, platformErrorMessage(error.message));
   revalidatePath(path);
   back(path, outcome.note, outcome.ok ? "saved" : "error");
+}
+
+// ---------------------------------------------------------------------------
+// Hardware (Phase 10)
+// ---------------------------------------------------------------------------
+export async function saveHardwareDevice(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/hardware");
+  await requirePlatformUser({ manage: true, nextPath: path });
+
+  // Only fields actually on the submitted form are sent, so a partial form
+  // (e.g. "retire") never blanks the others.
+  const fields = ["id", "device_type", "name", "vendor", "model", "serial_number", "asset_tag", "status", "ownership_type", "connection_type",
+    "ip_address", "mac_address", "protocol", "port", "assigned_service", "monitoring", "location_id", "notes", "payment_terminal_id"] as const;
+  const payload: Record<string, unknown> = {};
+  for (const key of fields) if (form.has(key)) payload[key] = text(form, key);
+  if (form.has("caller_lines_present")) payload.caller_lines = form.getAll("caller_lines").map(String);
+
+  const parsed = saveHardwareInputSchema.safeParse({ workspace, reason: text(form, "reason"), payload });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the device details.");
+  // Cleared optional fields must reach the database as "" so they are cleared.
+  const cleaned: Record<string, unknown> = { ...parsed.data.payload };
+  for (const key of ["vendor", "model", "serial_number", "asset_tag", "notes", "ip_address", "mac_address", "protocol", "port"] as const) {
+    if (key in payload && cleaned[key] === undefined) cleaned[key] = "";
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("hanafy_platform_save_hardware_device", {
+    target_workspace_slug: parsed.data.workspace,
+    payload: cleaned,
+    change_reason: parsed.data.reason,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  revalidatePath(`/platform/workspaces/${parsed.data.workspace}`, "layout");
+  back(path, cleaned.status === "retired" ? "Device retired. Its history is kept." : "Device saved.", "saved");
 }

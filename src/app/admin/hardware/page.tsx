@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { printerModelKeys, printerModels } from "@/hardware/printers/models";
-import { getHardwareSettings } from "@/lib/hardware/queries";
+import { getHardwareSettings, getWorkspaceDevices } from "@/lib/hardware/queries";
+import { deviceTypeLabels, healthLabels, healthTone, ownershipLabels } from "@/lib/platform/hardware";
+import { Badge } from "@/components/ui/badge";
+import { formatAdminDateTime } from "@/lib/orders/admin-format";
+import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { getPosMenu } from "@/lib/pos/queries";
 import { saveHardwareSettings } from "./actions";
 import { HardwareLive } from "./hardware-live";
@@ -26,9 +30,10 @@ const providerLabels = {
  * plainly that they are not connected.
  */
 export default async function HardwarePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
-  await requirePermission("hardware.manage", "/admin/hardware");
+  const access = await requirePermission("hardware.manage", "/admin/hardware");
   const params = await searchParams;
-  const [{ settings, unavailable }, menu] = await Promise.all([getHardwareSettings(), getPosMenu().catch(() => [])]);
+  const [{ settings, unavailable }, menu, devices] = await Promise.all([getHardwareSettings(), getPosMenu().catch(() => []), getWorkspaceDevices(access.workspace_slug ?? null)]);
+  const { timezone } = await getWorkspaceStoreSettings();
   const receipt = settings.receipt_printer;
   const kitchen = settings.kitchen_printers[0] ?? {};
   const routed = new Set(kitchen.routing_categories ?? []);
@@ -122,6 +127,25 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
 
       <div><Button size="lg" type="submit">Save hardware settings</Button></div>
     </form>
+
+    <Card className="mt-8 p-6">
+      <h2 className="text-2xl font-black">Devices on record</h2>
+      <p className="mt-2 text-sm text-wayne-muted">Everything Hanafy has recorded for this store. Printers, the drawer and the caller-ID box update from the settings above; health shows only after a real ticket prints or a real call rings.</p>
+      {devices === null ? <p className="mt-4 text-wayne-muted">The device list could not be loaded right now.</p> : (
+        <div className="mt-4 grid gap-2">
+          {devices.map((device) => (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-wayne-border p-3" key={device.id}>
+              <span><strong>{device.name}</strong> <span className="text-sm text-wayne-muted">· {deviceTypeLabels[device.device_type]}{device.ip_address ? ` · ${device.ip_address}` : ""} · {ownershipLabels[device.ownership_type]}</span></span>
+              <span className="flex items-center gap-2 text-sm">
+                {device.monitoring === "telemetry" && device.last_seen_at ? <span className="text-wayne-muted">last seen {formatAdminDateTime(device.last_seen_at, timezone)}</span> : null}
+                <Badge tone={healthTone(device.health)}>{healthLabels[device.health]}</Badge>
+              </span>
+            </div>
+          ))}
+          {devices.length === 0 ? <p className="text-wayne-muted">No devices recorded yet.</p> : null}
+        </div>
+      )}
+    </Card>
   </main>;
 }
 

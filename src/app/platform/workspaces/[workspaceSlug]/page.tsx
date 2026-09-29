@@ -74,9 +74,11 @@ export default async function PlatformWorkspaceOverviewPage({ params, searchPara
         </Card>
         <Card className="p-5">
           <h2 className="text-xl font-black">Hardware</h2>
-          <p className="mt-3">{workspace.hardware.registers} active register{workspace.hardware.registers === 1 ? "" : "s"}</p>
-          <p>{workspace.hardware.caller_lines} caller-ID line{workspace.hardware.caller_lines === 1 ? "" : "s"}</p>
-          <p className="mt-3 text-xs text-wayne-muted">Device inventory, health and equipment ownership come in Phase 10.</p>
+          <p className="mt-3">{workspace.hardware.devices} device{workspace.hardware.devices === 1 ? "" : "s"} on record · {workspace.hardware.monitored} reporting health</p>
+          {workspace.hardware.problems ? <p className="font-bold text-wayne-alert">{workspace.hardware.problems} reporting a problem</p> : null}
+          {workspace.hardware.never_seen ? <p className="text-wayne-warn">{workspace.hardware.never_seen} not seen yet</p> : null}
+          <p>{workspace.hardware.caller_lines} caller-ID line{workspace.hardware.caller_lines === 1 ? "" : "s"} · {workspace.hardware.registers} active register{workspace.hardware.registers === 1 ? "" : "s"}</p>
+          <a className="mt-3 inline-block text-sm font-bold underline" href={`/platform/workspaces/${workspace.slug}/hardware`}>Open hardware</a>
         </Card>
       </div>
 
