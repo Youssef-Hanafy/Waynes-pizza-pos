@@ -7,6 +7,7 @@ import {
   checkoutPaymentConfigSchema, orderPaymentSchema, paymentConsoleSchema,
   paymentReconciliationSchema, type OrderPayment,
 } from "./schemas";
+import { paymentConnectionSummarySchema } from "./capabilities";
 
 /** Non-secret card configuration for the storefront. Never throws: no card, no checkout change. */
 export async function getCheckoutPaymentConfig() {
@@ -63,7 +64,7 @@ export async function getPosTerminals() {
   if (!access?.workspace_id) return [];
   const [settings, terminals] = await Promise.all([
     supabase.from("location_payment_configurations").select("terminal_card_enabled").eq("workspace_id", access.workspace_id).order("created_at").limit(1).maybeSingle(),
-    supabase.from("payment_terminals").select("id, label, device_id, status").eq("workspace_id", access.workspace_id).eq("status", "active").order("label"),
+    supabase.from("payment_terminals").select("id, label, device_id, status").eq("workspace_id", access.workspace_id).eq("status", "active").eq("terminal_type", "provider_reader").order("label"),
   ]);
   if (!settings.data?.terminal_card_enabled) return [];
   return (terminals.data ?? []).map((terminal) => ({ id: terminal.id, label: terminal.label }));
@@ -80,4 +81,13 @@ export async function isOnlineOrderingAvailable(settings: Parameters<typeof isSt
   if (settings.test_ordering_enabled) return true;
   const card = paymentConfig === undefined ? await getCheckoutPaymentConfig() : paymentConfig;
   return card !== null;
+}
+
+/** The business's payment connections (Phase 9), without secrets or webhook keys. */
+export async function getPaymentConnectionsSummary(workspaceSlug: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_payment_connections_summary", { target_workspace_slug: workspaceSlug });
+  if (error) return [];
+  const parsed = paymentConnectionSummarySchema.array().safeParse(data ?? []);
+  return parsed.success ? parsed.data : [];
 }

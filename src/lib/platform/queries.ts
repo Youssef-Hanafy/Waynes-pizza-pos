@@ -16,6 +16,7 @@ import {
   type MySupportSession,
   type PlatformMe,
 } from "./schemas";
+import { platformIntegrationsSchema } from "./integrations";
 import { platformMessagingSchema } from "./messaging";
 
 /** The signed-in Hanafy platform user, or null for everyone else. */
@@ -93,4 +94,8 @@ export function getPlatformAudit(maxRows = 300) {
 
 export function getPlatformWorkspaceMessaging(slug: string) {
   return call("hanafy_platform_workspace_messaging", { target_workspace_slug: slug }, (data) => platformMessagingSchema.parse(data));
+}
+
+export function getPlatformWorkspaceIntegrations(slug: string) {
+  return call("hanafy_platform_workspace_integrations", { target_workspace_slug: slug }, (data) => platformIntegrationsSchema.parse(data));
 }

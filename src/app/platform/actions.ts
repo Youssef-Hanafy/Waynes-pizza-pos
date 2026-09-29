@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { logger } from "@/lib/logging/logger";
-import { getPlatformWorkspace, requirePlatformUser } from "@/lib/platform/queries";
+import { getPlatformWorkspace, getPlatformWorkspaceIntegrations, requirePlatformUser } from "@/lib/platform/queries";
+import { savePaymentConnectionInputSchema, savePaymentConnectionResultSchema } from "@/lib/platform/integrations";
+import { paymentConnectionSchema } from "@/lib/payments/capabilities";
+import { testPaymentConnection } from "@/lib/payments/registry";
 import {
   platformErrorMessage,
   setMemberInputSchema,
@@ -289,4 +292,105 @@ export async function adoptLegacyAutomations(form: FormData) {
   if (error) back(path, platformErrorMessage(error.message));
   revalidatePath(path);
   back(path, `${Number(data ?? 0)} automations now run on the platform. Switch each one on in the business's Automations screen.`, "saved");
+}
+
+// ---------------------------------------------------------------------------
+// Payments & integrations (Phase 9)
+// ---------------------------------------------------------------------------
+export async function savePaymentConnection(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/integrations");
+  await requirePlatformUser({ manage: true, nextPath: path });
+
+  let payload: Record<string, unknown>;
+  const pendingJson = text(form, "pending_payload");
+  if (pendingJson) {
+    try {
+      payload = JSON.parse(pendingJson) as Record<string, unknown>;
+    } catch {
+      back(path, "The confirmation expired. Make the change again.");
+    }
+  } else {
+    const publicConfiguration: Record<string, string | boolean> = {};
+    for (const key of ["application_id", "provider_location_id", "notification_url", "processor_name"]) {
+      const value = text(form, `config_${key}`).trim();
+      if (value) publicConfiguration[key] = value;
+    }
+    for (const key of ["online_card_enabled", "terminal_card_enabled"]) {
+      const value = text(form, `config_${key}`);
+      if (value === "yes" || value === "no") publicConfiguration[key] = value === "yes";
+    }
+    payload = {
+      id: text(form, "id"),
+      provider: text(form, "provider"),
+      purpose: text(form, "purpose"),
+      connection_mode: text(form, "connection_mode"),
+      status: text(form, "status"),
+      environment: text(form, "environment"),
+      merchant_reference: text(form, "merchant_reference"),
+      location_id: text(form, "location_id"),
+      secret_reference: text(form, "secret_reference"),
+      terminal_label: text(form, "terminal_label"),
+      ...(Object.keys(publicConfiguration).length ? { public_configuration: publicConfiguration } : {}),
+    };
+  }
+  const parsed = savePaymentConnectionInputSchema.safeParse({ workspace, reason: text(form, "reason"), confirmed: text(form, "confirmed") === "yes", payload });
+  if (!parsed.success) back(path, parsed.error.issues[0]?.message ?? "Check the payment connection.");
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("hanafy_platform_save_payment_connection", {
+    target_workspace_slug: parsed.data.workspace,
+    payload: parsed.data.payload,
+    change_reason: parsed.data.reason,
+    confirmed: parsed.data.confirmed,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  const result = savePaymentConnectionResultSchema.safeParse(data);
+  if (!result.success) back(path, "The change could not be confirmed. Refresh and check.");
+  if (result.data.status === "needs_confirmation") {
+    back(path, "Confirm this change", "error", {
+      confirm: "payment",
+      reason: parsed.data.reason,
+      pending_payload: JSON.stringify(parsed.data.payload),
+      warnings: JSON.stringify(result.data.warnings.slice(0, 8)),
+    });
+  }
+  revalidatePath(path);
+  back(path, "Payment connection saved. API connections show connected only after a successful test.", "saved");
+}
+
+/** A real, read-only provider call; only its success marks a connection connected. */
+export async function testWorkspacePaymentConnection(form: FormData) {
+  const workspace = text(form, "workspace");
+  const path = workspacePath(workspace, "/integrations");
+  await requirePlatformUser({ manage: true, nextPath: path });
+  const connectionId = text(form, "id");
+  // Read through the caller's own session so the platform role is checked,
+  // and only a connection of THIS business can be tested.
+  const integrations = await getPlatformWorkspaceIntegrations(workspace);
+  const listed = integrations.payment_connections.find((item) => item.id === connectionId);
+  if (!listed) back(path, "Payment connection not found for this business.");
+  const connection = paymentConnectionSchema.parse({
+    id: listed.id,
+    workspace_id: (await getPlatformWorkspace(workspace)).id,
+    location_id: listed.location_id,
+    provider: listed.provider,
+    connection_mode: listed.connection_mode,
+    status: listed.status,
+    environment: listed.environment,
+    merchant_reference: listed.merchant_reference,
+    capabilities: listed.capabilities,
+    public_configuration: listed.public_configuration,
+    secret_reference: listed.secret_reference,
+    purpose: listed.purpose,
+  });
+  const outcome = await testPaymentConnection(connection);
+  const { error } = await createServiceSupabaseClient().rpc("hanafy_payment_connection_record_check", {
+    target_connection_id: connection.id,
+    succeeded: outcome.ok,
+    note: outcome.note,
+  });
+  if (error) back(path, platformErrorMessage(error.message));
+  revalidatePath(path);
+  back(path, outcome.note, outcome.ok ? "saved" : "error");
 }

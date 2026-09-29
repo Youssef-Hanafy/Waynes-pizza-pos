@@ -312,9 +312,16 @@ export function platformErrorMessage(message: string | undefined) {
     "Sending number not found",
     "Enter the new number",
     "Switch this business",
+    "is planned, not built",
+    "does not support the",
+    "CARD_DATA_REFUSED",
+    "shows connected only after",
+    "That location does not belong",
+    "Payment connection not found",
     "messaging_identities_number_owner",
   ];
   if (message?.includes("messaging_identities_number_owner")) return "That phone number already belongs to a business on the platform.";
+  if (message?.includes("payment_connections_one_live")) return "This location already has a live payment connection for that purpose. Turn the old one off first.";
   if (message && known.some((part) => message.includes(part))) return message;
   return "The change could not be saved. Refresh and try again.";
 }

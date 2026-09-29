@@ -10,7 +10,7 @@ import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { paymentSecretsPresent } from "@/lib/payments/config";
-import { getPaymentConsole, getPaymentReconciliation } from "@/lib/payments/queries";
+import { getPaymentConnectionsSummary, getPaymentConsole, getPaymentReconciliation } from "@/lib/payments/queries";
 import type { PaymentConsole, PaymentReconciliation } from "@/lib/payments/schemas";
 import { savePaymentSettings, savePaymentTerminal } from "./actions";
 
@@ -26,8 +26,8 @@ function businessDate(timeZone: string, date = new Date()) {
 type Search = { from?: string | string[]; to?: string | string[]; error?: string | string[]; saved?: string | string[] };
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requirePermission("payments.manage", "/admin/payments");
-  const [settings, params] = await Promise.all([getWorkspaceStoreSettings(), searchParams]);
+  const access = await requirePermission("payments.manage", "/admin/payments");
+  const [settings, params, connections] = await Promise.all([getWorkspaceStoreSettings(), searchParams, getPaymentConnectionsSummary(access.workspace_slug ?? "")]);
   const today = businessDate(settings.timezone);
   const rawFrom = single(params.from);
   const rawTo = single(params.to);
@@ -61,6 +61,27 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     {consoleError ? <div className="mt-6 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 font-bold">{consoleError}</div> : null}
 
     <Card className="mt-8 p-6">
+      <h2 className="text-2xl font-black">How this business takes cards</h2>
+      <div className="mt-4 grid gap-3">
+        {connections.filter((connection) => connection.status !== "disabled").map((connection) => (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-wayne-border p-4" key={connection.id}>
+            <div>
+              <strong>{connection.purpose === "counter" ? "At the counter" : connection.purpose === "online" ? "Online" : "Counter and online"}: {connection.provider_name}{connection.merchant_reference ? ` (${connection.merchant_reference})` : ""}</strong>
+              <p className="text-sm text-wayne-muted">
+                {connection.connection_mode === "manual_external"
+                  ? "Run the amount on the processor's own terminal, then confirm it in the POS. The POS never sees the card."
+                  : `${connection.environment} · ${connection.status === "connected" ? "tested and connected" : "waiting for Hanafy to test the connection"}`}
+                {connection.terminals.length ? ` · ${connection.terminals.map((terminal) => terminal.label).join(", ")}` : ""}
+              </p>
+            </div>
+            <Badge className={connection.status === "connected" || connection.status === "manual" ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-warn-soft text-wayne-warn"}>{connection.status === "manual" ? "In use" : connection.status.replaceAll("_", " ")}</Badge>
+          </div>
+        ))}
+        {connections.every((connection) => connection.status === "disabled") ? <p className="text-sm text-wayne-muted">No payment connection is set up. Hanafy adds it in Platform Admin.</p> : null}
+      </div>
+    </Card>
+
+    <Card className="mt-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-black">Status</h2>
         <Badge className={live ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-cream-deep text-wayne-muted"}>{live ? "Card payment is live" : "Card payment is off"}</Badge>
