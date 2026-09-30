@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export type SuggestedAddress = { address1: string; city: string; state: string; postal_code: string };
 type AddressComponent = { longText?: string; shortText?: string; types?: string[] };
@@ -26,7 +26,6 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
   const inputRef = useRef<HTMLInputElement>(null);
   const widgetRef = useRef<HTMLDivElement>(null);
   const selectRef = useRef(onAddressSelect);
-  const [widgetReady, setWidgetReady] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   useEffect(() => { selectRef.current = onAddressSelect; }, [onAddressSelect]);
@@ -65,6 +64,10 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
       widget.setAttribute("aria-label", label);
       widget.setAttribute("placeholder", placeholder ?? "Start typing your street address");
       widgetRef.current.replaceChildren(widget);
+      // Do this directly instead of setting React state: a re-render would remove
+      // the Google-owned custom element we just attached.
+      widgetRef.current.classList.remove("hidden");
+      inputRef.current?.style.setProperty("display", "none");
       widget.addEventListener("gmp-select", async (event) => {
         const place = event.placePrediction?.toPlace();
         if (!place) return;
@@ -77,7 +80,6 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
           state: part("administrative_area_level_1"), postal_code: part("postal_code"),
         });
       });
-      setWidgetReady(true);
     };
     const existing = document.getElementById("wayne-google-places") as HTMLScriptElement | null;
     if ((window as GoogleWindow).google?.maps) void connect();
@@ -93,8 +95,8 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
     return () => { cancelled = true; widget?.remove(); };
   }, [apiKey, label, placeholder]);
 
-  const nativeField = <input autoComplete={autoComplete} className={className ?? "min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong"} defaultValue={value === undefined ? defaultValue : undefined} id={id} maxLength={maxLength} name={name} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} ref={inputRef} required={required} style={widgetReady ? { display: "none" } : undefined} value={value} />;
-  const googleWidget = <div aria-label={`${label} suggestions`} className={widgetReady ? "block" : "hidden"} ref={widgetRef} />;
+  const nativeField = <input autoComplete={autoComplete} className={className ?? "min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong"} defaultValue={value === undefined ? defaultValue : undefined} id={id} maxLength={maxLength} name={name} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} ref={inputRef} required={required} value={value} />;
+  const googleWidget = <div aria-label={`${label} suggestions`} className="hidden" ref={widgetRef} />;
   if (bare) return <>{googleWidget}{nativeField}</>;
   return <div className="grid content-start gap-1.5 sm:col-span-2">
     <label className="text-sm font-bold tracking-tight" htmlFor={id}>{label}{required ? <span aria-hidden className="ml-1 text-wayne-red">*</span> : null}</label>
