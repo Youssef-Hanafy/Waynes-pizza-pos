@@ -17,6 +17,8 @@ import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
 import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
 import { connectStripeReader, startStripeReader } from "@/stores/stripe-reader";
+import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
+import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
 import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
@@ -77,6 +79,7 @@ export function PosApp(props: Props) {
 
   const runtimeReady = useHardware(hardware);
   const stripeReaderOn = hardware.payment_terminal_mode === "integrated";
+  const onlineAlerts = useOnlineOrderAlerts(canManageOrders);
   // Stripe Reader M2: inside the POS app, reconnect the reader as soon as the register opens.
   useEffect(() => {
     if (stripeReaderOn && runtimeReady && startStripeReader()) void connectStripeReader();
@@ -167,6 +170,15 @@ export function PosApp(props: Props) {
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
+    {onlineAlerts.alerts.length ? <div className="flex shrink-0 flex-wrap items-center gap-3 bg-wayne-gold px-3 py-2 text-wayne-ink" role="alert">
+      <span aria-hidden className="animate-bounce text-2xl">🔔</span>
+      <p className="min-w-0 flex-1 font-black">
+        {onlineAlerts.alerts.length === 1 ? "New online order" : `${onlineAlerts.alerts.length} new online orders`}
+        <span className="ml-2 font-bold">{onlineAlerts.alerts.slice(-3).map((order) => `${order.order_number} · ${order.customer_name || "Customer"} · ${order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · ${formatCents(order.total_cents)}`).join("   |   ")}</span>
+      </p>
+      <Button onClick={() => { const delivery = onlineAlerts.alerts.every((order) => order.fulfillment_type === "delivery") && deliveryEnabled && settings.delivery_enabled; onlineAlerts.acknowledge(); setPhoneFocus(null); setPayFocus(null); setSection(delivery ? "delivery" : "orders"); }} size="sm" variant="brand">View</Button>
+      <Button onClick={onlineAlerts.acknowledge} size="sm" variant="secondary">Got it</Button>
+    </div> : null}
     {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
@@ -192,8 +204,9 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
   const [terminal, setTerminal] = useState("");
   const [saved, setSaved] = useState(false);
   const [autoOpen, setAutoOpen] = useState(true);
+  const [chime, setChime] = useState(true);
   useEffect(() => {
-    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); }, 0);
+    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); setChime(getOnlineChimeEnabled()); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -206,6 +219,10 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
           <label className="grid flex-1 gap-1.5 text-sm font-bold" htmlFor="terminal-name">Register name<input className="min-h-11 rounded-xl border border-wayne-border px-3 font-normal" id="terminal-name" maxLength={60} onChange={(event) => { setTerminal(event.target.value); setSaved(false); }} value={terminal} /></label>
           <Button type="submit">{saved ? "Saved" : "Save"}</Button>
         </form>
+        <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
+          <input checked={chime} className="mt-1 size-5" onChange={(event) => { setChime(event.target.checked); setOnlineChimeEnabled(event.target.checked); }} type="checkbox" />
+          <span><strong className="block text-base">Chime for new online orders</strong>Rings when an order comes in from the website, and again every 30 seconds until someone taps <em>Got it</em>. <button className="font-bold underline" onClick={(event) => { event.preventDefault(); playOrderChime(); }} type="button">Test the chime</button></span>
+        </label>
         <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
           <input checked={autoOpen} className="mt-1 size-5" onChange={(event) => { setAutoOpen(event.target.checked); setAutoOpenCalls(event.target.checked); }} type="checkbox" />
           <span><strong className="block text-base">Pick up calls automatically</strong>When Line 1 or Line 2 rings and this register isn&apos;t in the middle of a ticket, the caller&apos;s card opens by itself. Turn off on a register that shouldn&apos;t jump to the phone (e.g. a kitchen tablet).</span>
