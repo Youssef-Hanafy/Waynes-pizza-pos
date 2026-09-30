@@ -17,10 +17,16 @@ type Props = {
   id?: string; name?: string; label?: string; defaultValue?: string; value?: string; required?: boolean;
   onChange?: (value: string) => void;
   onAddressSelect?: (address: SuggestedAddress) => void;
+  /** Use an existing surrounding label, such as the delivery-start form. */
+  bare?: boolean;
+  className?: string;
+  placeholder?: string;
+  maxLength?: number;
+  autoComplete?: string;
 };
 
 /** Google Places suggestions can update React state or an ordinary checkout form. */
-export function GoogleAddressInput({ id = "address1", name = "address1", label = "Find your delivery address", defaultValue = "", value, required = true, onChange, onAddressSelect }: Props) {
+export function GoogleAddressInput({ id = "address1", name = "address1", label = "Find your delivery address", defaultValue = "", value, required = true, onChange, onAddressSelect, bare = false, className, placeholder, maxLength, autoComplete = "street-address" }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef(onAddressSelect);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -77,9 +83,12 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
     return () => { cancelled = true; listener?.remove?.(); };
   }, [apiKey]);
 
+  const field = <input autoComplete={autoComplete} className={className ?? "min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong"} defaultValue={value === undefined ? defaultValue : undefined} id={id} maxLength={maxLength} name={name} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} ref={inputRef} required={required} value={value} />;
+  if (bare) return field;
+
   return <div className="grid content-start gap-1.5 sm:col-span-2">
     <label className="text-sm font-bold tracking-tight" htmlFor={id}>{label}{required ? <span aria-hidden className="ml-1 text-wayne-red">*</span> : null}</label>
-    <input autoComplete="street-address" className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" defaultValue={value === undefined ? defaultValue : undefined} id={id} name={name} onChange={(event) => onChange?.(event.target.value)} ref={inputRef} required={required} value={value} />
+    {field}
     <p className="text-xs text-wayne-muted">{apiKey ? "Start typing, then choose an address to fill in the city, state, and ZIP." : "Enter the full street address."}</p>
   </div>;
 }

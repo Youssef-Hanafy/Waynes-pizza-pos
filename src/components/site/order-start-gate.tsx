@@ -2,6 +2,7 @@
 
 import { useStorefrontBrand } from "./storefront-brand";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 import { SiteIcon } from "./site-icon";
 import {
   estimateRange,
@@ -148,14 +149,7 @@ export function OrderStartGate({
             </fieldset>
             <label>
               Street address
-              <input
-                autoComplete="address-line1"
-                defaultValue={initial?.address1 ?? ""}
-                maxLength={200}
-                name="address1"
-                placeholder="123 West Boylston St"
-                required
-              />
+              <GoogleAddressInput autoComplete="address-line1" bare defaultValue={initial?.address1 ?? ""} maxLength={200} placeholder="123 West Boylston St" />
             </label>
             {residenceNeedsUnit[residence] ? (
               <label>
