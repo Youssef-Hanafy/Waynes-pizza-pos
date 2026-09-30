@@ -70,7 +70,9 @@ Submit order → "Sent to the kitchen" → **How are they paying?**: 💵 Cash (
 
 `app.hanafymedia.com` currently serves the Hanafy Media marketing site (404 for /pos), so the app — which opens `https://app.hanafymedia.com/pos` — shows a 404 until that subdomain points at the Vercel POS project (Vercel → Domains → add app.hanafymedia.com; Cloudflare DNS → CNAME `app` → `cname.vercel-dns.com`, DNS only, and no Worker route covering `app.hanafymedia.com`).
 
-To test now, add one line to `android/local.properties` (not committed) and re-run:
+Open **`~/Downloads/waynes-pizza-pos/android`** itself in Android Studio (File → Open). The old "My Application" wrapper project in ~/AndroidStudioProjects only pointed at this app folder and ignored its settings.
+
+To test now, add one line to `android/local.properties` (not committed) and re-run — it only affects **debug** builds; store (release) builds always open the live address:
 
 - Emulator against `npm run dev` on the Mac: `waynesPosUrl=http://10.0.2.2:3000/pos`
 - Or any https deployment: `waynesPosUrl=https://<preview>.vercel.app/pos`

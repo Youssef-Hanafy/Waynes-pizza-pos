@@ -4,13 +4,21 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// The live POS.  Store builds (release) always open this.
+val livePosUrl = "https://app.hanafymedia.com/pos"
+// Test builds (debug) can open another address, set in android/local.properties
+// (this Mac only, never committed), e.g. the dev server seen from the emulator:
+//     waynesPosUrl=http://10.0.2.2:3000/pos
+// Read from the file next to this app module, so it works whichever
+// Android Studio project the module is opened from.
 val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
+    // Read through Gradle so an edit to the file is picked up on the next build (configuration cache).
+    val text = providers.fileContents(layout.projectDirectory.file("../local.properties")).asText.orNull
+    if (text != null) load(text.reader())
 }
-val posUrl: String = (localProperties.getProperty("waynesPosUrl")
+val debugPosUrl: String = (localProperties.getProperty("waynesPosUrl")
     ?: providers.gradleProperty("waynesPosUrl").orNull
-    ?: "https://app.hanafymedia.com/pos").trim()
+    ?: livePosUrl).trim()
 
 android {
     namespace = "com.waynespizza.pos"
@@ -24,12 +32,8 @@ android {
         targetSdk = 37
         versionCode = 2
         versionName = "1.1"
-        // The POS the app opens: the live address unless waynesPosUrl is set in android/local.properties
-        // (this Mac only) or gradle.properties.  To try the app in the Android emulator against
-        // `npm run dev` on this Mac, add to android/local.properties:
-        //     waynesPosUrl=http://10.0.2.2:3000/pos
-        // (10.0.2.2 is how the emulator reaches the Mac; plain http is allowed for it in debug builds only.)
-        buildConfigField("String", "POS_URL", "\"$posUrl\"")
+        // The POS the app opens (see livePosUrl / debugPosUrl above).
+        buildConfigField("String", "POS_URL", "\"$livePosUrl\"")
     }
 
     buildFeatures {
@@ -37,6 +41,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 10.0.2.2 is this Mac as seen from the emulator; plain http to it is allowed in debug builds only.
+            buildConfigField("String", "POS_URL", "\"$debugPosUrl\"")
+        }
         release {
             optimization {
                 enable = false
