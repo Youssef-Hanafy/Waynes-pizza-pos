@@ -1,13 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DetailedHTMLProps, HTMLAttributes } from "react";
+
+/* eslint-disable @typescript-eslint/no-namespace -- React uses JSX namespace augmentation for web components. */
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "gmp-place-autocomplete": DetailedHTMLProps<HTMLAttributes<HTMLElement> & { placeholder?: string }, HTMLElement>;
+    }
+  }
+}
 
 export type SuggestedAddress = { address1: string; city: string; state: string; postal_code: string };
 type AddressComponent = { longText?: string; shortText?: string; types?: string[] };
 type Place = { addressComponents?: AddressComponent[]; formattedAddress?: string; fetchFields: (options: { fields: string[] }) => Promise<void> };
 type PlacePrediction = { toPlace: () => Place };
-type PlaceAutocompleteElement = HTMLElement & { addEventListener: (event: "gmp-select", listener: (event: Event & { placePrediction?: PlacePrediction }) => void) => void };
-type PlacesLibrary = { PlaceAutocompleteElement?: new (options?: { includedRegionCodes?: string[]; includedPrimaryTypes?: string[] }) => PlaceAutocompleteElement };
+type PlaceAutocompleteElement = HTMLElement & {
+  includedRegionCodes?: string[];
+  includedPrimaryTypes?: string[];
+  addEventListener: (event: "gmp-select", listener: (event: Event & { placePrediction?: PlacePrediction }) => void) => void;
+};
+type PlacesLibrary = Record<string, unknown>;
 type GoogleWindow = Window & { google?: { maps?: { importLibrary?: (library: "places") => Promise<PlacesLibrary>; places?: PlacesLibrary } } };
 
 type Props = {
@@ -24,16 +38,17 @@ type Props = {
 /** Google Places API (New), with a native-input fallback for ordinary forms. */
 export function GoogleAddressInput({ id = "address1", name = "address1", label = "Find your delivery address", defaultValue = "", value, required = true, onChange, onAddressSelect, bare = false, className, placeholder, maxLength, autoComplete = "street-address" }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const widgetRef = useRef<HTMLDivElement>(null);
+  const widgetRef = useRef<PlaceAutocompleteElement>(null);
   const selectRef = useRef(onAddressSelect);
+  const [widgetReady, setWidgetReady] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   useEffect(() => { selectRef.current = onAddressSelect; }, [onAddressSelect]);
+  const setWidgetNode = useCallback((node: HTMLElement | null) => { widgetRef.current = node as PlaceAutocompleteElement | null; }, []);
 
   useEffect(() => {
     if (!apiKey || !inputRef.current || !widgetRef.current) return;
     let cancelled = false;
-    let widget: PlaceAutocompleteElement | null = null;
     const setNativeValue = (next: string) => {
       const field = inputRef.current;
       if (!field) return;
@@ -58,16 +73,10 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
       const maps = (window as GoogleWindow).google?.maps;
       if (!maps?.importLibrary) return;
       const library = await maps.importLibrary("places").catch(() => undefined);
-      const PlaceAutocomplete = library?.PlaceAutocompleteElement ?? maps?.places?.PlaceAutocompleteElement;
-      if (cancelled || !PlaceAutocomplete || !widgetRef.current) return;
-      widget = new PlaceAutocomplete({ includedRegionCodes: ["us"], includedPrimaryTypes: ["street_address"] });
-      widget.setAttribute("aria-label", label);
-      widget.setAttribute("placeholder", placeholder ?? "Start typing your street address");
-      widgetRef.current.replaceChildren(widget);
-      // Do this directly instead of setting React state: a re-render would remove
-      // the Google-owned custom element we just attached.
-      widgetRef.current.classList.remove("hidden");
-      inputRef.current?.style.setProperty("display", "none");
+      const widget = widgetRef.current;
+      if (cancelled || !library || !widget) return;
+      widget.includedRegionCodes = ["us"];
+      widget.includedPrimaryTypes = ["street_address"];
       widget.addEventListener("gmp-select", async (event) => {
         const place = event.placePrediction?.toPlace();
         if (!place) return;
@@ -80,6 +89,7 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
           state: part("administrative_area_level_1"), postal_code: part("postal_code"),
         });
       });
+      setWidgetReady(true);
     };
     const existing = document.getElementById("wayne-google-places") as HTMLScriptElement | null;
     if ((window as GoogleWindow).google?.maps) void connect();
@@ -92,11 +102,12 @@ export function GoogleAddressInput({ id = "address1", name = "address1", label =
       script.addEventListener("load", () => { void connect(); }, { once: true });
       document.head.appendChild(script);
     }
-    return () => { cancelled = true; widget?.remove(); };
+    return () => { cancelled = true; };
   }, [apiKey, label, placeholder]);
 
-  const nativeField = <input autoComplete={autoComplete} className={className ?? "min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong"} defaultValue={value === undefined ? defaultValue : undefined} id={id} maxLength={maxLength} name={name} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} ref={inputRef} required={required} value={value} />;
-  const googleWidget = <div aria-label={`${label} suggestions`} className="hidden" ref={widgetRef} />;
+  const nativeField = <input autoComplete={autoComplete} className={className ?? "min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong"} defaultValue={value === undefined ? defaultValue : undefined} id={id} maxLength={maxLength} name={name} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} ref={inputRef} required={required} style={widgetReady ? { display: "none" } : undefined} value={value} />;
+  // This is React-owned so it survives ordinary checkout re-renders; Google upgrades it after importLibrary("places").
+  const googleWidget = <gmp-place-autocomplete aria-label={label} className={widgetReady ? "block" : "hidden"} placeholder={placeholder ?? "Start typing your street address"} ref={setWidgetNode} />;
   if (bare) return <>{googleWidget}{nativeField}</>;
   return <div className="grid content-start gap-1.5 sm:col-span-2">
     <label className="text-sm font-bold tracking-tight" htmlFor={id}>{label}{required ? <span aria-hidden className="ml-1 text-wayne-red">*</span> : null}</label>
