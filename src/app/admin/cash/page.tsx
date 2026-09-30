@@ -45,7 +45,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
       <div>
         <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Cash</p>
         <h1 className="mt-3 text-4xl font-black">Drawers &amp; day close</h1>
-        <p className="mt-3 max-w-3xl text-wayne-muted">What each drawer should hold is worked out from the ledger — cash taken, cash refunded, paid in and out. The only number anyone types is the count.</p>
+        <p className="mt-3 max-w-3xl text-wayne-muted">What each drawer should hold is worked out from the ledger — counter cash, cash collected on deliveries, refunds, paid in and out. The only number anyone types is the count.</p>
       </div>
       <Button asChild variant="secondary"><Link href="/admin/reports">Reports</Link></Button>
     </div>
@@ -89,9 +89,9 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
 
       {closeout ? <>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Cash sales" value={formatCents(closeout.totals.cash_sales_cents)} />
+          <Metric label="Cash sales (includes deliveries)" value={formatCents(closeout.totals.cash_sales_cents)} />
           <Metric label="Counted" value={formatCents(closeout.totals.counted_cash_cents)} />
-          <Metric label="Expected" value={formatCents(closeout.totals.expected_cash_cents)} />
+          <Metric label="Expected in drawer" value={formatCents(closeout.totals.expected_cash_cents)} />
           <Metric label="Variance" value={`${closeout.totals.variance_cents === 0 ? "" : closeout.totals.variance_cents > 0 ? "+" : "−"}${formatCents(Math.abs(closeout.totals.variance_cents))}`} />
         </dl>
         <Card className="mt-5 p-5"><dl className="grid gap-3 sm:grid-cols-4">
@@ -99,6 +99,8 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
           <Metric label="Paid in" value={formatCents(closeout.totals.paid_in_cents)} />
           <Metric label="Paid out and drops" value={formatCents(closeout.totals.paid_out_cents)} />
           <Metric label="Driver cash in" value={formatCents(closeout.totals.driver_cash_cents)} />
+          <Metric label="Cash collected on deliveries" value={formatCents(closeout.totals.delivery_cash_collected_cents)} />
+          {closeout.totals.delivery_cash_unassigned_cents ? <Metric label="Delivery cash needing assignment" value={formatCents(closeout.totals.delivery_cash_unassigned_cents)} /> : null}
         </dl></Card>
 
         <h3 className="mt-8 text-xl font-black">Drawers</h3>

@@ -34,4 +34,4 @@ function redirectToLogin(request: NextRequest, error?: string) {
   return NextResponse.redirect(target);
 }
 
-export const config = { matcher: ["/admin/:path*", "/pos/:path*", "/kitchen/:path*", "/driver/:path*"] };
+export const config = { matcher: ["/admin/:path*", "/pos/:path*", "/kitchen/:path*", "/driver/:path*", "/platform/:path*", "/onboarding/:path*"] };

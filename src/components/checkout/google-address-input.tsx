@@ -2,49 +2,71 @@
 
 import { useEffect, useRef } from "react";
 
-type PlaceComponent = { short_name?: string; types?: string[] };
+export type SuggestedAddress = { address1: string; city: string; state: string; postal_code: string };
+type PlaceComponent = { long_name?: string; short_name?: string; types?: string[] };
+type Place = { address_components?: PlaceComponent[]; formatted_address?: string; name?: string };
 type GoogleAutocomplete = {
-  addListener: (event: "place_changed", callback: () => void) => void;
-  getPlace: () => { address_components?: PlaceComponent[]; formatted_address?: string };
+  addListener: (event: "place_changed", callback: () => void) => { remove?: () => void };
+  getPlace: () => Place;
 };
 type GoogleWindow = Window & {
-  google?: { maps?: { places?: { Autocomplete: new (input: HTMLInputElement, options: { componentRestrictions: { country: string }; fields: string[] }) => GoogleAutocomplete } } };
+  google?: { maps?: { places?: { Autocomplete: new (input: HTMLInputElement, options: { componentRestrictions: { country: string }; fields: string[]; types: string[] }) => GoogleAutocomplete } } };
 };
 
-export function GoogleAddressInput() {
+type Props = {
+  id?: string; name?: string; label?: string; value: string; required?: boolean;
+  onChange: (value: string) => void;
+  onAddressSelect: (address: SuggestedAddress) => void;
+};
+
+/** Google Places suggestions update React state, so every address field stays in sync. */
+export function GoogleAddressInput({ id = "address1", name = "address1", label = "Find your delivery address", value, required = true, onChange, onAddressSelect }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectRef = useRef(onAddressSelect);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  useEffect(() => { selectRef.current = onAddressSelect; }, [onAddressSelect]);
 
   useEffect(() => {
     if (!apiKey || !inputRef.current) return;
+    let listener: { remove?: () => void } | undefined;
+    let cancelled = false;
     const connect = () => {
       const Autocomplete = (window as GoogleWindow).google?.maps?.places?.Autocomplete;
-      if (!Autocomplete || !inputRef.current) return;
-      const autocomplete = new Autocomplete(inputRef.current, { componentRestrictions: { country: "us" }, fields: ["address_components", "formatted_address"] });
-      autocomplete.addListener("place_changed", () => {
+      if (cancelled || !Autocomplete || !inputRef.current) return;
+      const autocomplete = new Autocomplete(inputRef.current, { componentRestrictions: { country: "us" }, fields: ["address_components", "formatted_address", "name"], types: ["address"] });
+      listener = autocomplete.addListener("place_changed", () => {
         const place = autocomplete.getPlace();
         const components = place.address_components ?? [];
-        const valueFor = (type: string) => components.find((part) => part.types?.includes(type))?.short_name ?? "";
-        const set = (name: string, value: string) => {
-          const field = document.querySelector<HTMLInputElement>(`input[name="${name}"]`);
-          if (field && value) field.value = value;
-        };
-        set("address1", [valueFor("street_number"), valueFor("route")].filter(Boolean).join(" ") || place.formatted_address || "");
-        set("city", valueFor("locality") || valueFor("postal_town"));
-        set("state", valueFor("administrative_area_level_1"));
-        set("postal_code", valueFor("postal_code"));
+        const part = (type: string, long = false) => components.find((component) => component.types?.includes(type))?.[long ? "long_name" : "short_name"] ?? "";
+        selectRef.current({
+          address1: [part("street_number"), part("route", true)].filter(Boolean).join(" ") || place.name || place.formatted_address || "",
+          city: part("locality", true) || part("postal_town", true) || part("sublocality", true),
+          state: part("administrative_area_level_1"), postal_code: part("postal_code"),
+        });
       });
     };
-    if ((window as GoogleWindow).google?.maps?.places) { connect(); return; }
+    if ((window as GoogleWindow).google?.maps?.places) {
+      connect();
+      return () => { cancelled = true; listener?.remove?.(); };
+    }
     const existing = document.getElementById("wayne-google-places") as HTMLScriptElement | null;
-    if (existing) { existing.addEventListener("load", connect, { once: true }); return () => existing.removeEventListener("load", connect); }
+    if (existing) {
+      existing.addEventListener("load", connect, { once: true });
+      return () => { cancelled = true; existing.removeEventListener("load", connect); listener?.remove?.(); };
+    }
     const script = document.createElement("script");
     script.id = "wayne-google-places";
     script.async = true;
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
     script.addEventListener("load", connect, { once: true });
     document.head.appendChild(script);
+    return () => { cancelled = true; listener?.remove?.(); };
   }, [apiKey]);
 
-  return <div className="grid content-start gap-1.5 sm:col-span-2"><label className="text-sm font-bold tracking-tight" htmlFor="address1">{apiKey ? "Find your delivery address" : "Street address"}<span aria-hidden className="ml-1 text-wayne-red">*</span></label><input ref={inputRef} className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" id="address1" name="address1" required /><p className="text-xs text-wayne-muted">{apiKey ? "Choose a suggestion from Google Maps for accurate delivery." : "Google address suggestions appear after NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured."}</p></div>;
+  return <div className="grid content-start gap-1.5 sm:col-span-2">
+    <label className="text-sm font-bold tracking-tight" htmlFor={id}>{label}{required ? <span aria-hidden className="ml-1 text-wayne-red">*</span> : null}</label>
+    <input autoComplete="street-address" className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" id={id} name={name} onChange={(event) => onChange(event.target.value)} ref={inputRef} required={required} value={value} />
+    <p className="text-xs text-wayne-muted">{apiKey ? "Start typing, then choose an address to fill in the city, state, and ZIP." : "Enter the full street address."}</p>
+  </div>;
 }

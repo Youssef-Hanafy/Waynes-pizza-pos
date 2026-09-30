@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   type FormEvent,
+  type TextareaHTMLAttributes,
   useCallback,
   useEffect,
   useRef,
@@ -34,6 +35,14 @@ import { StripeCardField, type StripeCardConfirm } from "@/components/payments/s
 import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 
 type Fulfillment = "pickup" | "delivery";
+type DeliveryAddress = {
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  delivery_instructions: string;
+};
 type Props = {
   fulfillment: Fulfillment;
   menu: PublicMenu;
@@ -64,6 +73,9 @@ export function CheckoutClient({
   const [tipCents, setTipCents] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [address, setAddress] = useState<DeliveryAddress>({
+    address1: "", address2: "", city: "", state: "MA", postal_code: "", delivery_instructions: "",
+  });
   const tokenizer = useRef<Tokenizer | null>(null);
   const stripeConfirm = useRef<StripeCardConfirm | null>(null);
   const [cardReady, setCardReady] = useState(false);
@@ -121,14 +133,7 @@ export function CheckoutClient({
       tip_cents: tipCents,
       promo_code: String(form.get("promo_code") ?? ""),
       special_instructions: String(form.get("special_instructions") ?? ""),
-      address: {
-        address1: String(form.get("address1") ?? ""),
-        address2: String(form.get("address2") ?? ""),
-        city: String(form.get("city") ?? ""),
-        state: String(form.get("state") ?? ""),
-        postal_code: String(form.get("postal_code") ?? ""),
-        delivery_instructions: String(form.get("delivery_instructions") ?? ""),
-      },
+      address,
       items: cart.map((line) => ({
         menu_item_id: line.menu_item_id,
         variant_id: line.variant_id,
@@ -164,7 +169,7 @@ export function CheckoutClient({
             name: `${payload.first_name} ${payload.last_name}`.trim(),
             email: payload.email || undefined,
             phone: payload.phone,
-            postalCode: payload.address.postal_code || undefined,
+              postalCode: address.postal_code || undefined,
           });
           const settledResponse = await fetch("/api/payments/intent/confirm", {
             method: "POST",
@@ -199,7 +204,7 @@ export function CheckoutClient({
         // closed tab cannot leave a paid order unplaced.
         const card = await tokenizer.current({
           amountCents: total,
-          billingPostalCode: String(form.get("postal_code") ?? "") || undefined,
+          billingPostalCode: address.postal_code || undefined,
         });
         const response = await fetch("/api/payments/card", {
           method: "POST",
@@ -303,15 +308,17 @@ export function CheckoutClient({
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Delivery address</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <GoogleAddressInput />
-              <Input label="Apartment / unit (optional)" name="address2" />
-              <Input label="City" name="city" required />
-              <Input defaultValue="MA" label="State" name="state" required />
-              <Input label="Postal code" name="postal_code" required />
+              <GoogleAddressInput onAddressSelect={(selected) => setAddress((current) => ({ ...current, ...selected }))} onChange={(address1) => setAddress((current) => ({ ...current, address1 }))} value={address.address1} />
+              <Input label="Apartment / unit (optional)" name="address2" onChange={(event) => setAddress((current) => ({ ...current, address2: event.target.value }))} value={address.address2} />
+              <Input label="City" name="city" onChange={(event) => setAddress((current) => ({ ...current, city: event.target.value }))} required value={address.city} />
+              <Input label="State" name="state" onChange={(event) => setAddress((current) => ({ ...current, state: event.target.value }))} required value={address.state} />
+              <Input label="Postal code" name="postal_code" onChange={(event) => setAddress((current) => ({ ...current, postal_code: event.target.value }))} required value={address.postal_code} />
             </div>
             <TextArea
               label="Delivery instructions (optional)"
               name="delivery_instructions"
+              onChange={(event) => setAddress((current) => ({ ...current, delivery_instructions: event.target.value }))}
+              value={address.delivery_instructions}
             />
           </section>
         ) : null}
@@ -515,7 +522,7 @@ function Check({ label, name }: { label: string; name: string }) {
     </label>
   );
 }
-function TextArea({ label, name }: { label: string; name: string }) {
+function TextArea({ label, name, ...props }: { label: string; name: string } & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
@@ -524,6 +531,7 @@ function TextArea({ label, name }: { label: string; name: string }) {
         maxLength={1000}
         name={name}
         rows={3}
+        {...props}
       />
     </label>
   );

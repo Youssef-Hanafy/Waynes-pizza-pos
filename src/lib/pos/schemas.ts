@@ -37,7 +37,7 @@ export const posOrderInputSchema = z.object({
   customer_id: optionalUuid,
   source: z.enum(["pos", "phone"]),
   fulfillment_type: z.enum(["pickup", "delivery"]),
-  payment_method: z.enum(["test_manual", "cash"]),
+  payment_method: z.enum(["test_manual", "cash", "card"]),
   first_name: z.string().trim().max(100),
   last_name: z.string().trim().max(100),
   phone: z.string().trim().max(40),

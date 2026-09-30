@@ -1,5 +1,8 @@
 node_modules/
 .next/
+.open-next/
+.wrangler/
+.wayne-local-store.json
 coverage/
 .env
 .env.local

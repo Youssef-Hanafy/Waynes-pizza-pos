@@ -40,6 +40,47 @@ async function main() {
     return data;
   };
 
+  async function ensureIncludedIngredientGroup(itemId: string, itemName: string, ingredients: string[]) {
+    if (!ingredients.length) return;
+    const name = `Included: ${itemName}`;
+    const found = take(await supabase.from("modifier_groups").select("id").eq("name", name).maybeSingle(), `read included recipe for ${itemName}`) as { id: string } | null;
+    const created = take(await supabase.from("modifier_groups").insert({
+      name,
+      customer_label: "Included ingredients — tap to remove",
+      min_select: 0,
+      max_select: ingredients.length,
+      required: false,
+      allow_quantities: true,
+      sort_order: 890,
+    }).select("id").single(), `create included recipe for ${itemName}`) as { id: string };
+    const groupId = found?.id || created.id;
+    note(!found, `included recipe for ${itemName}`);
+
+    for (const [choiceIndex, ingredient] of ingredients.entries()) {
+      const existing = take(await supabase.from("modifier_choices").select("id").eq("modifier_group_id", groupId).eq("name", ingredient).maybeSingle(), `read ${ingredient} recipe choice`) as { id: string } | null;
+      if (!existing) {
+        take(await supabase.from("modifier_choices").insert({
+          modifier_group_id: groupId,
+          name: ingredient,
+          price_delta_cents: 0,
+          default_selected: true,
+          sort_order: choiceIndex * 10,
+        }).select("id").single(), `create ${ingredient} recipe choice`);
+        tally.created += 1;
+      } else {
+        tally.existing += 1;
+      }
+    }
+
+    const link = await supabase.from("menu_item_modifier_groups").upsert({
+      menu_item_id: itemId,
+      modifier_group_id: groupId,
+      sort_order: 890,
+      active: true,
+    }, { onConflict: "menu_item_id,modifier_group_id" });
+    if (link.error) throw new Error(`link included recipe for ${itemName}: ${link.error.message}`);
+  }
+
   console.log(`Loading the menu${customerVisible ? "" : " (hidden from customers until you publish it)"}…\n`);
 
   // --- Modifier groups and their choices -----------------------------------
@@ -133,6 +174,8 @@ async function main() {
         if (error) throw new Error(`link ${key} to ${item.name}: ${error.message}`);
         tally.created += 1;
       }
+
+      await ensureIncludedIngredientGroup(itemId, item.name, item.includedIngredients ?? []);
     }
   }
 

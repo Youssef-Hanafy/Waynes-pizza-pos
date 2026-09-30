@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useMemo, useRef, useState } from "react";
+import { GoogleAddressInput } from "@/components/checkout/google-address-input";
+import { SquareCardField, type Tokenizer } from "@/components/payments/square-card-field";
+import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
@@ -9,15 +12,16 @@ import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, findMenuItem } from "@/lib/orders/cart";
 import type { CartLine } from "@/lib/orders/schemas";
 import { posCustomerSchema, posOrderCreatedSchema, type PosCustomer } from "@/lib/pos/schemas";
+import { posCardIntentResultSchema, posCardResultSchema, type CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenOrdersPanel } from "./open-orders-panel";
 
 type MenuItem = PublicMenu[number]["items"][number];
-type Props = { canManageDiscount: boolean; canManageOrders: boolean; canOpenAdmin: boolean; menu: PublicMenu; settings: StoreSettings; staffName: string };
+type Props = { canManageDiscount: boolean; canManageOrders: boolean; canOpenAdmin: boolean; menu: PublicMenu; paymentConfig: CheckoutPaymentConfig | null; settings: StoreSettings; staffName: string };
 
 const blankAddress = { address1: "", address2: "", city: "Worcester", state: "MA", postal_code: "", delivery_instructions: "" };
 
-export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, menu, settings, staffName }: Props) {
+export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, menu, paymentConfig, settings, staffName }: Props) {
   const [customerMode, setCustomerMode] = useState<"walk_in" | "identified">("walk_in");
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -35,15 +39,18 @@ export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, me
   const [addressId, setAddressId] = useState("");
   const [address, setAddress] = useState(blankAddress);
   const [orderNote, setOrderNote] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"test_manual" | "cash">("test_manual");
+  const [paymentMethod, setPaymentMethod] = useState<"test_manual" | "cash" | "card">("test_manual");
   const [promoCode, setPromoCode] = useState("");
   const [manualType, setManualType] = useState<"" | "fixed" | "percent">("");
   const [manualValue, setManualValue] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<{ order_number: string; total_cents: number } | null>(null);
+  const [created, setCreated] = useState<{ order_number: string; total_cents: number; paymentMethod: "test_manual" | "cash" | "card" } | null>(null);
   const [ticketIdempotencyKey, setTicketIdempotencyKey] = useState(() => crypto.randomUUID());
+  const tokenizer = useRef<Tokenizer | null>(null);
+  const stripeConfirm = useRef<StripeCardConfirm | null>(null);
+  const [cardReady, setCardReady] = useState(false);
 
   const visibleMenu = useMemo(() => menu.map((category) => ({ ...category, items: category.items.filter((item) => item.name.toLowerCase().includes(itemSearch.trim().toLowerCase())) })).filter((category) => category.items.length), [itemSearch, menu]);
   const subtotal = cartSubtotalCents(menu, cart);
@@ -53,8 +60,11 @@ export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, me
   const tax = Math.round((subtotal - previewDiscount + deliveryFee) * settings.tax_rate_basis_points / 10_000);
   const previewTotal = subtotal - previewDiscount + deliveryFee + tax;
 
+  const handleTokenizer = useCallback((next: Tokenizer | null) => { tokenizer.current = next; setCardReady(Boolean(next)); }, []);
+  const handleStripeConfirm = useCallback((next: StripeCardConfirm | null) => { stripeConfirm.current = next; setCardReady(Boolean(next)); }, []);
+
   function chooseWalkIn() {
-    setCustomerMode("walk_in"); setFulfillment("pickup"); setSelectedCustomer(null); setCustomerResults([]); setError("");
+    setCustomerMode("walk_in"); setFulfillment("pickup"); setPaymentMethod("test_manual"); setSelectedCustomer(null); setCustomerResults([]); setError("");
   }
 
   function choosePhone() { setCustomerMode("identified"); setError(""); }
@@ -92,11 +102,34 @@ export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, me
       items: cart.map((line) => ({ menu_item_id: line.menu_item_id, variant_id: line.variant_id, quantity: line.quantity, special_instructions: line.special_instructions, modifiers: line.modifiers })),
     };
     try {
+      if (paymentMethod === "card") {
+        if (!paymentConfig) throw new Error("Keyed card payment is not configured yet.");
+        if (paymentConfig.provider === "stripe") {
+          if (!stripeConfirm.current) throw new Error("Secure Stripe card entry is still loading.");
+          const intentResponse = await fetch("/api/pos/card/intent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: payload }) });
+          const intentBody: unknown = await intentResponse.json();
+          const intent = posCardIntentResultSchema.safeParse(intentBody);
+          if (!intentResponse.ok || !intent.success) throw new Error(intentBody && typeof intentBody === "object" && "error" in intentBody ? String(intentBody.error) : "The keyed card payment could not be prepared.");
+          const confirmation = await stripeConfirm.current({ clientSecret: intent.data.client_secret, name: `${firstName} ${lastName}`.trim(), email: email || undefined, phone, postalCode: address.postal_code || undefined });
+          const confirmResponse = await fetch("/api/pos/card/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payment_id: intent.data.payment_id }) });
+          const confirmBody: unknown = await confirmResponse.json();
+          const confirmed = posCardResultSchema.safeParse(confirmBody);
+          if (confirmation.error || !confirmResponse.ok || !confirmed.success || confirmed.data.payment_status !== "captured") throw new Error(confirmation.error?.message ?? (confirmBody && typeof confirmBody === "object" && "error" in confirmBody ? String(confirmBody.error) : "The card was not charged. Try another card."));
+          setCreated({ ...confirmed.data, paymentMethod: "card" }); setCart([]); return;
+        }
+        if (!tokenizer.current) throw new Error("Secure card entry is still loading.");
+        const card = await tokenizer.current({ amountCents: previewTotal, billingPostalCode: address.postal_code || undefined });
+        const response = await fetch("/api/pos/card", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: payload, payment: { source_id: card.token, verification_token: card.verificationToken } }) });
+        const body: unknown = await response.json();
+        const paid = posCardResultSchema.safeParse(body);
+        if (!response.ok || !paid.success || paid.data.payment_status !== "captured") throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The card was not charged. Try another card.");
+        setCreated({ ...paid.data, paymentMethod: "card" }); setCart([]); return;
+      }
       const response = await fetch("/api/pos/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body: unknown = await response.json();
       const parsed = posOrderCreatedSchema.safeParse(body);
       if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The ticket could not be submitted.");
-      setCreated(parsed.data); setCart([]);
+      setCreated({ ...parsed.data, paymentMethod }); setCart([]);
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : "The ticket could not be submitted."); }
     finally { setSubmitting(false); }
   }
@@ -105,7 +138,7 @@ export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, me
     setCreated(null); setCart([]); setCustomerMode("walk_in"); setFulfillment("pickup"); setSelectedCustomer(null); setFirstName(""); setLastName(""); setPhone(""); setEmail(""); setAddressId(""); setAddress(blankAddress); setOrderNote(""); setPromoCode(""); setManualType(""); setManualValue(""); setManualReason(""); setPaymentMethod("test_manual"); setTicketIdempotencyKey(crypto.randomUUID()); setError("");
   }
 
-  if (created) return <main className="grid min-h-screen place-items-center bg-wayne-cream-deep p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl"><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">Order submitted</p><h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p><p className="mt-4 rounded-xl bg-wayne-warn-soft p-4 font-bold">TEST / MANUAL boundary — no card was processed.</p><Button className="mt-6 w-full text-lg" onClick={newTicket}>Start new ticket</Button></section></main>;
+  if (created) return <main className="grid min-h-screen place-items-center bg-wayne-cream-deep p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl"><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">Order submitted</p><h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p><p className={`mt-4 rounded-xl p-4 font-bold ${created.paymentMethod === "card" ? "bg-wayne-ok-soft" : "bg-wayne-warn-soft"}`}>{created.paymentMethod === "card" ? "Card payment approved — the kitchen ticket is released." : created.paymentMethod === "cash" ? "Cash is due for this order and will appear in the daily cash total when collected." : "TEST / MANUAL boundary — no card was processed."}</p><Button className="mt-6 w-full text-lg" onClick={newTicket}>Start new ticket</Button></section></main>;
 
   return <div className="min-h-screen bg-wayne-cream-deep">
     <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 bg-wayne-green px-4 py-3 text-wayne-cream"><div><strong className="text-xl">Wayne&apos;s Front POS</strong><span className="ml-3 text-sm text-wayne-cream/70">{staffName}</span></div><div className="flex flex-wrap gap-2"><DrawerPanel timeZone={settings.timezone} />{canManageOrders ? <OpenOrdersPanel timeZone={settings.timezone} /> : null}{canOpenAdmin ? <Button asChild variant="secondary"><Link href="/admin">Admin</Link></Button> : null}<Button asChild variant="secondary"><Link href="/">Public site</Link></Button></div></header>
@@ -113,23 +146,24 @@ export function PosClient({ canManageDiscount, canManageOrders, canOpenAdmin, me
       <aside className="border-b border-wayne-border bg-white p-4 xl:border-b-0 xl:border-r">
         <h2 className="text-xl font-black">Order type</h2><div className="mt-3 grid grid-cols-2 gap-2"><Button className="px-3" onClick={chooseWalkIn} variant={customerMode === "walk_in" ? "primary" : "secondary"}>Walk-in</Button><Button className="px-3" onClick={choosePhone} variant={customerMode === "identified" ? "primary" : "secondary"}>Phone</Button></div>
         {customerMode === "walk_in" ? <div className="mt-5 rounded-xl bg-wayne-cream p-4"><strong>Anonymous walk-in</strong><p className="mt-1 text-sm text-wayne-muted">Pickup ticket with no customer profile.</p></div> : <div className="mt-5"><form className="flex gap-2" onSubmit={lookupCustomer}><label className="flex-1 text-sm font-bold">Find customer<input className="mt-2 min-h-12 w-full rounded-lg border border-wayne-border px-3 font-normal" onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Phone, name, or order #" value={customerSearch} /></label><Button className="self-end px-3" disabled={customerBusy}>{customerBusy ? "…" : "Find"}</Button></form>{customerResults.length ? <div className="mt-3 grid gap-2">{customerResults.map((customer) => <button className="rounded-xl border border-wayne-border p-3 text-left" key={customer.id} onClick={() => selectCustomer(customer)}><strong>{customer.first_name} {customer.last_name}</strong><p className="text-sm">{customer.phone}</p><p className="text-xs text-wayne-muted">{customer.order_count} orders · {formatCents(customer.lifetime_spend_cents)} lifetime</p></button>)}</div> : null}<div className="mt-4 grid gap-3"><Input label="First name" onChange={(e) => { setFirstName(e.target.value); setSelectedCustomer(null); setAddressId(""); }} required value={firstName} /><Input label="Last name" onChange={(e) => { setLastName(e.target.value); setSelectedCustomer(null); setAddressId(""); }} required value={lastName} /><Input label="Phone" onChange={(e) => { setPhone(e.target.value); setSelectedCustomer(null); setAddressId(""); }} required type="tel" value={phone} /><Input label="Email (optional)" onChange={(e) => { setEmail(e.target.value); setSelectedCustomer(null); setAddressId(""); }} type="email" value={email} /></div></div>}
-        <h2 className="mt-6 text-xl font-black">Fulfillment</h2><div className="mt-3 grid grid-cols-2 gap-2"><Button disabled={!settings.pickup_enabled} onClick={() => setFulfillment("pickup")} variant={fulfillment === "pickup" ? "primary" : "secondary"}>Pickup</Button><Button disabled={customerMode === "walk_in" || !settings.delivery_enabled} onClick={() => setFulfillment("delivery")} variant={fulfillment === "delivery" ? "primary" : "secondary"}>Delivery</Button></div>
+        <h2 className="mt-6 text-xl font-black">Fulfillment</h2><div className="mt-3 grid grid-cols-2 gap-2"><Button disabled={!settings.pickup_enabled} onClick={() => { setFulfillment("pickup"); if (paymentMethod === "card") setPaymentMethod("test_manual"); }} variant={fulfillment === "pickup" ? "primary" : "secondary"}>Pickup</Button><Button disabled={customerMode === "walk_in" || !settings.delivery_enabled} onClick={() => setFulfillment("delivery")} variant={fulfillment === "delivery" ? "primary" : "secondary"}>Delivery</Button></div>
         {fulfillment === "delivery" ? <AddressFields address={address} addressId={addressId} customer={selectedCustomer} onAddress={setAddress} onAddressId={setAddressId} /> : null}
       </aside>
       <section className="p-4 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-3xl font-black">Add items</h1><input aria-label="Search menu" className="min-h-12 rounded-xl border border-wayne-border bg-white px-4" onChange={(event) => setItemSearch(event.target.value)} placeholder="Search menu" value={itemSearch} /></div><nav className="mt-4 flex gap-2 overflow-x-auto pb-2">{visibleMenu.map((category) => <a className="whitespace-nowrap rounded-full bg-white px-4 py-3 font-bold shadow-sm" href={`#pos-${category.id}`} key={category.id}>{category.name}</a>)}</nav><div className="mt-5 grid gap-8">{visibleMenu.map((category) => <section id={`pos-${category.id}`} key={category.id}><h2 className="text-2xl font-black">{category.name}</h2><div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-4">{category.items.map((item) => <button className="min-h-28 rounded-2xl border border-wayne-border bg-white p-4 text-left shadow-sm transition active:scale-95 disabled:opacity-50" disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)}><strong className="text-lg">{item.name}</strong><p className="mt-2 font-black text-wayne-red">{item.variants.length ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.base_price_cents)}</p>{item.modifier_groups.length ? <p className="mt-1 text-xs font-bold text-wayne-ok">Customize · {item.modifier_groups.reduce((total, group) => total + group.choices.length, 0)} options</p> : <p className="mt-1 text-xs font-bold text-wayne-muted">Quick add</p>}{item.sold_out ? <span className="text-sm font-bold">Sold out</span> : null}</button>)}</div></section>)}</div></section>
       <aside className="border-t border-wayne-border bg-white p-4 xl:border-l xl:border-t-0"><div className="sticky top-4"><div className="flex items-center justify-between"><h2 className="text-2xl font-black">Current ticket</h2><button className="text-sm font-bold text-wayne-red underline" onClick={newTicket}>Clear</button></div><div className="mt-4 max-h-[36vh] space-y-3 overflow-y-auto">{cart.length ? cart.map((line) => { const item = findMenuItem(menu, line.menu_item_id); const variant = item?.variants.find((candidate) => candidate.id === line.variant_id); const modifiers = line.modifiers.flatMap((modifier) => item?.modifier_groups.flatMap((group) => group.choices.filter((choice) => choice.id === modifier.choice_id).map((choice) => `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}`)) ?? []); return <div className="rounded-xl bg-wayne-cream p-3" key={line.line_id}><div className="flex justify-between gap-2"><div><strong>{line.quantity}× {item?.name}</strong>{variant ? <p className="text-sm text-wayne-muted">{variant.name}</p> : null}</div><strong>{formatCents(cartLineUnitCents(menu, line) * line.quantity)}</strong></div>{modifiers.length ? <p className="mt-1 text-sm text-wayne-muted">{modifiers.join(", ")}</p> : null}{line.special_instructions ? <p className="mt-1 text-sm">Note: {line.special_instructions}</p> : null}<div className="mt-2 flex gap-2"><button aria-label="Decrease item" className="h-10 w-10 rounded-lg border" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity - 1))}>−</button><button aria-label="Increase item" className="h-10 w-10 rounded-lg border" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity + 1))}>+</button><button className="text-sm font-bold underline" onClick={() => { if (item) { setEditingLine(line); setSelectedItem(item); } }}>Edit</button><button className="ml-auto text-sm font-bold text-wayne-red" onClick={() => setCart(cart.filter((candidate) => candidate.line_id !== line.line_id))}>Remove</button></div></div>; }) : <p className="rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to begin.</p>}</div>
         <label className="mt-4 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-3 font-normal" maxLength={1500} onChange={(e) => setOrderNote(e.target.value)} rows={2} value={orderNote} /></label>
-        <div className="mt-4 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-2 min-h-11 w-full rounded-lg border px-3 font-normal uppercase" disabled={Boolean(manualType)} onChange={(e) => setPromoCode(e.target.value)} value={promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-2 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => setPaymentMethod(e.target.value as "test_manual" | "cash")} value={paymentMethod}><option value="test_manual">TEST / MANUAL</option><option value="cash">Cash (unpaid)</option></select></label></div>
+        <div className="mt-4 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-2 min-h-11 w-full rounded-lg border px-3 font-normal uppercase" disabled={Boolean(manualType)} onChange={(e) => setPromoCode(e.target.value)} value={promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-2 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => setPaymentMethod(e.target.value as "test_manual" | "cash" | "card")} value={paymentMethod}><option value="test_manual">TEST / MANUAL</option><option value="cash">Cash due</option>{paymentConfig && fulfillment === "delivery" && customerMode === "identified" ? <option value="card">Keyed-in card</option> : null}</select></label></div>
+        {paymentMethod === "card" && paymentConfig ? <section className="mt-4 rounded-xl border border-wayne-border bg-wayne-cream p-4"><h3 className="font-black">Keyed delivery card</h3><p className="mt-1 text-sm text-wayne-muted">Enter the customer&apos;s card directly in the secure {paymentConfig.provider === "stripe" ? "Stripe" : "Square"} form. Wayne&apos;s does not see or store the card number.</p><div className="mt-3">{paymentConfig.provider === "stripe" ? <StripeCardField config={paymentConfig} onReady={handleStripeConfirm} onStatus={setError} /> : <SquareCardField config={paymentConfig} onReady={handleTokenizer} onStatus={setError} />}</div></section> : null}
         {canManageDiscount ? <details className="mt-4 rounded-xl border border-wayne-border p-3"><summary className="cursor-pointer font-bold">Manager manual discount</summary><div className="mt-3 grid gap-3"><select className="min-h-11 rounded-lg border bg-white px-3" disabled={Boolean(promoCode)} onChange={(e) => setManualType(e.target.value as "" | "fixed" | "percent")} value={manualType}><option value="">None</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{manualType ? <><Input label={manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => setManualValue(e.target.value)} step="0.01" type="number" value={manualValue} /><Input label="Required reason" onChange={(e) => setManualReason(e.target.value)} value={manualReason} /></> : null}</div></details> : null}
         <div className="mt-5 space-y-2"><Total label="Subtotal" value={subtotal} />{previewDiscount ? <Total label="Manual discount" value={-previewDiscount} /> : null}{deliveryFee ? <Total label="Delivery fee" value={deliveryFee} /> : null}<Total label="Estimated tax" value={tax} /><Total emphasis label={promoCode ? "Estimated total*" : "Total"} value={previewTotal} />{promoCode ? <p className="text-xs text-wayne-muted">*Promotion is validated and totaled securely at submit.</p> : null}</div>
-        <p className="mt-4 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">No card payment is available in Phase 4.</p>{error ? <p aria-live="polite" className="mt-3 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}</p> : null}<Button className="mt-4 min-h-14 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? "Submitting…" : "Submit order"}</Button>
+        <p className="mt-4 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">{paymentMethod === "card" ? "The ticket only reaches the kitchen after the keyed card is approved." : "Cash delivery payments are collected by the driver and included in the daily cash closeout."}</p>{error ? <p aria-live="polite" className="mt-3 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}</p> : null}<Button className="mt-4 min-h-14 w-full text-lg" disabled={submitting || !cart.length || (paymentMethod === "card" && !cardReady)} onClick={submitOrder}>{submitting ? paymentMethod === "card" ? "Charging once…" : "Submitting…" : paymentMethod === "card" ? `Charge ${formatCents(previewTotal)} and submit` : "Submit order"}</Button>
       </div></aside>
     </main>{selectedItem ? <PosItemDialog initialLine={editingLine} item={selectedItem} onAdd={(line) => { setCart(editingLine ? cart.map((candidate) => candidate.line_id === editingLine.line_id ? line : candidate) : [...cart, line]); setEditingLine(null); setSelectedItem(null); }} onClose={() => { setEditingLine(null); setSelectedItem(null); }} /> : null}
   </div>;
 }
 
 function AddressFields({ address, addressId, customer, onAddress, onAddressId }: { address: typeof blankAddress; addressId: string; customer: PosCustomer | null; onAddress: (value: typeof blankAddress) => void; onAddressId: (value: string) => void }) {
-  return <div className="mt-4 grid gap-3">{customer?.addresses.length ? <label className="grid gap-2 text-sm font-bold">Saved address<select className="min-h-11 rounded-lg border bg-white px-3 font-normal" onChange={(e) => onAddressId(e.target.value)} value={addressId}><option value="">Enter a new address</option>{customer.addresses.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.address1}, {candidate.postal_code}</option>)}</select></label> : null}{!addressId ? <><Input label="Address" onChange={(e) => onAddress({ ...address, address1: e.target.value })} value={address.address1} /><Input label="Unit" onChange={(e) => onAddress({ ...address, address2: e.target.value })} value={address.address2} /><div className="grid grid-cols-2 gap-2"><Input label="City" onChange={(e) => onAddress({ ...address, city: e.target.value })} value={address.city} /><Input label="State" onChange={(e) => onAddress({ ...address, state: e.target.value })} value={address.state} /></div><Input label="ZIP" onChange={(e) => onAddress({ ...address, postal_code: e.target.value })} value={address.postal_code} /><Input label="Delivery instructions" onChange={(e) => onAddress({ ...address, delivery_instructions: e.target.value })} value={address.delivery_instructions} /></> : null}</div>;
+  return <div className="mt-4 grid gap-3">{customer?.addresses.length ? <label className="grid gap-2 text-sm font-bold">Saved address<select className="min-h-11 rounded-lg border bg-white px-3 font-normal" onChange={(e) => onAddressId(e.target.value)} value={addressId}><option value="">Enter a new address</option>{customer.addresses.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.address1}, {candidate.postal_code}</option>)}</select></label> : null}{!addressId ? <><GoogleAddressInput id="pos-address1" label="Find delivery address" onAddressSelect={(selected) => onAddress({ ...address, ...selected })} onChange={(address1) => onAddress({ ...address, address1 })} value={address.address1} /><Input label="Unit" onChange={(e) => onAddress({ ...address, address2: e.target.value })} value={address.address2} /><div className="grid grid-cols-2 gap-2"><Input label="City" onChange={(e) => onAddress({ ...address, city: e.target.value })} value={address.city} /><Input label="State" onChange={(e) => onAddress({ ...address, state: e.target.value })} value={address.state} /></div><Input label="ZIP" onChange={(e) => onAddress({ ...address, postal_code: e.target.value })} value={address.postal_code} /><Input label="Delivery instructions" onChange={(e) => onAddress({ ...address, delivery_instructions: e.target.value })} value={address.delivery_instructions} /></> : null}</div>;
 }
 
 /**
