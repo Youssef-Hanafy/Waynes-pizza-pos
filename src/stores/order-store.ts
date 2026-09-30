@@ -102,3 +102,9 @@ export function useActiveDraft() {
 export function useDrafts() {
   return useStore(orderStore, (state) => state, serverSnapshot);
 }
+
+/**
+ * True while the payment prompt is on screen after sending an order, so a
+ * ringing phone never pulls the cashier away mid-payment (§34.1).
+ */
+export const paymentPromptStore = createStore<boolean>(false);

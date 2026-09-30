@@ -61,3 +61,18 @@ The M2 is a **Bluetooth** reader. Stripe only supports it through its iOS / Andr
 
 - The Android app was not compiled in the Claude session (Maven Central / Google Maven are blocked there). Build it in Android Studio; the Stripe calls match the SDK 5.8.1 reference and its Java example app.
 - End-to-end with a real M2 needs the hardware. Stripe test mode: switch the Stripe keys to test keys on a preview deployment and use a physical test card, or the SDK's simulated reader.
+
+## 4. Payment prompt right after sending (2026-09-30, later)
+
+Submit order → "Sent to the kitchen" → **How are they paying?**: 💵 Cash (keypad, change due), 💳 Card reader (Stripe M2 in the app, or the separate terminal + "Approved"), ⌨️ Key in card (Stripe's secure card field — now allowed for any order, not just phone deliveries), ⏱ Pay later (order stays unpaid in Payments). After payment: change due / print receipt / Next order. The Payments screen uses the same three tenders. A ringing phone doesn't auto-open while this prompt is up.
+
+## 5. Android app: running it in the emulator
+
+`app.hanafymedia.com` currently serves the Hanafy Media marketing site (404 for /pos), so the app — which opens `https://app.hanafymedia.com/pos` — shows a 404 until that subdomain points at the Vercel POS project (Vercel → Domains → add app.hanafymedia.com; Cloudflare DNS → CNAME `app` → `cname.vercel-dns.com`, DNS only, and no Worker route covering `app.hanafymedia.com`).
+
+To test now, add one line to `android/local.properties` (not committed) and re-run:
+
+- Emulator against `npm run dev` on the Mac: `waynesPosUrl=http://10.0.2.2:3000/pos`
+- Or any https deployment: `waynesPosUrl=https://<preview>.vercel.app/pos`
+
+Debug builds allow plain http only to 10.0.2.2 / localhost; release builds stay https-only. `next.config.ts` allows the 10.0.2.2 dev origin. The M2 can't be used in the emulator (no Bluetooth) — use a real tablet for the reader.

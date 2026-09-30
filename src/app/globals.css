@@ -125,3 +125,21 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Google's address search box (Places autocomplete).  Always light, and never
+ * wider than the form it sits in — it follows the computer's dark mode and its
+ * own width otherwise (POS New Order card, 2026-09-30).
+ */
+gmp-place-autocomplete {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color-scheme: light;
+}
+.pos-address gmp-place-autocomplete {
+  background-color: #fff;
+  border: 1px solid var(--color-wayne-border);
+  border-radius: 0.75rem;
+}

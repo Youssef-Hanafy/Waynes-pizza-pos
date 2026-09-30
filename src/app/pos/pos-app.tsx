@@ -11,7 +11,7 @@ import { activeDraft, draftFromCall, draftHasContent, isDraftIdle } from "@/lib/
 import { ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
-import { orderActions, orderStore, useActiveDraft, useDrafts } from "@/stores/order-store";
+import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOpenCalls, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
@@ -130,7 +130,7 @@ export function PosApp(props: Props) {
       if (!getAutoOpenCalls()) return;
       const current = sectionRef.current;
       const idle = current === "orders" || current === "delivery"
-        || (current === "order" && isDraftIdle(activeDraft(orderStore.get())));
+        || (current === "order" && isDraftIdle(activeDraft(orderStore.get())) && !paymentPromptStore.get());
       if (!idle) return;
       n += 1;
       setPhoneFocus({ key: ringing[0]!.key, n });
@@ -172,7 +172,7 @@ export function PosApp(props: Props) {
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
     </nav>
 
-    {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} onTakePayment={takePayment} settings={settings} /> : null}
+    {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} /> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}

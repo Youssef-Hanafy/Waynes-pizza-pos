@@ -34,7 +34,8 @@ export function isSoftwarePath(pathname: string) {
 
 /** Local development and preview addresses are never split. */
 function isDevelopmentHost(host: string) {
-  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+  // 10.0.2.2 is this computer as seen from the Android emulator.
+  return host === "localhost" || host === "127.0.0.1" || host === "10.0.2.2" || host.endsWith(".local");
 }
 
 export type HostDecision =

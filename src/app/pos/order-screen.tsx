@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
@@ -8,13 +8,16 @@ import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
 import { draftLabel, type PosDraft } from "@/lib/orders/drafts";
 import type { CartLine } from "@/lib/orders/schemas";
+import type { OpenOrder } from "@/lib/orders/status";
+import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
 import { draftSync, useSyncState } from "@/stores/draft-sync";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
-import { orderActions, useActiveDraft, useDrafts } from "@/stores/order-store";
+import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { phoneActions } from "@/stores/phone-store";
 import { PosItemDialog } from "./item-dialog";
+import { PaymentPrompt } from "./payments-screen";
 import { StartOrderCard } from "./start-order-card";
 
 type MenuItem = PublicMenu[number]["items"][number];
@@ -24,8 +27,10 @@ type Props = {
   menu: PublicMenu;
   settings: StoreSettings;
   onOpenPhone: () => void;
-  /** Open the Payments screen on the order just sent. */
-  onTakePayment?: (orderId: string) => void;
+  /** Stripe (online) connection for keyed-in cards; null when Stripe isn't connected. */
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null;
+  /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */
+  stripeReader: boolean;
 };
 
 /**
@@ -33,7 +38,7 @@ type Props = {
  * the active draft, so holding it, taking a second call and coming back leaves
  * it exactly as it was (§36), and a refresh does too (test 15).
  */
-export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, onTakePayment }: Props) {
+export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, keyedCardConfig, stripeReader }: Props) {
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
   const held = drafts.filter((candidate) => candidate.id !== activeId);
@@ -46,21 +51,27 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, on
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<{ id: string; order_number: string; total_cents: number; duplicate: boolean; delivery?: boolean } | null>(null);
+  /** The order just sent, shown with the payment prompt until it is paid or left to pay later. */
+  const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean } | null>(null);
   const [printNote, setPrintNote] = useState("");
+  const paying = created !== null;
+  useEffect(() => {
+    paymentPromptStore.set(paying);
+    return () => paymentPromptStore.set(false);
+  }, [paying]);
 
   /** Through the printer layer only (§23): which printer, and how, is Admin → Hardware's business. */
   async function print(kind: "receipt" | "kitchen") {
     if (!created) return;
     if (kind === "receipt") {
       setPrintNote("Printing…");
-      setPrintNote((await requestReceipt(created.id)).message);
+      setPrintNote((await requestReceipt(created.order.id)).message);
       return;
     }
     const runtime = getHardwareRuntime();
     if (!runtime) { setPrintNote("Printing is still starting up. Try again in a moment."); return; }
     setPrintNote("Printing…");
-    const result = await runtime.kitchenPrinter.printKitchenTicket(created.id);
+    const result = await runtime.kitchenPrinter.printKitchenTicket(created.order.id);
     setPrintNote(result.ok ? (result.jobId === "print-dialog" ? "Sent to the print dialog." : "Sent to the printer.") : result.reason);
   }
 
@@ -88,9 +99,23 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, on
     // ticket and resends it, with the same idempotency key, when it is back.
     // Walk-ins without a profile always go out as pickup (see draftToOrderPayload).
     const delivery = draft.fulfillment === "delivery" && !noProfile;
+    const customerName = draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}` : `${draft.firstName} ${draft.lastName}`.trim();
+    const source = draft.source;
     const result = await draftSync.submit(draft.id);
     setSubmitting(false);
-    if (result.ok) { setPrintNote(""); setCreated({ ...result.order, delivery }); return; }
+    if (result.ok) {
+      setPrintNote("");
+      const now = new Date().toISOString();
+      setCreated({
+        duplicate: result.order.duplicate, delivery,
+        order: {
+          id: result.order.id, order_number: result.order.order_number, total_cents: result.order.total_cents,
+          customer_name: customerName, fulfillment_type: delivery ? "delivery" : "pickup", source,
+          status: "placed", payment_method: "", payment_status: "unpaid", placed_at: now, promised_at: null, ready_at: null,
+        },
+      });
+      return;
+    }
     setError(result.message);
   }
 
@@ -108,17 +133,26 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, on
     orderActions.clearActive(); setError("");
   }
 
-  if (created) return <div className="grid min-h-0 flex-1 place-items-center bg-wayne-cream-deep p-5"><section className="w-full max-w-xl rounded-3xl border border-wayne-border bg-white p-8 text-center shadow-xl">
-    <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">{created.duplicate ? "Already submitted" : "Order submitted"}</p>
-    <h1 className="mt-3 text-5xl font-black">{created.order_number}</h1><p className="mt-4 text-2xl font-bold">{formatCents(created.total_cents)}</p>
-    <p className="mt-4 text-sm font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket and delivery receipt print automatically." : "Kitchen ticket prints automatically. Print a receipt only if the customer asks."}</p>
-    <div className="mt-3 grid grid-cols-2 gap-2"><Button onClick={() => void print("receipt")} variant="secondary">{created.delivery ? "Print another receipt" : "Print receipt"}</Button><Button onClick={() => void print("kitchen")} variant="secondary">Reprint kitchen ticket</Button></div>
-    {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
-    {onTakePayment ? <Button className="mt-5 w-full text-xl" onClick={() => { const id = created.id; setCreated(null); onTakePayment(id); }} size="lg">Take payment · {formatCents(created.total_cents)}</Button> : null}
-    <p className="mt-4 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">Not paid yet. Take payment now, or later from Payments.</p>
-    <Button className="mt-6 w-full text-lg" onClick={() => setCreated(null)}>{held.some(isWorthResuming) ? "Back to tickets" : "Start new ticket"}</Button>
-    {held.filter(isWorthResuming).length ? <div className="mt-4 grid gap-2 text-left"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p>{held.filter(isWorthResuming).map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setCreated(null); }} variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div> : null}
-  </section></div>;
+  // Sent: ask for payment right away (owner, 2026-09-30).
+  if (created) {
+    const resumable = held.filter(isWorthResuming);
+    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-3 sm:p-6">
+      <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
+          <p className="font-black text-wayne-ok">✓ {created.duplicate ? "Already sent" : "Sent to the kitchen"} · {created.order.order_number}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print automatically" : "Kitchen ticket prints automatically"}</span>
+            <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
+            <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">Reprint kitchen</Button>
+          </div>
+        </div>
+        {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
+        <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
+        <PaymentPrompt key={created.order.id} keyedCardConfig={keyedCardConfig} onFinished={() => setCreated(null)} onPayLater={() => setCreated(null)} order={created.order} stripeReader={stripeReader} />
+        {resumable.length ? <div className="mt-6 grid gap-2 border-t border-wayne-border pt-4"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p><div className="flex flex-wrap gap-2">{resumable.map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setCreated(null); }} size="sm" variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div></div> : null}
+      </section>
+    </div>;
+  }
 
   const summary = ticketSummary(draft, settings);
   const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-2">

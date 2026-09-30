@@ -71,7 +71,10 @@ final class NativeBridge {
 
     private boolean trusted() {
         Uri page = Uri.parse(currentUrl);
-        return "https".equals(page.getScheme()) && allowedHost != null && allowedHost.equals(page.getHost());
+        if (allowedHost == null || !allowedHost.equals(page.getHost())) return false;
+        if ("https".equals(page.getScheme())) return true;
+        // Debug builds only: the POS dev server on this computer, seen from the Android emulator.
+        return BuildConfig.DEBUG && "http".equals(page.getScheme()) && isLocalDevHost(page.getHost());
     }
 
     // ---- Called from the page ----
@@ -253,6 +256,10 @@ final class NativeBridge {
     private static String describe(Exception error) {
         String message = error.getMessage();
         return message == null || message.isEmpty() ? error.getClass().getSimpleName() : message;
+    }
+
+    static boolean isLocalDevHost(String host) {
+        return "10.0.2.2".equals(host) || "localhost".equals(host) || "127.0.0.1".equals(host);
     }
 
     /** Printers must be on the store's own network (10.x, 172.16-31.x, 192.168.x). */

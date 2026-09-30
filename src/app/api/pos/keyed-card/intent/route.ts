@@ -6,7 +6,7 @@ import { PaymentProviderError } from "@/lib/payments/provider";
 import { posKeyedCardIntentSchema } from "@/lib/payments/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
-/** Opens a Stripe-hosted card field for a delivery phone order already on the POS. */
+/** Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone). */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access") || !access?.workspace_id) return Response.json({ error: "POS access required." }, { status: 403 });
@@ -21,8 +21,7 @@ export async function POST(request: Request) {
   const { data: order } = await service.from("orders")
     .select("id, source, fulfillment_type")
     .eq("id", parsed.data.order_id).eq("workspace_id", access.workspace_id).maybeSingle();
-  if (!order || order.source !== "phone" || order.fulfillment_type !== "delivery")
-    return Response.json({ error: "Keyed card payment is available for delivery phone orders only." }, { status: 400 });
+  if (!order) return Response.json({ error: "Order not found." }, { status: 404 });
 
   const userClient = await createServerSupabaseClient();
   const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
@@ -40,7 +39,7 @@ export async function POST(request: Request) {
     } else {
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `Wayne's Pizza delivery ${begun.order_number}`, paymentId: begun.payment_id, receiptEmail: null,
+        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card)`, paymentId: begun.payment_id, receiptEmail: null,
       });
       const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);

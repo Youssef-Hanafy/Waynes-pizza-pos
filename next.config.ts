@@ -4,6 +4,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl) : undefined;
 
 const nextConfig: NextConfig = {
+  // `npm run dev` seen from the Android emulator (10.0.2.2 is this computer there).
+  allowedDevOrigins: ["10.0.2.2"],
   images: supabaseOrigin
     ? {
         maximumResponseBody: 5_000_000,

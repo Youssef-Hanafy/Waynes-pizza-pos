@@ -84,7 +84,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   );
 
   return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-3 sm:p-6">
-    <section aria-labelledby="start-order-title" className="w-full max-w-3xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
+    <section aria-labelledby="start-order-title" className="w-full min-w-0 max-w-3xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-black" id="start-order-title">{editing ? "Order details" : "New order"}</h1>
@@ -123,7 +123,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
           </div>
           <Button onClick={() => update({ customer: null, addressId: "" })} size="sm" variant="secondary">Not them</Button>
         </div> : <>
-          <div className="grid gap-3 sm:grid-cols-[1.1fr_1fr_1fr]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <Input autoComplete="off" id="start-phone" inputMode="tel" label="Phone" onChange={(event) => editIdentity({ phone: event.target.value })} placeholder="(508) 555-0123" type="tel" value={draft.phone} />
             <Input autoComplete="off" id="start-first" label="First name" onChange={(event) => editIdentity({ firstName: event.target.value })} value={draft.firstName} />
             <Input autoComplete="off" id="start-last" label="Last name" onChange={(event) => editIdentity({ lastName: event.target.value })} value={draft.lastName} />
@@ -133,7 +133,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
             {search.error ? <p className="text-sm font-bold text-wayne-alert">{search.error}</p> : null}
             {!search.busy && !search.error && search.searched && !matches.length ? <p className="text-sm font-bold text-wayne-muted">New customer — they&apos;ll be saved with this order.</p> : null}
           </div>
-          {matches.length ? <ul aria-label="Matching customers" className="grid gap-2 sm:grid-cols-2">
+          {matches.length ? <ul aria-label="Matching customers" className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             {matches.map((customer) => {
               const address = customer.addresses.find((candidate) => candidate.is_default) ?? customer.addresses[0];
               return <li key={customer.id}><button className="min-h-16 w-full rounded-xl border-2 border-wayne-border bg-white p-3 text-left transition hover:border-wayne-green active:scale-[0.99]" onClick={() => selectCustomer(customer)} type="button">
@@ -142,7 +142,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
               </button></li>;
             })}
           </ul> : null}
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Input autoComplete="off" id="start-email" label="Email (optional)" onChange={(event) => editIdentity({ email: event.target.value })} type="email" value={draft.email} />
             {kind === "pickup" ? <button className="min-h-11 self-end rounded-xl px-2 text-left text-sm font-bold text-wayne-muted underline" onClick={() => { setKind("walkin"); update({ customerMode: "walk_in", fulfillment: "pickup", customer: null, lastName: "", email: "", addressId: "" }); }} type="button">Skip — just put a name on the ticket</button> : null}
           </div>
@@ -161,7 +161,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
-  return <div className="mt-6">
+  return <div className="mt-6 min-w-0">
     <h2 className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-wayne-muted"><span className="grid size-6 place-items-center rounded-full bg-wayne-green text-xs text-white">{n}</span>{title}</h2>
     {children}
   </div>;
@@ -169,8 +169,8 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 function AddressPicker({ address, addressId, customer, onAddress, onAddressId }: { address: DraftAddress; addressId: string; customer: PosCustomer | null; onAddress: (value: DraftAddress) => void; onAddressId: (value: string) => void }) {
   const saved = customer?.addresses ?? [];
-  return <div className="grid gap-3">
-    {saved.length ? <div className="grid gap-2 sm:grid-cols-2">
+  return <div className="grid min-w-0 gap-3">
+    {saved.length ? <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       {saved.map((candidate) => <button aria-pressed={addressId === candidate.id} className={`min-h-16 rounded-xl border-2 p-3 text-left ${addressId === candidate.id ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border bg-white"}`} key={candidate.id} onClick={() => onAddressId(candidate.id)} type="button">
         <strong className="block">{candidate.address1}{candidate.address2 ? `, ${candidate.address2}` : ""}</strong>
         <span className="block text-sm">{candidate.city}, {candidate.state} {candidate.postal_code}</span>
@@ -178,9 +178,10 @@ function AddressPicker({ address, addressId, customer, onAddress, onAddressId }:
       </button>)}
       <button aria-pressed={!addressId} className={`min-h-16 rounded-xl border-2 border-dashed p-3 text-left font-bold ${!addressId ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border-strong bg-white"}`} onClick={() => onAddressId("")} type="button">＋ A different address</button>
     </div> : null}
-    {!addressId ? <div className="grid gap-3">
-      <GoogleAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onAddress({ ...address, ...selected })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1.4fr_5rem_7rem]">
+    {!addressId ? <div className="grid min-w-0 gap-3">
+      {/* Wrapped: the address field spans two columns when it sits in a form grid, which here would split this list into two columns. */}
+      <div className="pos-address min-w-0"><GoogleAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onAddress({ ...address, ...selected })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} /></div>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem_7rem]">
         <Input id="start-address2" label="Apt / unit" onChange={(event) => onAddress({ ...address, address2: event.target.value })} value={address.address2} />
         <Input id="start-city" label="City" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
         <Input id="start-state" label="State" maxLength={2} onChange={(event) => onAddress({ ...address, state: event.target.value.toUpperCase() })} value={address.state} />

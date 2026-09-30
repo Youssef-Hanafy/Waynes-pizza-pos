@@ -19,8 +19,8 @@ export async function POST(request: Request) {
   const { data: payment } = await service.from("payments")
     .select("id, provider_payment_id, order:orders!inner(id, workspace_id, source, fulfillment_type)")
     .eq("id", parsed.data.payment_id).eq("provider", "stripe").eq("orders.workspace_id", access.workspace_id).maybeSingle();
-  const order = payment?.order as unknown as { id: string; source: string; fulfillment_type: string } | null;
-  if (!payment?.provider_payment_id || !order || order.source !== "phone" || order.fulfillment_type !== "delivery") return Response.json({ error: "Keyed card payment not found." }, { status: 404 });
+  const order = payment?.order as unknown as { id: string } | null;
+  if (!payment?.provider_payment_id || !order) return Response.json({ error: "Keyed card payment not found." }, { status: 404 });
 
   try {
     const result = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
