@@ -122,7 +122,17 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
 
       <Card className="p-6">
         <h2 className="text-2xl font-black">Payment terminal</h2>
-        <p className="mt-2">External — integration pending. The POS shows the amount to run on the store&apos;s own card terminal. Direct terminal payments are switched on in Admin → Payments once a processor is connected.</p>
+        <label className="mt-4 grid max-w-xl gap-1.5 text-sm font-bold" htmlFor="payment_terminal_mode">Card reader at the counter
+          <select className="min-h-11 rounded-xl border border-wayne-border bg-white px-3 font-normal" defaultValue={settings.payment_terminal_mode} id="payment_terminal_mode" name="payment_terminal_mode">
+            <option value="manual_external">Separate terminal — staff key in the amount and tap Approved</option>
+            <option value="integrated">Stripe Reader M2 — the POS sends the total to the reader</option>
+          </select>
+        </label>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-wayne-muted">
+          <li>The Stripe Reader M2 connects over Bluetooth to the <strong>Wayne&apos;s POS Android app</strong> on the counter tablet (it can&apos;t connect to a web browser). Card payments go to the same Stripe account as online ordering.</li>
+          <li>First time: open the POS in the app, press the reader&apos;s button once, then More → Card reader → Connect reader. Allow Bluetooth and Location when Android asks. The reader may install an update the first time (a few minutes, battery over 50%).</li>
+          <li>The Stripe location the reader registers to is created automatically from the store address in Admin → Settings.</li>
+        </ul>
       </Card>
 
       <div><Button size="lg" type="submit">Save hardware settings</Button></div>

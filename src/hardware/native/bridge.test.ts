@@ -49,4 +49,47 @@ describe("Android caller ID packets (build sheet §17, §52)", () => {
     target.__waynesNativePacket?.(ring("02", "S", "508-555-9999"), "10.10.10.50", 0);
     expect(seen).toEqual(["5085551234"]);
   });
+
+  it("drives the Stripe M2: token from the page, prompts to the screen, the intent id back on approval", async () => {
+    const tokens: [string, boolean, string][] = [];
+    const android: WaynesAndroidInterface = {
+      info: () => "{}",
+      printerSend: () => undefined, callerIdStart: () => undefined, callerIdStop: () => undefined, callerIdStatus: () => "{}",
+      stripeStatus: () => JSON.stringify({ state: "connected", serial: "STRM2-1", battery: 0.8 }),
+      stripeConnect: (id, locationId) => queueMicrotask(() => target.__waynesNativeResult?.(id, locationId === "tml_1", "", "STRM2-1")),
+      stripeCollect: (id, secret) => queueMicrotask(() => {
+        target.__waynesStripeEvent?.("prompt", JSON.stringify({ text: "Tap, insert or swipe the card" }));
+        if (secret === "pi_ok_secret_x") target.__waynesNativeResult?.(id, true, "", "pi_ok");
+        else target.__waynesNativeResult?.(id, false, "DECLINED", "The card was declined. Try another card.");
+      }),
+      stripeCancel: (id) => queueMicrotask(() => target.__waynesNativeResult?.(id, true, "", "")),
+      stripeDisconnect: (id) => queueMicrotask(() => target.__waynesNativeResult?.(id, true, "", "")),
+      stripeTokenResult: (requestId, ok, value) => { tokens.push([requestId, ok, value]); },
+    };
+    const target = {} as Window;
+    const stripe = createAndroidHardware(android, target).stripe!;
+    expect(stripe.status()).toMatchObject({ state: "connected", serial: "STRM2-1" });
+    expect(await stripe.connect({ locationId: "tml_1" })).toBe("STRM2-1");
+
+    // The app asks for a connection token; the page answers with what the server gave it.
+    target.__waynesStripeToken?.("r1");
+    expect(tokens).toEqual([["r1", false, "The POS page is not ready to authorise the card reader."]]);
+    stripe.setTokenSource(async () => "pst_live_secret");
+    target.__waynesStripeToken?.("r2");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(tokens[1]).toEqual(["r2", true, "pst_live_secret"]);
+
+    const prompts: string[] = [];
+    const off = stripe.onEvent((event) => { if (event.type === "prompt") prompts.push(event.text); });
+    expect(await stripe.collect("pi_ok_secret_x")).toBe("pi_ok");
+    const declined = await stripe.collect("pi_no_secret_y").then(() => null, (error: Error & { code?: string }) => error);
+    off();
+    expect(declined?.code).toBe("DECLINED");
+    expect(prompts).toEqual(["Tap, insert or swipe the card", "Tap, insert or swipe the card"]);
+  });
+
+  it("leaves the card reader out for an older app without it", () => {
+    const android: WaynesAndroidInterface = { info: () => "{}", printerSend: () => undefined, callerIdStart: () => undefined, callerIdStop: () => undefined, callerIdStatus: () => "{}" };
+    expect(createAndroidHardware(android, {} as Window).stripe).toBeUndefined();
+  });
 });

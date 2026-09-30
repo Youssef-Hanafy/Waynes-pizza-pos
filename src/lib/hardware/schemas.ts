@@ -96,5 +96,7 @@ export const hardwareSettingsFormSchema = z.object({
     routing_categories: z.array(z.string().trim().max(80)).max(40),
   }).refine(networkReady, { message: networkMessage("kitchen") }),
   cash_drawer: z.object({ connection: z.enum(["none", "receipt_printer"]), model: z.string().trim().max(120) }),
+  /** integrated = the Stripe Reader M2, driven by the POS Android app. */
+  payment_terminal_mode: z.enum(["manual_external", "integrated"]),
 });
 export type HardwareSettingsForm = z.infer<typeof hardwareSettingsFormSchema>;

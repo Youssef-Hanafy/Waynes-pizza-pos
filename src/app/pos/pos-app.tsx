@@ -7,14 +7,16 @@ import type { StoreSettings } from "@/lib/content/schemas";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
 import type { PublicMenu } from "@/lib/menu/schemas";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
-import { activeDraft, draftFromCall, isDraftIdle } from "@/lib/orders/drafts";
+import { activeDraft, draftFromCall, draftHasContent, isDraftIdle } from "@/lib/orders/drafts";
 import { ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
-import { orderActions, orderStore, useDrafts } from "@/stores/order-store";
+import { orderActions, orderStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOpenCalls, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
+import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
+import { connectStripeReader, startStripeReader } from "@/stores/stripe-reader";
 import { usePrintStationRunner } from "@/stores/use-print-station";
 import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
@@ -70,9 +72,15 @@ export function PosApp(props: Props) {
   const badge = usePhoneBadge();
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
+  const currentDraft = useActiveDraft();
   const heldCount = drafts.filter((draft) => draft.held).length;
 
   const runtimeReady = useHardware(hardware);
+  const stripeReaderOn = hardware.payment_terminal_mode === "integrated";
+  // Stripe Reader M2: inside the POS app, reconnect the reader as soon as the register opens.
+  useEffect(() => {
+    if (stripeReaderOn && runtimeReady && startStripeReader()) void connectStripeReader();
+  }, [stripeReaderOn, runtimeReady]);
   const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
   const { notices } = useSyncState();
@@ -140,7 +148,7 @@ export function PosApp(props: Props) {
     : printStationWarning(printStation);
 
   const tabs: { id: Section; label: string }[] = [
-    { id: "order", label: heldCount ? `New Order · ${heldCount} held` : "New Order" },
+    { id: "order", label: `${draftHasContent(currentDraft) ? "Current Order" : "New Order"}${heldCount ? ` · ${heldCount} held` : ""}` },
     ...(callerIdEnabled ? [{ id: "phone" as const, label: badge.waiting ? `Phone (${badge.waiting})` : "Phone" }] : []),
     { id: "pay", label: "Payments" },
     ...(canManageOrders ? [{ id: "orders" as const, label: "Orders" }] : []),
@@ -165,7 +173,7 @@ export function PosApp(props: Props) {
     </nav>
 
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} onTakePayment={takePayment} settings={settings} /> : null}
-    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
+    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline onPay={takePayment} timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}
@@ -215,6 +223,7 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
         <p className="mt-3 text-sm text-wayne-muted">Caller ID provider: <strong>{hardware.caller_id_provider === "simulated" ? "Simulated" : hardware.caller_id_provider === "cloud" ? "Store bridge (cloud)" : "Android app"}</strong> · {hardware.caller_line_count} lines</p>
         {canManageHardware ? <Button asChild className="mt-3" variant="secondary"><Link href="/admin/hardware">Admin → Hardware</Link></Button> : null}
       </section>
+      {hardware.payment_terminal_mode === "integrated" ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Card reader</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Stripe Reader M2 over Bluetooth. Press its button once to wake it; it stays connected to this tablet.</p><StripeReaderStatus /></section> : null}
       <PrintStationPanel />
       {hardware.simulator_enabled ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Test calls</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Rings a line through the same path the real caller ID box will use.</p><SimulatorPanel lineCount={hardware.caller_line_count} /></section> : null}
     </div>

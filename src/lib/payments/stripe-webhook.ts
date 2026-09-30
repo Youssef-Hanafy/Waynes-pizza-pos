@@ -5,6 +5,7 @@ type Intent = {
   id?: string;
   status?: string;
   amount?: number;
+  metadata?: Record<string, string>;
   charges?: { data?: Array<{ receipt_url?: string; payment_method_details?: { card?: { brand?: string; last4?: string } } }> };
 };
 
@@ -15,6 +16,10 @@ export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType
   if (!intent.id) return;
   const status = intent.status === "succeeded" ? "captured" : intent.status === "requires_capture" ? "authorized" : intent.status === "canceled" ? "voided" : intent.status === "requires_payment_method" ? "failed" : "pending";
   if (status === "pending") return;
+  // A card declined on the Stripe M2 goes back to "requires_payment_method" and
+  // the same intent takes the next card; it is not a failed payment (the POS
+  // cancels it if the customer pays another way).
+  if (status === "failed" && intent.metadata?.wayne_entry === "terminal") return;
   const card = intent.charges?.data?.[0]?.payment_method_details?.card;
   const { error } = await supabase.rpc("wayne_settle_payment", {
     payload: {

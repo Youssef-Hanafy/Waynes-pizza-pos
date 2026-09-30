@@ -48,6 +48,7 @@ export async function saveHardwareSettings(form: FormData) {
       routing_categories: form.getAll("kitchen_categories").map(String),
     },
     cash_drawer: { connection: text(form, "drawer_connection") || "none", model: text(form, "drawer_model") },
+    payment_terminal_mode: text(form, "payment_terminal_mode") || "manual_external",
   });
   if (!parsed.success) back(parsed.error.issues[0]?.message ?? "Check the hardware settings.");
   const input = parsed.data!;
@@ -66,6 +67,7 @@ export async function saveHardwareSettings(form: FormData) {
       receipt_printer: input.receipt_printer,
       kitchen_printers: [input.kitchen_printer],
       cash_drawer: input.cash_drawer,
+      payment_terminal_mode: input.payment_terminal_mode,
     },
     target_workspace_slug: access.workspace_slug ?? null,
   });

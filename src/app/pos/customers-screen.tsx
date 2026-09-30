@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
-import { posCustomerOrderSchema, posCustomerSchema, type PosCustomer, type PosCustomerOrder } from "@/lib/pos/schemas";
+import { posCustomerOrderSchema, type PosCustomer, type PosCustomerOrder } from "@/lib/pos/schemas";
+import { useCustomerSearch } from "./use-customer-search";
 import { CustomerForm } from "./customer-form";
 
 /**
@@ -14,41 +15,26 @@ import { CustomerForm } from "./customer-form";
  */
 export function CustomersScreen({ focus, onStartOrder, timeZone }: { focus: PosCustomer | null; onStartOrder: (customer: PosCustomer) => void; timeZone: string }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PosCustomer[]>([]);
   const [selected, setSelected] = useState<PosCustomer | null>(focus);
   const [mode, setMode] = useState<"view" | "new" | "edit">("view");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function search(event: FormEvent) {
-    event.preventDefault();
-    if (query.trim().length < 2) { setError("Enter at least two characters."); return; }
-    setBusy(true); setError("");
-    try {
-      const response = await fetch(`/api/pos/customers?q=${encodeURIComponent(query)}`, { cache: "no-store" });
-      const parsed = posCustomerSchema.array().safeParse(await response.json());
-      if (!response.ok || !parsed.success) throw new Error("Customer search failed.");
-      setResults(parsed.data);
-      if (!parsed.data.length) setError("No customers match that search.");
-    } catch (searchError) {
-      setError(searchError instanceof TypeError ? "No connection. Try again when it is back." : searchError instanceof Error ? searchError.message : "Customer search failed.");
-    } finally { setBusy(false); }
-  }
+  /** Customers saved or edited on this screen. */
+  const [touched, setTouched] = useState<PosCustomer[]>([]);
+  const search = useCustomerSearch(query);
+  // While searching, the live matches (with any just-edited copy swapped in); otherwise whoever was just saved here.
+  const results = search.searched ? search.results.map((match) => touched.find((entry) => entry.id === match.id) ?? match) : touched;
+  const remember = (customer: PosCustomer) => setTouched((current) => [customer, ...current.filter((entry) => entry.id !== customer.id)]);
 
   return <div className="grid min-h-0 flex-1 grid-cols-1 bg-wayne-cream-deep lg:grid-cols-[24rem_1fr]">
     <aside className="border-b border-wayne-border bg-white p-4 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
       <div className="flex items-center justify-between gap-2"><h1 className="text-2xl font-black">Customers</h1><Button onClick={() => { setMode("new"); setSelected(null); }} size="sm">New customer</Button></div>
-      <form className="mt-4 flex gap-2" onSubmit={search}>
-        <label className="sr-only" htmlFor="customer-search">Search customers</label>
-        <input className="min-h-12 flex-1 rounded-xl border border-wayne-border px-3" id="customer-search" onChange={(event) => setQuery(event.target.value)} placeholder="Phone, name, address, email, order #" value={query} />
-        <Button disabled={busy} type="submit">{busy ? "…" : "Find"}</Button>
-      </form>
-      {error ? <p className="mt-3 text-sm font-bold text-wayne-muted">{error}</p> : null}
-      <ul className="mt-3 grid gap-2">{results.map((customer) => <li key={customer.id}><button className={`min-h-14 w-full rounded-xl border-2 p-3 text-left ${selected?.id === customer.id ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border"}`} onClick={() => { setSelected(customer); setMode("view"); }} type="button"><strong>{customer.first_name} {customer.last_name}</strong><span className="block text-sm">{formatPhone(customer.phone)}</span><span className="block text-xs text-wayne-muted">{customer.order_count} orders · {formatCents(customer.lifetime_spend_cents)} lifetime</span></button></li>)}</ul>
+      <label className="sr-only" htmlFor="customer-search">Search customers</label>
+      <input autoComplete="off" className="mt-4 min-h-12 w-full rounded-xl border border-wayne-border px-3" id="customer-search" onChange={(event) => setQuery(event.target.value)} placeholder="Start typing a phone, name, address, email or order #" type="search" value={query} />
+      <p aria-live="polite" className="mt-2 min-h-5 text-sm font-bold text-wayne-muted">{search.error ? search.error : search.busy ? "Looking…" : search.searched && !search.results.length ? "No customers match that." : ""}</p>
+      <ul className="mt-1 grid gap-2">{results.map((customer) => <li key={customer.id}><button className={`min-h-14 w-full rounded-xl border-2 p-3 text-left ${selected?.id === customer.id ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border"}`} onClick={() => { setSelected(customer); setMode("view"); }} type="button"><strong>{customer.first_name} {customer.last_name}</strong><span className="block text-sm">{formatPhone(customer.phone)}</span><span className="block text-xs text-wayne-muted">{customer.order_count} orders · {formatCents(customer.lifetime_spend_cents)} lifetime</span></button></li>)}</ul>
     </aside>
     <section className="p-4 lg:min-h-0 lg:overflow-y-auto">
-      {mode === "new" ? <div className="mx-auto max-w-2xl rounded-3xl bg-white p-5 shadow-sm"><h2 className="mb-4 text-2xl font-black">New customer</h2><CustomerForm onCancel={() => setMode("view")} onSaved={(customer) => { setSelected(customer); setResults((current) => [customer, ...current.filter((entry) => entry.id !== customer.id)]); setMode("view"); }} submitLabel="Save customer" /></div>
-        : mode === "edit" && selected ? <div className="mx-auto max-w-2xl rounded-3xl bg-white p-5 shadow-sm"><h2 className="mb-4 text-2xl font-black">Edit {selected.first_name}</h2><CustomerForm customer={selected} onCancel={() => setMode("view")} onSaved={(customer) => { setSelected(customer); setResults((current) => current.map((entry) => (entry.id === customer.id ? customer : entry))); setMode("view"); }} submitLabel="Save changes" /></div>
+      {mode === "new" ? <div className="mx-auto max-w-2xl rounded-3xl bg-white p-5 shadow-sm"><h2 className="mb-4 text-2xl font-black">New customer</h2><CustomerForm onCancel={() => setMode("view")} onSaved={(customer) => { setSelected(customer); remember(customer); setMode("view"); }} submitLabel="Save customer" /></div>
+        : mode === "edit" && selected ? <div className="mx-auto max-w-2xl rounded-3xl bg-white p-5 shadow-sm"><h2 className="mb-4 text-2xl font-black">Edit {selected.first_name}</h2><CustomerForm customer={selected} onCancel={() => setMode("view")} onSaved={(customer) => { setSelected(customer); remember(customer); setMode("view"); }} submitLabel="Save changes" /></div>
         : selected ? <CustomerDetail customer={selected} onEdit={() => setMode("edit")} onStartOrder={onStartOrder} timeZone={timeZone} />
         : <p className="mx-auto mt-10 max-w-md text-center text-wayne-muted">Search for a customer, or add a new one.</p>}
     </section>

@@ -59,6 +59,11 @@ export const posDraftSchema = z.object({
   syncedAt: z.string().nullable().optional().default(null),
   /** Submit failed for lack of a connection; resent automatically with the same key (§30). */
   submitPending: z.boolean().optional().default(false),
+  /**
+   * The New Order card (order type, customer, address) has been completed and
+   * the menu is showing.  Tickets saved before the card existed count as started.
+   */
+  started: z.boolean().optional().default(true),
 });
 export type PosDraft = z.infer<typeof posDraftSchema>;
 
@@ -99,6 +104,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     syncedVersion: null,
     syncedAt: null,
     submitPending: false,
+    started: false,
     ...patch,
   };
 }

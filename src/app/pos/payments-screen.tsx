@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
+import { StripeReaderTender } from "@/components/pos/stripe-reader-panel";
 import { posDrawerSchema } from "@/lib/cash/schemas";
 import { formatCents } from "@/lib/menu/schemas";
 import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
@@ -37,7 +38,7 @@ async function readError(response: Response, fallback: string) {
  * Every payment taken here opens the cash drawer: the database queues a
  * drawer kick and the print station pulses the drawer on the receipt printer.
  */
-export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
+export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean }) {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [listError, setListError] = useState("");
@@ -112,7 +113,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
     <section aria-label="Take payment" className="rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
       {done ? <PaidSummary done={done} onNext={() => setDone(null)} />
-        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
+        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
         : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Choose an order on the left to take payment.</p></div>}
     </section>
   </div>;
@@ -136,7 +137,7 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
   </div>;
 }
 
-function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged, keyedCardConfig }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
+function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged, keyedCardConfig, stripeReader }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; stripeReader: boolean }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -155,7 +156,7 @@ function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged, keyed
       </div>
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "card" ? <CardTender busy={busy} keyedCardConfig={keyedCardConfig} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} terminals={terminals} /> : null}
+      {mode === "card" ? <CardTender busy={busy} keyedCardConfig={keyedCardConfig} stripeReader={stripeReader} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} terminals={terminals} /> : null}
     </>}
   </div>;
 }
@@ -217,7 +218,7 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
   </div>;
 }
 
-function CardTender({ order, terminals, busy, setBusy, onError, onPaid, keyedCardConfig }: TenderProps & { terminals: Terminal[]; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
+function CardTender({ order, terminals, busy, setBusy, onError, onPaid, keyedCardConfig, stripeReader }: TenderProps & { terminals: Terminal[]; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; stripeReader: boolean }) {
   const [terminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
@@ -286,17 +287,8 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, keyedCar
     }
   }
 
-  return <div className="mt-5 grid gap-4">
-    {keyedCardConfig && order.source === "phone" && order.fulfillment_type === "delivery" ? <KeyedStripeTender busy={busy} config={keyedCardConfig} onError={onError} onPaid={onPaid} order={order} setBusy={setBusy} /> : null}
-    {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
-      <h2 className="text-xl font-black">Send to the card reader</h2>
-      {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
-      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button onClick={() => { void cancelOnReader(); }} variant="secondary">Cancel on reader</Button></div>
-        : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">Charge {formatCents(order.total_cents)} on the reader</Button>}
-    </div> : null}
-
-    <div className="rounded-2xl border-2 border-wayne-border p-4">
-      <h2 className="text-xl font-black">{terminals.length ? "Or: ran it on a separate reader" : "Card reader"}</h2>
+  const manualReader = <div className="rounded-2xl border-2 border-wayne-border p-4">
+      <h2 className="text-xl font-black">{terminals.length || stripeReader ? "Ran it on a separate terminal" : "Card reader"}</h2>
       <ol className="mt-2 list-decimal pl-5 text-base">
         <li>Key <strong>{formatCents(order.total_cents)}</strong> into the card reader and let the customer pay.</li>
         <li>When the reader says <strong>Approved</strong>, tap the button below.</li>
@@ -307,7 +299,19 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, keyedCar
         <label className="grid gap-1 text-sm font-bold">Approval code (optional)<input className="min-h-12 rounded-lg border border-wayne-border px-3 text-lg font-bold uppercase" maxLength={40} onChange={(event) => setApproval(event.target.value)} value={approval} /></label>
       </div>
       <Button className="mt-3 w-full text-xl" disabled={busy || (last4.length > 0 && last4.length < 4)} onClick={() => { void recordApproved(); }} size="lg">{busy && !charging ? "Saving…" : `Approved on the reader · ${formatCents(order.total_cents)}`}</Button>
-    </div>
+</div>;
+
+  return <div className="mt-5 grid gap-4">
+    {stripeReader ? <StripeReaderTender busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
+    {keyedCardConfig && order.source === "phone" && order.fulfillment_type === "delivery" ? <KeyedStripeTender busy={busy} config={keyedCardConfig} onError={onError} onPaid={onPaid} order={order} setBusy={setBusy} /> : null}
+    {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
+      <h2 className="text-xl font-black">Send to the card reader</h2>
+      {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
+      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button onClick={() => { void cancelOnReader(); }} variant="secondary">Cancel on reader</Button></div>
+        : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">Charge {formatCents(order.total_cents)} on the reader</Button>}
+    </div> : null}
+
+    {stripeReader ? <details className="rounded-2xl border border-dashed border-wayne-border-strong p-3"><summary className="min-h-9 cursor-pointer text-sm font-bold">Reader not working? Record a card run on a separate terminal</summary><div className="mt-3">{manualReader}</div></details> : manualReader}
   </div>;
 }
 

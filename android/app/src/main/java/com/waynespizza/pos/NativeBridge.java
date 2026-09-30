@@ -27,6 +27,9 @@ import java.util.concurrent.Executors;
  *   SEND_INTERRUPTED  the connection opened, then broke: part of the ticket may have printed
  *   PERMISSION_DENIED the local network permission was refused
  *
+ * The Stripe Reader M2 (StripeReader) answers on the same channel and sends
+ * status / "insert, tap or swipe" prompts through window.__waynesStripeEvent.
+ *
  * Only the POS site itself may use this: calls from any other page are ignored.
  */
 final class NativeBridge {
@@ -36,6 +39,7 @@ final class NativeBridge {
     private final ExecutorService printerThreads = Executors.newCachedThreadPool();
     private final ExecutorService callerIdThread = Executors.newSingleThreadExecutor();
     private final CallerIdListener callerId;
+    private final StripeReader stripe;
     private volatile String currentUrl = "";
 
     NativeBridge(MainActivity activity, WebView webView, String posUrl) {
@@ -43,6 +47,22 @@ final class NativeBridge {
         this.webView = webView;
         this.allowedHost = Uri.parse(posUrl).getHost();
         this.callerId = new CallerIdListener(activity, this::deliverPacket);
+        this.stripe = new StripeReader(activity, new StripeReader.Page() {
+            @Override
+            public void reply(String callId, boolean ok, String code, String message) {
+                NativeBridge.this.reply(callId, ok, code, message);
+            }
+
+            @Override
+            public void event(String type, JSONObject body) {
+                deliverScript("window.__waynesStripeEvent&&window.__waynesStripeEvent(" + JSONObject.quote(type) + "," + JSONObject.quote(body.toString()) + ")");
+            }
+
+            @Override
+            public void requestToken(String requestId) {
+                deliverScript("window.__waynesStripeToken&&window.__waynesStripeToken(" + JSONObject.quote(requestId) + ")");
+            }
+        });
     }
 
     void setCurrentUrl(String url) {
@@ -126,6 +146,51 @@ final class NativeBridge {
         return callerId.statusJson();
     }
 
+    // ---- Stripe Reader M2 ----
+
+    @JavascriptInterface
+    public String stripeStatus() {
+        return stripe.statusJson();
+    }
+
+    @JavascriptInterface
+    public void stripeConnect(final String callId, final String locationId, final boolean simulated) {
+        if (!trusted()) return;
+        if (locationId == null || !locationId.startsWith("tml_")) {
+            reply(callId, false, "ERROR", "The store's Stripe location is missing.");
+            return;
+        }
+        activity.runOnUiThread(() -> stripe.connect(callId, locationId, simulated));
+    }
+
+    @JavascriptInterface
+    public void stripeCollect(final String callId, final String clientSecret) {
+        if (!trusted()) return;
+        if (clientSecret == null || !clientSecret.startsWith("pi_")) {
+            reply(callId, false, "ERROR", "The payment to send to the reader is invalid.");
+            return;
+        }
+        activity.runOnUiThread(() -> stripe.collect(callId, clientSecret));
+    }
+
+    @JavascriptInterface
+    public void stripeCancel(final String callId) {
+        if (!trusted()) return;
+        activity.runOnUiThread(() -> stripe.cancel(callId));
+    }
+
+    @JavascriptInterface
+    public void stripeDisconnect(final String callId) {
+        if (!trusted()) return;
+        activity.runOnUiThread(() -> stripe.disconnect(callId));
+    }
+
+    @JavascriptInterface
+    public void stripeTokenResult(final String requestId, final boolean ok, final String value) {
+        if (!trusted()) return;
+        stripe.tokenResult(requestId, ok, value);
+    }
+
     // ---- Native work ----
 
     private void send(String callId, String host, int port, byte[] bytes, int timeout) {
@@ -165,6 +230,13 @@ final class NativeBridge {
         });
     }
 
+    /** Runs a line of script on the POS page (only while the POS itself is showing). */
+    private void deliverScript(String script) {
+        webView.post(() -> {
+            if (trusted()) webView.evaluateJavascript(script, null);
+        });
+    }
+
     private void reply(String callId, boolean ok, String code, String message) {
         String script = "window.__waynesNativeResult&&window.__waynesNativeResult("
                 + JSONObject.quote(callId) + "," + ok + "," + JSONObject.quote(code) + "," + JSONObject.quote(message) + ")";
@@ -172,6 +244,7 @@ final class NativeBridge {
     }
 
     void shutdown() {
+        stripe.shutdown();
         callerId.stop();
         printerThreads.shutdownNow();
         callerIdThread.shutdownNow();

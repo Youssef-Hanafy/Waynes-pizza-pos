@@ -31,19 +31,23 @@ import java.util.function.Consumer;
  *
  * A full-screen WebView of the POS website plus the two things a browser
  * cannot do, exposed to the page as window.WaynesAndroid (see NativeBridge):
- * listening for the caller ID box's UDP broadcasts, and sending receipts and
- * kitchen tickets straight to the network printers.  Every screen and rule
+ * listening for the caller ID box's UDP broadcasts, sending receipts and
+ * kitchen tickets straight to the network printers, and the Stripe Reader M2
+ * card reader over Bluetooth.  Every screen and rule
  * stays in the website, so updating the POS never needs a new app.
  */
 public class MainActivity extends Activity {
     /** Android 17 local network protection. Older Android versions don't have it. */
     static final String LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK";
     private static final int REQUEST_LOCAL_NETWORK = 17;
+    private static final int REQUEST_READER = 18;
 
     private WebView webView;
     private NativeBridge bridge;
     private final List<Consumer<Boolean>> waitingForPermission = new ArrayList<>();
     private boolean askingPermission = false;
+    private final List<Consumer<Boolean>> waitingForReader = new ArrayList<>();
+    private String[] readerPermissions = new String[0];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -164,9 +168,40 @@ public class MainActivity extends Activity {
         });
     }
 
+    // ---- Bluetooth + location for the card reader ----
+
+    private boolean allGranted(String[] permissions) {
+        for (String permission : permissions) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) return false;
+        }
+        return true;
+    }
+
+    /** Runs `then` on the main thread with whether every listed permission is granted (asking once if needed). */
+    void withPermissions(String[] permissions, Consumer<Boolean> then) {
+        runOnUiThread(() -> {
+            if (allGranted(permissions)) {
+                then.accept(true);
+                return;
+            }
+            waitingForReader.add(then);
+            if (waitingForReader.size() == 1) {
+                readerPermissions = permissions;
+                requestPermissions(permissions, REQUEST_READER);
+            }
+        });
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_READER) {
+            boolean granted = allGranted(readerPermissions);
+            List<Consumer<Boolean>> waiting = new ArrayList<>(waitingForReader);
+            waitingForReader.clear();
+            for (Consumer<Boolean> callback : waiting) callback.accept(granted);
+            return;
+        }
         if (requestCode != REQUEST_LOCAL_NETWORK) return;
         askingPermission = false;
         boolean granted = hasLocalNetwork();
