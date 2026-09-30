@@ -18,10 +18,15 @@ export async function getCashCloseout(from: string, through: string) {
   ]);
   const { data, error } = closeout;
   if (error) throw new Error(`The closeout report failed: ${error.message}`);
-  if (deliveryCash.error || !deliveryCash.data || typeof deliveryCash.data !== "object") throw new Error("The delivery cash total could not be loaded.");
+  // Keep the closeout usable during the short window before the accompanying
+  // migration reaches a database; zeros make the missing addition explicit
+  // without hiding the existing drawer ledger.
+  const deliveryTotals = deliveryCash.error || !deliveryCash.data || typeof deliveryCash.data !== "object"
+    ? { delivery_cash_collected_cents: 0, delivery_cash_unassigned_cents: 0 }
+    : deliveryCash.data;
   return cashCloseoutSchema.parse({
     ...data as object,
-    totals: { ...(data as { totals: object }).totals, ...deliveryCash.data as object },
+    totals: { ...(data as { totals: object }).totals, ...deliveryTotals as object },
   });
 }
 
