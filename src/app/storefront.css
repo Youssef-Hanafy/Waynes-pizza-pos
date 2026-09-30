@@ -3024,6 +3024,11 @@
   font-weight: 600;
   font-family: inherit;
 }
+.order-gate gmp-place-autocomplete {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+}
 .order-gate textarea {
   min-height: 70px;
 }
