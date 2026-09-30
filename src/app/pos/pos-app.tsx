@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { StoreSettings } from "@/lib/content/schemas";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
 import type { PublicMenu } from "@/lib/menu/schemas";
+import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { activeDraft, draftFromCall, isDraftIdle } from "@/lib/orders/drafts";
 import { ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
@@ -41,6 +42,7 @@ type Props = {
   callerIdEnabled: boolean;
   deliveryEnabled: boolean;
   workspaceName: string;
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null;
 };
 
 /**
@@ -53,7 +55,7 @@ type Props = {
  * the cashier away from what they are doing (§6, §34.1).
  */
 export function PosApp(props: Props) {
-  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, callerIdEnabled, deliveryEnabled, workspaceName } = props;
+  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = props;
   const [section, setSection] = useState<Section>("order");
   const [customerFocus, setCustomerFocus] = useState<PosCustomer | null>(null);
   const [phoneFocus, setPhoneFocus] = useState<{ key: string; n: number } | null>(null);
@@ -163,7 +165,7 @@ export function PosApp(props: Props) {
     </nav>
 
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} onTakePayment={takePayment} settings={settings} /> : null}
-    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
+    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline onPay={takePayment} timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}

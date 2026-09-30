@@ -43,7 +43,7 @@ export const posOrderInputSchema = z.object({
   phone_call_id: optionalUuid.optional().default(""),
   phone_line: z.number().int().min(1).max(8).nullable().optional().default(null),
   fulfillment_type: z.enum(["pickup", "delivery"]),
-  payment_method: z.enum(["test_manual", "cash", "card"]),
+  payment_method: z.enum(["test_manual", "cash"]),
   first_name: z.string().trim().max(100),
   last_name: z.string().trim().max(100),
   phone: z.string().trim().max(40),

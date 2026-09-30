@@ -5,6 +5,7 @@ import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { getHardwareSettings } from "@/lib/hardware/queries";
 import { callerIdProviderSchema } from "@/lib/hardware/schemas";
 import { getPosMenu } from "@/lib/pos/queries";
+import { getPosKeyedCardConfig } from "@/lib/payments/queries";
 import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { SupportPill } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PosPage() {
   const access = await requirePermission("pos.access", "/pos");
-  const [menu, settings, { settings: hardware }] = await Promise.all([getPosMenu(), getWorkspaceStoreSettings(), getHardwareSettings()]);
+  const [menu, settings, { settings: hardware }, keyedCardConfig] = await Promise.all([getPosMenu(), getWorkspaceStoreSettings(), getHardwareSettings(), getPosKeyedCardConfig()]);
   // CALLER_ID_PROVIDER / CALLER_LINE_COUNT (build sheet §50) override the saved
   // settings for a development or test deployment. Read on the server only.
   const envProvider = callerIdProviderSchema.safeParse(process.env.CALLER_ID_PROVIDER);
@@ -37,6 +38,7 @@ export default async function PosPage() {
       canManageOrders={hasPermission(access, "orders.manage")}
       canOpenAdmin={hasPermission(access, "admin.access")}
       hardware={effectiveHardware}
+      keyedCardConfig={keyedCardConfig}
       menu={menu}
       profileId={access.profile_id}
       settings={settings}

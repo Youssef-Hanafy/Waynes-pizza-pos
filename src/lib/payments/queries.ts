@@ -31,6 +31,22 @@ export async function getCheckoutPaymentConfig() {
   }
 }
 
+/** Non-secret Stripe configuration for the signed-in POS workspace. */
+export async function getPosKeyedCardConfig() {
+  try {
+    const access = await getCurrentAccess();
+    if (!access?.workspace_id) return null;
+    const resolved = await resolvePaymentProvider("online", { workspaceId: access.workspace_id, locationId: access.location_id ?? null });
+    if (!resolved.ok || resolved.value.provider.code !== "stripe") return null;
+    const parsed = checkoutPaymentConfigSchema.safeParse({
+      provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true,
+    });
+    return parsed.success && parsed.data.provider === "stripe" ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getPaymentConsole() {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.rpc("wayne_admin_payment_console");

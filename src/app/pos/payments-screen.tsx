@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { posDrawerSchema } from "@/lib/cash/schemas";
 import { formatCents } from "@/lib/menu/schemas";
 import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
+import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 
@@ -35,7 +37,7 @@ async function readError(response: Response, fallback: string) {
  * Every payment taken here opens the cash drawer: the database queues a
  * drawer kick and the print station pulses the drawer on the receipt printer.
  */
-export function PaymentsScreen({ timeZone, initialOrderId = null }: { timeZone: string; initialOrderId?: string | null }) {
+export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [listError, setListError] = useState("");
@@ -110,7 +112,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null }: { timeZone: 
 
     <section aria-label="Take payment" className="rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
       {done ? <PaidSummary done={done} onNext={() => setDone(null)} />
-        : selected ? <PaymentPage key={selected.id} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
+        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
         : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Choose an order on the left to take payment.</p></div>}
     </section>
   </div>;
@@ -134,7 +136,7 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
   </div>;
 }
 
-function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void> }) {
+function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged, keyedCardConfig }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -153,7 +155,7 @@ function PaymentPage({ order, shiftId, terminals, onPaid, onDrawerChanged }: { o
       </div>
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "card" ? <CardTender busy={busy} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} terminals={terminals} /> : null}
+      {mode === "card" ? <CardTender busy={busy} keyedCardConfig={keyedCardConfig} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} terminals={terminals} /> : null}
     </>}
   </div>;
 }
@@ -215,7 +217,7 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
   </div>;
 }
 
-function CardTender({ order, terminals, busy, setBusy, onError, onPaid }: TenderProps & { terminals: Terminal[] }) {
+function CardTender({ order, terminals, busy, setBusy, onError, onPaid, keyedCardConfig }: TenderProps & { terminals: Terminal[]; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null }) {
   const [terminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
@@ -285,6 +287,7 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid }: Tender
   }
 
   return <div className="mt-5 grid gap-4">
+    {keyedCardConfig && order.source === "phone" && order.fulfillment_type === "delivery" ? <KeyedStripeTender busy={busy} config={keyedCardConfig} onError={onError} onPaid={onPaid} order={order} setBusy={setBusy} /> : null}
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
@@ -305,5 +308,50 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid }: Tender
       </div>
       <Button className="mt-3 w-full text-xl" disabled={busy || (last4.length > 0 && last4.length < 4)} onClick={() => { void recordApproved(); }} size="lg">{busy && !charging ? "Saving…" : `Approved on the reader · ${formatCents(order.total_cents)}`}</Button>
     </div>
+  </div>;
+}
+
+/** Delivery-phone cards are entered in Stripe's iframe, never in Wayne's app. */
+function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: TenderProps & { config: Extract<CheckoutPaymentConfig, { provider: "stripe" }> }) {
+  const confirmRef = useRef<StripeCardConfirm | null>(null);
+  const [message, setMessage] = useState("");
+  const onReady = useCallback((confirm: StripeCardConfirm | null) => { confirmRef.current = confirm; }, []);
+  const onStatus = useCallback((next: string) => setMessage(next), []);
+
+  async function charge() {
+    if (!confirmRef.current) { onError("Secure card entry is still loading."); return; }
+    setBusy(true); onError(""); setMessage("Preparing Stripe payment…");
+    try {
+      const intentResponse = await fetch("/api/pos/keyed-card/intent", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-keyed-card-${order.id}-${crypto.randomUUID()}` }), signal: AbortSignal.timeout(15_000),
+      });
+      if (!intentResponse.ok) throw new Error(await readError(intentResponse, "The payment could not be prepared."));
+      const intent = await intentResponse.json().catch(() => null) as { payment_id?: string; client_secret?: string } | null;
+      if (!intent?.payment_id || !intent.client_secret) throw new Error("The payment could not be prepared.");
+      setMessage("Waiting for Stripe…");
+      const confirmed = await confirmRef.current({ clientSecret: intent.client_secret, name: order.customer_name || "Wayne's Pizza customer" });
+      if (confirmed.error) throw new Error(confirmed.error.message ?? "The card was declined.");
+      const confirmResponse = await fetch("/api/pos/keyed-card/confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payment_id: intent.payment_id }), signal: AbortSignal.timeout(15_000),
+      });
+      if (!confirmResponse.ok) throw new Error(await readError(confirmResponse, "We could not verify the payment."));
+      const result = await confirmResponse.json().catch(() => null) as { payment_status?: string } | null;
+      if (result?.payment_status === "captured") { onPaid({ order, method: "card", changeCents: 0, tenderedCents: null }); return; }
+      if (result?.payment_status === "pending") throw new Error("Stripe is still processing this payment. Do not enter the card again; check Payments shortly.");
+      throw new Error("The card was declined. Try another card.");
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "The keyed card payment could not be completed.");
+    } finally {
+      setBusy(false); setMessage("");
+    }
+  }
+
+  return <div className="rounded-2xl border-2 border-wayne-green p-4">
+    <h2 className="text-xl font-black">Key in a delivery card</h2>
+    <p className="mt-1 text-sm text-wayne-muted">For phone delivery orders only. Card details go directly to Stripe and are never stored by Wayne&apos;s Pizza.</p>
+    <div className="mt-3"><StripeCardField config={config} onReady={onReady} onStatus={onStatus} /></div>
+    {message ? <p aria-live="polite" className="mt-2 text-sm font-bold">{message}</p> : null}
+    <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void charge(); }} size="lg">{busy ? "Processing…" : `Charge ${formatCents(order.total_cents)} with Stripe`}</Button>
   </div>;
 }

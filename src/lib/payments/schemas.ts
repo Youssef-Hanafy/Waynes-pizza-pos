@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { checkoutInputSchema } from "@/lib/orders/schemas";
-import { posOrderInputSchema } from "@/lib/pos/schemas";
 import { spokenDatabaseMessage } from "@/lib/errors/database";
 
 /** The legacy Square SDK script. Kept while historical Square configurations exist. */
@@ -94,28 +93,6 @@ export const cardCheckoutResultSchema = z.object({
   payment_status: z.enum(["captured", "pending"]),
 });
 
-/** A staff-only keyed-card request for a delivery phone order. */
-export const posCardOrderSchema = posOrderInputSchema.refine(
-  (order) => order.payment_method === "card" && order.source === "phone" && order.fulfillment_type === "delivery",
-  { message: "Keyed card payment is available for delivery phone orders only." },
-);
-export const posCardCheckoutRequestSchema = z.object({
-  order: posCardOrderSchema,
-  payment: z.object({
-    source_id: z.string().min(1).max(4000),
-    verification_token: z.string().max(4000).nullable().optional(),
-  }),
-});
-export const posCardIntentRequestSchema = z.object({ order: posCardOrderSchema });
-export const posCardConfirmRequestSchema = z.object({ payment_id: z.uuid() });
-export const posCardResultSchema = z.object({
-  id: z.uuid(), order_number: z.string(), total_cents: z.number().int(), duplicate: z.boolean(),
-  payment_status: z.enum(["captured", "pending", "failed"]),
-});
-export const posCardIntentResultSchema = posCardResultSchema.extend({
-  payment_id: z.uuid(), client_secret: z.string().min(20),
-});
-
 /** The first Stripe step creates the held order and its PaymentIntent. */
 export const stripeIntentRequestSchema = checkoutInputSchema;
 export const stripeIntentResultSchema = z.object({
@@ -135,6 +112,13 @@ export const stripeConfirmResultSchema = z.object({
   id: z.uuid(), public_access_token: z.uuid(), order_number: z.string(), total_cents: z.number().int(),
   payment_status: z.enum(["captured", "pending", "failed"]),
 });
+
+/** A staff-only Stripe payment for an already-created delivery phone order. */
+export const posKeyedCardIntentSchema = z.object({
+  order_id: z.uuid(),
+  idempotency_key: z.string().min(16).max(160),
+});
+export const posKeyedCardConfirmSchema = z.object({ payment_id: z.uuid() });
 
 export const terminalActionSchema = z.object({
   order_id: z.uuid(),

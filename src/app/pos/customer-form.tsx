@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 import { blankAddress } from "@/lib/orders/drafts";
 import { formatPhone } from "@/lib/phone/normalize";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
@@ -61,7 +62,7 @@ export function CustomerForm({ customer, initialPhone = "", submitLabel, onSaved
     </div>
     {showAddress ? <fieldset className="grid gap-3 rounded-xl border border-wayne-border p-3">
       <legend className="px-1 text-sm font-black">{customer ? "Add an address" : "Address (optional)"}</legend>
-      <Input id="cf-address1" label="Street address" onChange={(e) => setAddress({ ...address, address1: e.target.value })} value={address.address1} />
+      <GoogleAddressInput id="cf-address1" label="Find address" name="cf-address1" onAddressSelect={(selected) => setAddress({ ...address, ...selected })} onChange={(address1) => setAddress({ ...address, address1 })} value={address.address1} />
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_6rem_7rem]">
         <Input id="cf-address2" label="Unit" onChange={(e) => setAddress({ ...address, address2: e.target.value })} value={address.address2} />
         <Input id="cf-city" label="City" onChange={(e) => setAddress({ ...address, city: e.target.value })} value={address.city} />

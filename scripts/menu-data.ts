@@ -29,8 +29,6 @@ export type MenuItem = {
   priceCents?: number;
   variants?: { name: string; priceCents: number }[];
   groups?: string[];
-  /** Recipe ingredients selected when this specialty pizza is opened. */
-  includedIngredients?: string[];
 };
 
 export type MenuCategory = { name: string; description?: string; items: MenuItem[] };
@@ -63,15 +61,6 @@ export const modifierGroups: MenuModifierGroup[] = [
   toppingGroup(1),
   toppingGroup(2),
   toppingGroup(3),
-  {
-    key: "pizza-customizations",
-    name: "POS pizza customizations",
-    customerLabel: "Toppings & changes",
-    minSelect: 0,
-    maxSelect: 99,
-    allowQuantities: true,
-    choices: PIZZA_TOPPINGS,
-  },
   {
     key: "calzone-toppings",
     name: "Calzone toppings",
@@ -170,25 +159,24 @@ export const categories: MenuCategory[] = [
   {
     name: "Gourmet Pizza",
     items: [
-      { name: "Full Combo Pizza", description: "Pepperoni, Meatball, Sausage, Ham, Mushrooms, Onion, Peppers", variants: sizes(1300, 2050), includedIngredients: ["Pepperoni", "Meatball", "Sausage", "Ham", "Mushrooms", "Onion", "Peppers"] },
-      { name: "Veggie Combo Pizza", description: "Broccoli, Spinach, Black Olives, Mushrooms, Peppers, Onion, Tomato", variants: sizes(1300, 2050), includedIngredients: ["Broccoli", "Spinach", "Black Olives", "Mushrooms", "Peppers", "Onion", "Tomato"] },
-      { name: "Primavera Pizza", description: "Spinach, Tomato, Broccoli", variants: sizes(1125, 1800), includedIngredients: ["Spinach", "Tomato", "Broccoli"] },
-      { name: "Greek Pizza", description: "Spinach, Feta, Tomato", variants: sizes(1150, 1850), includedIngredients: ["Spinach", "Feta", "Tomato"] },
-      { name: "Hawaiian Pizza", description: "Ham, Pineapple", variants: sizes(1125, 1800), includedIngredients: ["Ham", "Pineapple"] },
-      { name: "Meat Lovers Pizza", description: "Pepperoni, Sausage, Ham, Salami", variants: sizes(1300, 2050), includedIngredients: ["Pepperoni", "Sausage", "Ham", "Salami"] },
-      { name: "Chicken Broccoli Garlic Pizza", description: "Grilled Chicken, Broccoli, Garlic", variants: sizes(1325, 2050), includedIngredients: ["Grilled Chicken", "Broccoli", "Garlic"] },
-      { name: "Chicken Broccoli Alfredo Pizza", description: "Grilled Chicken, Broccoli, Alfredo Sauce", variants: sizes(1375, 2075), includedIngredients: ["Grilled Chicken", "Broccoli", "Alfredo Sauce"] },
-      { name: "Chicken Bacon Ranch Pizza", description: "Grilled Chicken, Bacon, Ranch", variants: sizes(1375, 2075), includedIngredients: ["Grilled Chicken", "Bacon", "Ranch"] },
-      { name: "BBQ Chicken Pizza", description: "Grilled Chicken, BBQ Sauce", variants: sizes(1200, 1975), includedIngredients: ["Grilled Chicken", "BBQ Sauce"] },
-      { name: "Buffalo Chicken Pizza", description: "Grilled Chicken, Buffalo Sauce", variants: sizes(1200, 1975), includedIngredients: ["Grilled Chicken", "Buffalo Sauce"] },
-      { name: "Mexican Pizza", description: "Hamburger, Banana Peppers, Onion, Peppers, Tomato, Lettuce", variants: sizes(1200, 1925), includedIngredients: ["Hamburger", "Banana Peppers", "Onion", "Peppers", "Tomato", "Lettuce"] },
-      { name: "Philly Steak Pizza", description: "Onion, Peppers, Mushrooms", variants: sizes(1350, 2075), includedIngredients: ["Onion", "Peppers", "Mushrooms"] },
-      { name: "White Pizza", description: "Mozzarella, cheddar, feta and parmesan cheese with olive oil", variants: sizes(1150, 1925) },
-      { name: "Wayne's Pizza", description: "Eggplant, Mushrooms, Onion, Artichoke, Garlic", variants: sizes(1175, 1975), includedIngredients: ["Eggplant", "Mushrooms", "Onion", "Artichoke", "Garlic"] },
-      { name: "Grilled Chicken Pizza", description: "Grilled Chicken", variants: sizes(1200, 1975), includedIngredients: ["Grilled Chicken"] },
-      { name: "Shrimp Scampi Alfredo", description: "Shrimp, Garlic, Alfredo Sauce", variants: sizes(1375, 2075), includedIngredients: ["Shrimp", "Garlic", "Alfredo Sauce"] },
-      { name: "Five Alarm", description: "Buffalo Chicken, Onion, Garlic, Jalapenos", variants: sizes(1375, 2075), includedIngredients: ["Buffalo Chicken", "Onion", "Garlic", "Jalapenos"] },
-    ].map((item) => ({ ...item, groups: ["pizza-customizations"] })),
+      { name: "Full Combo", description: "Pepperoni, meatball, sausage, ham, mushrooms, onions & peppers", variants: sizes(1300, 2050) },
+      { name: "Veggie Combo", description: "Broccoli, spinach, black olives, mushrooms, peppers, onions and sliced tomato", variants: sizes(1300, 2050) },
+      { name: "Primavera", description: "Broccoli, spinach, sliced tomato", variants: sizes(1125, 1800) },
+      { name: "Greek Pizza", description: "Spinach, feta, sliced tomato", variants: sizes(1150, 1850) },
+      { name: "Mexican Pizza", description: "Hamburger, hot sauce, hot banana pepper rings, onions, green peppers, lettuce, sliced tomato", variants: sizes(1200, 1925) },
+      { name: "Hawaiian", description: "Ham & pineapple", variants: sizes(1125, 1800) },
+      { name: "Meat Lovers", description: "Pepperoni, sausage, ham, bacon, salami", variants: sizes(1300, 2050) },
+      { name: "Philly Steak Pizza", description: "Steak, green peppers, onions & mushrooms", variants: sizes(1350, 2075) },
+      { name: "White Pizza", description: "Mozzarella, cheddar, feta & parmesan cheese with olive oil", variants: sizes(1150, 1925) },
+      { name: "Wayne's Pizza", description: "Eggplant, mushrooms, onions, artichoke hearts, garlic", variants: sizes(1175, 1975) },
+      { name: "BBQ Chicken Pizza", variants: sizes(1200, 1975) },
+      { name: "Buffalo Chicken Pizza", variants: sizes(1200, 1975) },
+      { name: "Chicken, Broccoli & Garlic Pizza", variants: sizes(1325, 2050) },
+      { name: "Chicken, Broccoli Alfredo Pizza", variants: sizes(1375, 2075) },
+      { name: "Chicken Bacon Ranch Pizza", variants: sizes(1375, 2075) },
+      { name: "Five Alarm Pizza", description: "Buffalo chicken, onion, fresh garlic and sliced jalapeños", variants: sizes(1375, 2075) },
+      { name: "Alfredo Shrimp Scampi Pizza", variants: sizes(1375, 2075) },
+    ],
   },
   {
     name: "Calzones",
