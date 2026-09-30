@@ -9,7 +9,7 @@ export const cashMovementLabels: Record<CashMovementKind, string> = {
   paid_in: "Paid in",
   paid_out: "Paid out",
   drop: "Dropped to the safe",
-  driver_cash: "Driver cash handed in",
+  driver_cash: "Other driver cash handed in",
 };
 
 /** Whether a movement adds to or takes from the drawer. */
@@ -84,6 +84,7 @@ export const cashCloseoutSchema = z.object({
     opening_cash_cents: z.number().int(), cash_sales_cents: z.number().int(),
     cash_refunds_cents: z.number().int(), paid_in_cents: z.number().int(),
     paid_out_cents: z.number().int(), driver_cash_cents: z.number().int(),
+    delivery_cash_collected_cents: z.number().int(), delivery_cash_unassigned_cents: z.number().int(),
     counted_cash_cents: z.number().int(), expected_cash_cents: z.number().int(),
     variance_cents: z.number().int(), over_count: z.number().int(), short_count: z.number().int(),
   }),

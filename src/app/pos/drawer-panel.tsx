@@ -163,6 +163,7 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
 
           <div className="rounded-2xl border border-wayne-border p-5">
             <h3 className="text-xl font-black">Move cash</h3>
+            <p className="mt-1 text-sm text-wayne-muted">Cash recorded by a driver as collected at the door is added automatically. Use “Other driver cash handed in” only for cash that was not recorded on a delivery here.</p>
             <div className="mt-3 grid gap-3">
               <label className="grid gap-2 text-sm font-bold">What is this
                 <select className="min-h-12 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setMovementKind(event.target.value as CashMovementKind)} value={movementKind}>
