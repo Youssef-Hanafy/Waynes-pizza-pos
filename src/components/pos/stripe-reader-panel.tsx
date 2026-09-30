@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { cancelStripeReaderCollect, collectWithStripeReader, connectStripeReader, startStripeReader, stripeReaderLabels, useStripeReader } from "@/stores/stripe-reader";
+import { uuid } from "@/lib/uuid";
 
 async function readError(response: Response, fallback: string) {
   const body: unknown = await response.json().catch(() => null);
@@ -95,7 +96,7 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
         if (!(await connectStripeReader())) throw new Error("The card reader isn't connected. Turn it on (press the button once), keep it near the tablet, then try again.");
       }
       setPhase("preparing"); setNote("Sending the total to the reader…");
-      const response = await post("/api/pos/stripe-terminal/intent", { order_id: orderId, idempotency_key: `pos-m2-${orderId}-${crypto.randomUUID()}` });
+      const response = await post("/api/pos/stripe-terminal/intent", { order_id: orderId, idempotency_key: `pos-m2-${orderId}-${uuid()}` });
       const body = await response.json().catch(() => ({})) as { payment_id?: string; client_secret?: string; state?: string; error?: string };
       if (body.state === "captured") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
       if (!response.ok || !body.payment_id || !body.client_secret) throw new Error(body.error || "The card payment could not be prepared.");

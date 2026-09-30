@@ -9,6 +9,7 @@ import { posOrderCreatedSchema } from "@/lib/pos/schemas";
 import { createStore, useStore } from "./create-store";
 import { orderStore } from "./order-store";
 import { getTerminalLabel, phoneActions } from "./phone-store";
+import { uuid } from "@/lib/uuid";
 
 /**
  * Phase 6 — tickets that survive the register (build sheet §22, §30, §36).
@@ -76,7 +77,7 @@ export function getDeviceId(): string {
   try {
     const existing = window.localStorage.getItem(DEVICE_KEY);
     if (existing && existing.length >= 8) return existing;
-    const created = crypto.randomUUID();
+    const created = uuid();
     window.localStorage.setItem(DEVICE_KEY, created);
     return created;
   } catch {

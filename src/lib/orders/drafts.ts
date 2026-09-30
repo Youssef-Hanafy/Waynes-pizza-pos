@@ -2,6 +2,7 @@ import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
 import { z } from "zod";
 import { cartLineSchema, type CartLine } from "@/lib/orders/schemas";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
+import { uuid } from "@/lib/uuid";
 
 /**
  * Tickets in progress at this register (build sheet §13, §36, test 15).
@@ -70,7 +71,7 @@ export type PosDraft = z.infer<typeof posDraftSchema>;
 export type DraftsState = { activeId: string; drafts: PosDraft[] };
 
 function newId() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  return uuid();
 }
 
 export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISOString()): PosDraft {

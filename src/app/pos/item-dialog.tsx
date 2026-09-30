@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, includedSelection, isIncludedChoice } from "@/lib/orders/cart";
 import type { CartLine } from "@/lib/orders/schemas";
+import { uuid } from "@/lib/uuid";
 
 type MenuItem = PublicMenu[number]["items"][number];
 
@@ -62,7 +63,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
         return;
       }
     }
-    onAdd({ ...draftLine, line_id: initialLine?.line_id ?? crypto.randomUUID() });
+    onAdd({ ...draftLine, line_id: initialLine?.line_id ?? uuid() });
   }
 
   return <div aria-modal="true" className="fixed inset-0 z-50 bg-black/60 p-3 sm:grid sm:place-items-center" role="dialog">

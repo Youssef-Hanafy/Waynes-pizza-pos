@@ -32,6 +32,7 @@ import {
   type OrderDetails,
 } from "@/lib/orders/order-details";
 import type { CartLine } from "@/lib/orders/schemas";
+import { uuid } from "@/lib/uuid";
 
 type Fulfillment = "pickup" | "delivery";
 type MenuItem = PublicMenu[number]["items"][number];
@@ -730,7 +731,7 @@ function ItemDialog({
     }
     onAdd({
       ...draftLine,
-      line_id: initialLine?.line_id ?? crypto.randomUUID(),
+      line_id: initialLine?.line_id ?? uuid(),
     });
   }
 

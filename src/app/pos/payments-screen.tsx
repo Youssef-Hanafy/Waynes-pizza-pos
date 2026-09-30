@@ -11,6 +11,7 @@ import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
 import { requestReceipt } from "@/lib/printing/request-receipt";
+import { uuid } from "@/lib/uuid";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -372,7 +373,7 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
     try {
       const intentResponse = await fetch("/api/pos/keyed-card/intent", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-keyed-card-${order.id}-${crypto.randomUUID()}` }), signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-keyed-card-${order.id}-${uuid()}` }), signal: AbortSignal.timeout(15_000),
       });
       if (!intentResponse.ok) throw new Error(await readError(intentResponse, "The payment could not be prepared."));
       const intent = await intentResponse.json().catch(() => null) as { payment_id?: string; client_secret?: string } | null;

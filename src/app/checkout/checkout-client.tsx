@@ -42,6 +42,7 @@ import {
   residenceLabels,
   type OrderDetails,
 } from "@/lib/orders/order-details";
+import { uuid } from "@/lib/uuid";
 
 type Fulfillment = "pickup" | "delivery";
 type Props = {
@@ -149,7 +150,7 @@ export function CheckoutClient({
     const form = new FormData(event.currentTarget);
     const idempotencyKey =
       window.sessionStorage.getItem("wayne-order-idempotency-v1") ??
-      crypto.randomUUID();
+      uuid();
     window.sessionStorage.setItem("wayne-order-idempotency-v1", idempotencyKey);
     const payload = {
       idempotency_key: idempotencyKey,

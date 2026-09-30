@@ -1,10 +1,11 @@
 import { isPhoneLineNumber, status, type HardwareStatus, type IncomingCallEvent, type PhoneLineNumber } from "../types";
 import { CallListeners, type CallerIdProvider } from "./provider";
+import { uuid } from "@/lib/uuid";
 
 export type SimulatedCall = { line: PhoneLineNumber; phoneNumber: string; callerName?: string };
 
 function randomId() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sim-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return uuid();
 }
 
 /**
