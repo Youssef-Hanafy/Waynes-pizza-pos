@@ -16,7 +16,7 @@ import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOp
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
 import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
-import { connectStripeReader, startStripeReader } from "@/stores/stripe-reader";
+import { connectStripeReader, describeNativeApp, startStripeReader } from "@/stores/stripe-reader";
 import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
 import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
@@ -29,6 +29,7 @@ import { OrderScreen } from "./order-screen";
 import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
+import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 
 type Section = "order" | "phone" | "pay" | "orders" | "customers" | "delivery" | "more";
 
@@ -80,6 +81,12 @@ export function PosApp(props: Props) {
   const runtimeReady = useHardware(hardware);
   const stripeReaderOn = hardware.payment_terminal_mode === "integrated";
   const onlineAlerts = useOnlineOrderAlerts(canManageOrders);
+  // Diagnostics for the counter tablet: script errors and what this register was given.
+  useEffect(() => {
+    installDeviceErrorLogging();
+    logDevice("pos.open", "", { payment_terminal_mode: hardware.payment_terminal_mode, runtime_ready: runtimeReady, ...describeNativeApp() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per page load
+  }, []);
   // Stripe Reader M2: inside the POS app, reconnect the reader as soon as the register opens.
   useEffect(() => {
     if (stripeReaderOn && runtimeReady && startStripeReader()) void connectStripeReader();

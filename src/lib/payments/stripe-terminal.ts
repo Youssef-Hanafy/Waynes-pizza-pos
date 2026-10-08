@@ -4,6 +4,8 @@ import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { getHardwareSettings } from "@/lib/hardware/queries";
+import { recordDeviceEvents } from "@/lib/pos/device-events";
+import { getPosStripeReaderEnabled } from "./queries";
 import { stripeSecrets } from "./capabilities";
 import { readPaymentConnection } from "./config";
 import { PaymentProviderError, type LedgerStatus } from "./provider";
@@ -36,12 +38,27 @@ export const json = (body: unknown, status = 200) => Response.json(body, { statu
 
 /** Staff, same-origin, Stripe connected and the M2 switched on — or the reason why not. */
 export async function guardStripeTerminal(request: Request): Promise<Guarded> {
+  const result = await checkStripeTerminal(request);
+  if (!result.ok) {
+    const access = await getCurrentAccess().catch(() => null);
+    const body = await result.response.clone().json().catch(() => ({})) as { error?: string };
+    if (access?.workspace_id) await recordDeviceEvents(
+      { workspaceId: access.workspace_id, profileId: access.profile_id, userAgent: request.headers.get("user-agent"), source: "server" },
+      [{ kind: "server.terminal_refused", message: body.error ?? "", detail: { path: new URL(request.url).pathname, status: result.response.status } }],
+    );
+  }
+  return result;
+}
+
+async function checkStripeTerminal(request: Request): Promise<Guarded> {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access") || !access?.workspace_id) return { ok: false, response: json({ error: "POS access required." }, 403) };
   if (request.headers.get("origin") !== new URL(request.url).origin) return { ok: false, response: json({ error: "Invalid request origin." }, 403) };
 
-  const { settings } = await getHardwareSettings();
-  if (settings.payment_terminal_mode !== "integrated")
+  const scopeIds = { workspace_id: access.workspace_id, location_id: access.location_id ?? null };
+  const [{ settings }, readerEnabled] = await Promise.all([getHardwareSettings(scopeIds), getPosStripeReaderEnabled(scopeIds)]);
+  // Same rule as the POS page: either switch turns the M2 on, so the screen and the server never disagree.
+  if (settings.payment_terminal_mode !== "integrated" && !readerEnabled)
     return { ok: false, response: json({ error: "The Stripe card reader is switched off. Turn it on in Admin → Hardware → Payment terminal." }, 503) };
 
   const scope = { workspaceId: access.workspace_id, locationId: access.location_id ?? null };
@@ -52,6 +69,15 @@ export async function guardStripeTerminal(request: Request): Promise<Guarded> {
   if (!secrets) return { ok: false, response: json({ error: "The server is missing the Stripe keys (STRIPE_SECRET_KEY)." }, 503) };
 
   return { ok: true, account: { secretKey: secrets.secretKey, workspaceId: access.workspace_id, locationId: access.location_id ?? null, environment: connection.environment } };
+}
+
+/** A Stripe Terminal step failed on the server: keep Stripe's own error code for the diagnostics log. */
+export async function recordTerminalFailure(account: StripeTerminalAccount, request: Request, kind: string, cause: unknown) {
+  const error = cause as { message?: string; code?: string };
+  await recordDeviceEvents(
+    { workspaceId: account.workspaceId, userAgent: request.headers.get("user-agent"), source: "server" },
+    [{ kind, message: error?.message ?? String(cause), detail: { code: error?.code ?? null, environment: account.environment } }],
+  );
 }
 
 function form(data: Record<string, string | number | boolean | null | undefined>) {

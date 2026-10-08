@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { getPosMenu } from "@/lib/pos/queries";
-import { saveHardwareSettings } from "./actions";
 import { HardwareLive } from "./hardware-live";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +31,7 @@ const providerLabels = {
 export default async function HardwarePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
   const access = await requirePermission("hardware.manage", "/admin/hardware");
   const params = await searchParams;
-  const [{ settings, unavailable }, menu, devices] = await Promise.all([getHardwareSettings(), getPosMenu().catch(() => []), getWorkspaceDevices(access.workspace_slug ?? null)]);
+  const [{ settings, unavailable }, menu, devices] = await Promise.all([getHardwareSettings(access), getPosMenu().catch(() => []), getWorkspaceDevices(access.workspace_slug ?? null)]);
   const { timezone } = await getWorkspaceStoreSettings();
   const receipt = settings.receipt_printer;
   const kitchen = settings.kitchen_printers[0] ?? {};
@@ -48,7 +47,12 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
 
     <HardwareLive settings={settings} />
 
-    <form action={saveHardwareSettings} className="mt-8 grid gap-6">
+    {/* The inputs below are intentionally uncontrolled so a cashier can type
+        without a full page rerender. Give the form the saved revision as its
+        key so a Server Action redirect remounts every defaultValue/defaultChecked
+        control from the database, rather than leaving the previous defaults on
+        the Android WebView screen. */}
+    <form action="/admin/hardware/save" className="mt-8 grid gap-6" key={settings.updated_at} method="post">
       <Card className="p-6">
         <h2 className="text-2xl font-black">Caller ID</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">

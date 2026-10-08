@@ -6,6 +6,10 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "browserslist": [
+    "Chrome >= 80",
+    "and_chr >= 80"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

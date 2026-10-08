@@ -2,7 +2,7 @@ import { z } from "zod";
 import { logger } from "@/lib/logging/logger";
 import { paymentErrorMessage } from "@/lib/payments/schemas";
 import { PaymentProviderError } from "@/lib/payments/provider";
-import { cancelTerminalIntent, createTerminalIntent, guardStripeTerminal, json, ledgerStatusFor, readTerminalIntent } from "@/lib/payments/stripe-terminal";
+import { cancelTerminalIntent, createTerminalIntent, guardStripeTerminal, json, ledgerStatusFor, readTerminalIntent, recordTerminalFailure } from "@/lib/payments/stripe-terminal";
 import { settleTerminalPayment } from "@/lib/payments/stripe-terminal-ledger";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
     return json({ payment_id: begun.payment_id, client_secret: intent.clientSecret, amount_cents: begun.amount_cents, state: "open" });
   } catch (cause) {
     logger.error("stripe_terminal.intent_failed", cause, { order_id: order.id });
+    await recordTerminalFailure(account, request, "server.intent_failed", cause);
     return json({ error: cause instanceof PaymentProviderError ? cause.message : "The card payment could not be prepared." }, 502);
   }
 }

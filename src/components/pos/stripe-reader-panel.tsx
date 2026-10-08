@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
-import { cancelStripeReaderCollect, collectWithStripeReader, connectStripeReader, startStripeReader, stripeReaderLabels, useStripeReader } from "@/stores/stripe-reader";
+import { cancelStripeReaderCollect, collectWithStripeReader, connectStripeReader, describeNativeApp, startStripeReader, stripeReaderLabels, useStripeReader } from "@/stores/stripe-reader";
 import { uuid } from "@/lib/uuid";
+import { logDevice } from "@/lib/pos/device-log";
 
 async function readError(response: Response, fallback: string) {
   const body: unknown = await response.json().catch(() => null);
@@ -25,7 +26,7 @@ function Battery({ level, charging }: { level?: number | null; charging?: boolea
 export function StripeReaderStatus({ compact = false }: { compact?: boolean }) {
   const reader = useStripeReader();
   const [busy, setBusy] = useState(false);
-  useEffect(() => { startStripeReader(); }, []);
+  useEffect(() => { if (!startStripeReader()) logDevice("reader.unavailable", "The page has no card reader bridge from the app.", describeNativeApp()); }, []);
 
   if (!reader.available) return <p className="text-sm text-wayne-muted">The Stripe Reader M2 connects to the <strong>Wayne&apos;s POS Android app</strong> on the counter tablet over Bluetooth. Open the POS in the app to use it.</p>;
   const state = reader.status.state;
@@ -99,7 +100,11 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       const response = await post("/api/pos/stripe-terminal/intent", { order_id: orderId, idempotency_key: `pos-m2-${orderId}-${uuid()}` });
       const body = await response.json().catch(() => ({})) as { payment_id?: string; client_secret?: string; state?: string; error?: string };
       if (body.state === "captured") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
-      if (!response.ok || !body.payment_id || !body.client_secret) throw new Error(body.error || "The card payment could not be prepared.");
+      if (!response.ok || !body.payment_id || !body.client_secret) {
+        logDevice("reader.intent_failed", body.error || `HTTP ${response.status}`, { status: response.status, order_id: orderId });
+        throw new Error(body.error || "The card payment could not be prepared.");
+      }
+      logDevice("reader.intent_ok", body.payment_id, { order_id: orderId, total_cents: totalCents });
       paymentId.current = body.payment_id;
 
       setPhase("waiting"); setNote("");
@@ -114,6 +119,7 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       }
     } catch (cause) {
       setPhase("idle");
+      logDevice("reader.charge_failed", cause instanceof Error ? cause.message : String(cause), { order_id: orderId });
       onError(cause instanceof Error ? cause.message : "The card reader did not finish.");
     } finally {
       setBusy(false); setNote("");

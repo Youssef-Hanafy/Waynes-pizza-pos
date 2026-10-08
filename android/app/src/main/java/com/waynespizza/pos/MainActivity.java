@@ -65,6 +65,10 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        // The counter must always start with the current production POS. Older
+        // Elo WebViews can otherwise retain an outdated HTML/RSC response and
+        // hide newly enabled hardware such as the Stripe Reader M2.
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setAllowFileAccess(false);
@@ -82,9 +86,14 @@ public class MainActivity extends Activity {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
         }
 
-        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(BuildConfig.POS_URL);
-        }
+        // The POS settings live on the server. Restoring the last WebView page
+        // can preserve stale form controls after the server has accepted a save,
+        // making a successful setting change look as though it was discarded.
+        // Always start the register from the current production page instead.
+        // Keep sign-in cookies, but discard only reusable web assets from a
+        // prior deployment before requesting the screen again.
+        webView.clearCache(true);
+        webView.loadUrl(BuildConfig.POS_URL);
         // Ask for the local network up front so the first ring and the first ticket don't wait on a dialog.
         withLocalNetwork(granted -> { });
     }
@@ -114,12 +123,6 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         // Android 12 and older; newer versions use the callback registered in onCreate.
         goBack();
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        if (webView != null) webView.saveState(outState);
     }
 
     @Override

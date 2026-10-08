@@ -37,7 +37,8 @@ export function LoginForm({ initialError, nextPath }: { initialError: string; ne
   }
 
   return (
-    <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
+    <form action="/auth/password-login" className="mt-7 grid gap-5" method="post" onSubmit={handleSubmit}>
+      <input name="next" type="hidden" value={nextPath} />
       <Input autoComplete="email" label="Email" name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
       <Input autoComplete="current-password" label="Password" name="password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
       {error ? <p className="rounded-lg bg-wayne-alert-soft p-3 text-sm font-semibold text-wayne-alert" role="alert">{error}</p> : null}

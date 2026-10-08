@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getCurrentAccess } from "@/lib/auth/access";
+import { getCurrentAccess, type CurrentAccess } from "@/lib/auth/access";
 import { isStoreOpenNow } from "@/lib/content/store-status";
 import { getStorefront } from "@/lib/content/queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -93,6 +93,24 @@ export async function getPosTerminals() {
   ]);
   if (!settings.data?.terminal_card_enabled) return [];
   return (terminals.data ?? []).map((terminal) => ({ id: terminal.id, label: terminal.label }));
+}
+
+/**
+ * The POS needs this independently of the Hardware screen.  A counter reader
+ * that has already been authorised must not disappear merely because an old
+ * counter WebView still has a stale hardware page in its cache.
+ */
+export async function getPosStripeReaderEnabled(scope?: Pick<CurrentAccess, "workspace_id" | "location_id">) {
+  const supabase = await createServerSupabaseClient();
+  const access = scope ?? await getCurrentAccess();
+  if (!access?.workspace_id) return false;
+  let query = supabase
+    .from("location_payment_configurations")
+    .select("provider,terminal_card_enabled")
+    .eq("workspace_id", access.workspace_id);
+  if (access.location_id) query = query.eq("location_id", access.location_id);
+  const { data, error } = await query.order("created_at").limit(1).maybeSingle();
+  return !error && data?.provider === "stripe" && data.terminal_card_enabled === true;
 }
 
 /**
