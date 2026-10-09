@@ -364,3 +364,74 @@ function revalidateMenu() {
   revalidatePath("/menu");
   revalidatePath("/admin/menu");
 }
+
+/*
+ * Category options (owner request 2026-10-08): edit a category's option
+ * sections once for every item in it. The database applies each section to
+ * every item's matching group (same label), so items keep their own
+ * "comes with" toppings while names, prices and limits stay in step.
+ */
+const categoryOptionsSchema = z.object({
+  sections: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(160),
+        customer_label: z.string().trim().min(1).max(160),
+        min_select: z.number().int().min(0).max(200),
+        max_select: z.number().int().min(1).max(200),
+        required: z.boolean(),
+        allow_quantities: z.boolean(),
+        add_to_all_items: z.boolean(),
+        choices: z
+          .array(
+            z.object({
+              key: z.string().trim().max(120).nullable(),
+              name: z.string().trim().max(120),
+              price_cents: z.number().int().min(-100_000).max(100_000).nullable(),
+              variant_prices: z.record(
+                z.string(),
+                z.union([z.number().int().min(-100_000).max(100_000), z.literal("clear"), z.null()]),
+              ),
+              everywhere: z.boolean(),
+              remove: z.boolean(),
+            }),
+          )
+          .max(200),
+      }),
+    )
+    .max(50),
+});
+
+export async function saveCategoryOptionsAction(
+  categoryId: string,
+  formData: FormData,
+) {
+  const back = `/admin/menu/categories/${categoryId}/options`;
+  await requirePermission("menu.manage", back);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text(formData, "configuration") || "{}");
+  } catch {
+    redirect(`${back}?error=${encodeURIComponent("Could not read the changes")}`);
+  }
+  const parsed = categoryOptionsSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    redirect(
+      `${back}?error=${encodeURIComponent(issue ? `${issue.path.join(" › ")}: ${issue.message}` : "Invalid options")}`,
+    );
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("wayne_save_category_options", {
+    target_category_id: categoryId,
+    payload: parsed.data,
+  });
+  if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
+  revalidateMenu();
+  revalidatePath("/pos");
+  revalidatePath(back);
+  const result = (data ?? {}) as { updated?: number; added?: number; removed?: number };
+  redirect(
+    `${back}?saved=${encodeURIComponent(`${result.updated ?? 0}-${result.added ?? 0}-${result.removed ?? 0}`)}`,
+  );
+}

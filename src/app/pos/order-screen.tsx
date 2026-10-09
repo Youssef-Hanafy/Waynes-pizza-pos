@@ -16,6 +16,7 @@ import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { phoneActions } from "@/stores/phone-store";
+import { FitGrid } from "./fit-grid";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt } from "./payments-screen";
 import { StartOrderCard } from "./start-order-card";
@@ -175,24 +176,23 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   </div>;
 
   const shownCategories = itemSearch.trim() ? visibleMenu : visibleMenu.filter((category) => category.id === (categoryId ?? visibleMenu[0]?.id));
+  const shownItems = shownCategories.flatMap((category) => category.items);
 
   return <div className="flex min-h-0 flex-1 flex-col">
     {topBar}
     <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_22rem] 2xl:grid-cols-[1fr_26rem]">
-      <section aria-label="Menu" className="flex flex-col p-3 lg:min-h-0">
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <input aria-label="Search menu" className="min-h-12 flex-1 rounded-xl border border-wayne-border bg-white px-4 text-base" onChange={(event) => setItemSearch(event.target.value)} placeholder="🔍  Search the menu" type="search" value={itemSearch} />
-        </div>
-        {!itemSearch.trim() ? <nav aria-label="Menu categories" className="mt-3 flex shrink-0 flex-wrap gap-1.5">{visibleMenu.map((category) => {
+      <section aria-label="Menu" className="flex flex-col gap-3 p-3 lg:min-h-0 lg:flex-row">
+        {/* Categories down the left on the counter tablet, so the items get the full height. */}
+        {!itemSearch.trim() ? <FitGrid className="shrink-0 lg:w-52" count={visibleMenu.length} fallbackClassName="flex flex-wrap gap-1.5 lg:grid lg:auto-rows-[2.75rem] lg:content-start" gap={6} label="Menu categories" maxCols={2} minHeight={40} minWidth={70} ratio={3}>{() => visibleMenu.map((category) => {
           const selected = category.id === (categoryId ?? visibleMenu[0]?.id);
-          return <button aria-pressed={selected} className={`min-h-11 rounded-xl px-3.5 text-sm font-black transition ${selected ? "bg-wayne-green text-white shadow-sm" : "bg-white text-wayne-ink shadow-sm hover:bg-wayne-cream"}`} key={category.id} onClick={() => setCategoryId(category.id)} type="button">{category.name}</button>;
-        })}</nav> : null}
-        <div className="mt-3 grid flex-1 content-start gap-5 pr-1 lg:min-h-0 lg:overflow-y-auto">
-          {shownCategories.map((category) => <section aria-label={category.name} key={category.id}>
-            {itemSearch.trim() ? <h2 className="mb-2 text-lg font-black">{category.name}</h2> : null}
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{category.items.map((item) => <button className="flex min-h-24 flex-col rounded-xl border border-wayne-border bg-white p-3 text-left shadow-sm transition active:scale-95 disabled:opacity-50" disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} type="button"><strong className="block text-sm leading-tight">{item.name}</strong><span className="mt-auto pt-1 text-sm font-black text-wayne-red">{item.variants.length ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.base_price_cents)}</span>{item.sold_out ? <span className="text-xs font-bold">Sold out</span> : item.modifier_groups.length ? <span className="text-[0.65rem] font-bold text-wayne-ok">Customize</span> : <span className="text-[0.65rem] font-bold text-wayne-muted">Quick add</span>}</button>)}</div>
-          </section>)}
-          {!shownCategories.length ? <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">Nothing on the menu matches “{itemSearch}”.</p> : null}
+          return <button aria-pressed={selected} className={`min-h-10 rounded-xl px-2.5 text-left text-sm font-black leading-tight transition lg:min-h-0 ${selected ? "bg-wayne-green text-white shadow-sm" : "bg-white text-wayne-ink shadow-sm hover:bg-wayne-cream"}`} key={category.id} onClick={() => setCategoryId(category.id)} type="button">{category.name}</button>;
+        })}</FitGrid> : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-3 lg:min-h-0">
+          <input aria-label="Search menu" className="min-h-11 shrink-0 rounded-xl border border-wayne-border bg-white px-4 text-base" onChange={(event) => setItemSearch(event.target.value)} placeholder="🔍  Search the menu" type="search" value={itemSearch} />
+          {shownItems.length ? <FitGrid className="flex-1" count={shownItems.length} fallbackClassName="grid grid-cols-2 content-start gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" key={itemSearch.trim() ? "search" : (categoryId ?? visibleMenu[0]?.id ?? "")} label="Menu items" minHeight={52} minWidth={104} ratio={1.6}>{(cellHeight) => {
+            const roomy = cellHeight === null || cellHeight >= 84;
+            return shownItems.map((item) => <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-24 p-3" : roomy ? "p-3" : "px-2.5 py-1.5"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} type="button"><strong className={`line-clamp-2 block leading-tight ${roomy ? "text-base" : "text-sm"}`}>{item.name}</strong><span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-sm" : "text-xs"}`}>{item.variants.length ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span>{roomy && !item.sold_out ? item.modifier_groups.length ? <span className="text-[0.65rem] font-bold text-wayne-ok">Customize</span> : <span className="text-[0.65rem] font-bold text-wayne-muted">Quick add</span> : null}</button>);
+          }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
         </div>
       </section>
       <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white p-3 lg:min-h-0 lg:border-l lg:border-t-0">

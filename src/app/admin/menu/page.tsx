@@ -156,7 +156,14 @@ function CategoryCard({
             · Sort {category.sort_order}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {items.length && !category.archived_at ? (
+            <Button asChild variant="brand">
+              <Link href={`/admin/menu/categories/${category.id}/options`}>
+                Edit options for all items
+              </Link>
+            </Button>
+          ) : null}
           <details>
             <summary className="cursor-pointer list-none rounded-lg border border-wayne-border bg-white px-4 py-2 text-sm font-bold">
               Edit
