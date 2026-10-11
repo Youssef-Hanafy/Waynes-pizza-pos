@@ -25,6 +25,8 @@ import { useDraftSync } from "@/stores/use-draft-sync";
 import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenDrawerButton } from "./open-drawer-button";
+import { DeliveriesScreen } from "./deliveries-screen";
+import { startCustomerDisplayLink } from "@/stores/customer-display-link";
 import { TestOrdersPanel } from "./test-orders-panel";
 import { OpenOrdersPanel } from "./open-orders-panel";
 import { OrderScreen } from "./order-screen";
@@ -74,6 +76,8 @@ export function PosApp(props: Props) {
   }
   const sectionRef = useRef<Section>(section);
   useEffect(() => { sectionRef.current = section; }, [section]);
+  // The customer screen (Fire tablet) mirrors this register.
+  useEffect(() => { startCustomerDisplayLink(); }, []);
   const badge = usePhoneBadge();
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
@@ -192,13 +196,15 @@ export function PosApp(props: Props) {
     {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
+      {/* Open this on the tablet that faces the customer (owner, 2026-10-11). */}
+      <Link className="ml-auto flex min-h-11 items-center whitespace-nowrap rounded-xl border border-dashed border-wayne-border-strong px-4 text-sm font-black text-wayne-ink hover:bg-wayne-cream" href="/pos/display">🖥 Customer screen</Link>
     </nav>
 
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} /> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
-    {section === "delivery" && canManageOrders && deliveryEnabled ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel fulfillment="delivery" inline onPay={takePayment} timeZone={settings.timezone} />{canOpenAdmin ? <p className="mt-4 text-sm"><Link className="font-bold underline" href="/admin/delivery">Assign drivers in Admin → Delivery</Link></p> : null}</div> : null}
+    {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;

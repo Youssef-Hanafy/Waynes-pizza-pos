@@ -17,22 +17,24 @@ export async function POST(request: Request) {
 
   const service = createServiceSupabaseClient();
   const { data: payment } = await service.from("payments")
-    .select("id, provider_payment_id, order:orders!inner(id, workspace_id, source, fulfillment_type)")
+    .select("id, provider_payment_id, amount_cents, metadata, order:orders!inner(id, workspace_id, source, fulfillment_type)")
     .eq("id", parsed.data.payment_id).eq("provider", "stripe").eq("orders.workspace_id", access.workspace_id).maybeSingle();
   const order = payment?.order as unknown as { id: string } | null;
   if (!payment?.provider_payment_id || !order) return Response.json({ error: "Keyed card payment not found." }, { status: 404 });
 
   try {
     const result = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
+    // A delivery card is only held: the ledger keeps the order amount, the hold is in metadata.
+    const held = result.status === "authorized";
     if (result.status !== "pending") {
       const { error } = await service.rpc("wayne_settle_payment", { payload: {
         payment_id: payment.id, status: result.status, provider_payment_id: result.providerPaymentId, provider_status: result.providerStatus,
-        amount_cents: result.amountCents, card_brand: result.cardBrand, card_last4: result.cardLast4, receipt_url: result.receiptUrl,
-        failure_reason: result.failureReason, metadata: { source: "pos_keyed_card" },
+        amount_cents: held ? payment.amount_cents : result.amountCents, card_brand: result.cardBrand, card_last4: result.cardLast4, receipt_url: result.receiptUrl,
+        failure_reason: result.failureReason, metadata: { source: "pos_keyed_card", ...(held ? { hold_cents: result.amountCents } : {}) },
       } });
       if (error) throw new Error("The payment was approved, but the ticket could not be finalized.");
     }
-    return Response.json({ payment_status: result.status === "captured" ? "captured" : result.status === "pending" ? "pending" : "failed" }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ payment_status: result.status === "captured" ? "captured" : held ? "authorized" : result.status === "pending" ? "pending" : "failed" }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
     logger.error("pos.keyed_card_confirm_failed", cause, { payment_id: payment.id });
     return Response.json({ error: cause instanceof Error ? cause.message : "We could not verify this payment. Do not enter the card again until the ticket is checked." }, { status: 502 });

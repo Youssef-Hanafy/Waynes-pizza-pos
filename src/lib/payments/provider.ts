@@ -45,13 +45,16 @@ export interface PaymentProvider {
   /** Charge a card tokenized in the browser. */
   createOnlinePayment(input: { amountCents: number; idempotencyKey: string; sourceId: string; referenceId: string; note: string; verificationToken?: string | null }): Promise<ProviderPayment>;
   /** Create an online PaymentIntent before Stripe.js collects the card details. */
-  createOnlinePaymentIntent(input: { amountCents: number; idempotencyKey: string; referenceId: string; note: string; paymentId: string; receiptEmail?: string | null }): Promise<ProviderOnlinePaymentIntent>;
+  createOnlinePaymentIntent(input: { amountCents: number; idempotencyKey: string; referenceId: string; note: string; paymentId: string; receiptEmail?: string | null;
+    /** Only HOLD this much on the card (manual capture); charged later with capturePayment. */
+    holdCents?: number | null }): Promise<ProviderOnlinePaymentIntent>;
   getOnlinePaymentIntent(providerPaymentId: string): Promise<ProviderOnlinePaymentIntent>;
   /** Ask a paired card reader to collect a card-present payment. */
   createCardPresentPayment(input: { amountCents: number; idempotencyKey: string; deviceId: string; referenceId: string; note: string }): Promise<ProviderTerminalCheckout>;
   getCardPresentPayment(checkoutId: string): Promise<ProviderTerminalCheckout>;
   cancelCardPresentPayment(checkoutId: string): Promise<ProviderTerminalCheckout>;
-  capturePayment(providerPaymentId: string): Promise<ProviderPayment>;
+  /** Charge a held card. amountCents (≤ the hold) charges less than the hold and releases the rest. */
+  capturePayment(providerPaymentId: string, options?: { amountCents?: number; idempotencyKey?: string }): Promise<ProviderPayment>;
   voidPayment(providerPaymentId: string): Promise<ProviderPayment>;
   refundPayment(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string; reason: string }): Promise<ProviderRefund>;
   getPaymentStatus(providerPaymentId: string): Promise<ProviderPayment>;

@@ -103,12 +103,16 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       throw new PaymentProviderError("This Stripe checkout must be confirmed in the secure card form.", "UNSUPPORTED_OPERATION");
     },
 
-    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail }) {
+    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents }) {
+      const hold = holdCents && holdCents > 0 ? Math.round(holdCents) : null;
       const intent = await call<StripePaymentIntent>("/v1/payment_intents", {
         method: "POST",
         idempotencyKey,
         body: form({
-          amount: amountCents,
+          amount: hold ?? amountCents,
+          // A held card (delivery): authorised now, charged at the driver's cash-out with the tip.
+          capture_method: hold ? "manual" : undefined,
+          "metadata[wayne_hold_cents]": hold ?? undefined,
           currency: "usd",
           "payment_method_types[]": "card",
           description: note.slice(0, 500),
@@ -134,8 +138,12 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       throw new PaymentProviderError("Stripe Terminal is not configured yet.", "TERMINAL_DISABLED");
     },
 
-    async capturePayment(providerPaymentId) {
-      const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/capture`, { method: "POST" }, "The payment could not be captured.");
+    async capturePayment(providerPaymentId, options) {
+      const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/capture`, {
+        method: "POST",
+        idempotencyKey: options?.idempotencyKey,
+        body: options?.amountCents ? form({ amount_to_capture: Math.round(options.amountCents) }) : undefined,
+      }, "The held card could not be charged.");
       return mapIntent(intent);
     },
     async voidPayment(providerPaymentId) {

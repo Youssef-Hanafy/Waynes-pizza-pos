@@ -6,7 +6,13 @@ import { PaymentProviderError } from "@/lib/payments/provider";
 import { posKeyedCardIntentSchema } from "@/lib/payments/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
-/** Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone). */
+/**
+ * Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone).
+ *
+ * Delivery orders only HOLD the card (owner, 2026-10-11): order total + 30%, so the
+ * driver's tip can be added at cash-out and the card is charged once, one fee.
+ */
+const DELIVERY_HOLD_MULTIPLIER = 1.3;
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access") || !access?.workspace_id) return Response.json({ error: "POS access required." }, { status: 403 });
@@ -37,14 +43,18 @@ export async function POST(request: Request) {
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
+      const holdCents = order.fulfillment_type === "delivery" ? Math.ceil(begun.amount_cents * DELIVERY_HOLD_MULTIPLIER) : null;
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card)`, paymentId: begun.payment_id, receiptEmail: null,
+        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (${holdCents ? "delivery card hold" : "keyed card"})`, paymentId: begun.payment_id, receiptEmail: null,
+        holdCents,
       });
-      const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus }).eq("id", begun.payment_id);
+      const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
+      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), ...(holdCents ? { hold_cents: holdCents, held_for: "delivery_tip" } : {}) };
+      const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
     }
-    return Response.json({ payment_id: begun.payment_id, client_secret: intent.clientSecret, payment_status: intent.status === "captured" ? "captured" : "pending" }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ payment_id: begun.payment_id, client_secret: intent.clientSecret, payment_status: intent.status === "captured" ? "captured" : intent.status === "authorized" ? "authorized" : "pending" }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
     const error = cause instanceof PaymentProviderError ? cause : null;
     logger.error("pos.keyed_card_intent_failed", cause, { code: error?.code, order_id: parsed.data.order_id });

@@ -16,6 +16,7 @@ import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { phoneActions } from "@/stores/phone-store";
+import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt } from "./payments-screen";
@@ -87,6 +88,19 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const deliveryFee = draft.fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
   const tax = Math.round((subtotal - previewDiscount + deliveryFee) * settings.tax_rate_basis_points / 10_000);
   const previewTotal = subtotal - previewDiscount + deliveryFee + tax;
+
+  // The customer screen follows the ticket as it is rung up (owner, 2026-10-11).
+  useEffect(() => {
+    if (created) return;
+    if (!cart.length) { showOnCustomerScreen({ phase: "idle" }); return; }
+    const lines = cart.map((line) => {
+      const item = findMenuItem(menu, line.menu_item_id);
+      const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
+      const notes = describeLineModifiers(item, line).map((note) => note.label);
+      return { name: item?.name ?? "Item", detail: [variant?.name, ...notes].filter(Boolean).join(" · ").slice(0, 200), quantity: line.quantity, cents: cartLineUnitCents(menu, line) * line.quantity };
+    });
+    showOnCustomerScreen({ phase: "order", lines, subtotal_cents: subtotal, discount_cents: previewDiscount, delivery_fee_cents: deliveryFee, tax_cents: tax, total_cents: previewTotal });
+  }, [cart, created, menu, subtotal, previewDiscount, deliveryFee, tax, previewTotal]);
 
   function setCart(next: CartLine[]) { update({ cart: next }); }
 
