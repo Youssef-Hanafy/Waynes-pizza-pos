@@ -106,14 +106,11 @@ select public._wayne_patch_function('public.wayne_create_pos_order(jsonb)'::regp
 $o$'city', btrim(payload #>> '{address,city}'), 'state', upper(btrim(payload #>> '{address,state}')), 'postal_code', btrim(payload #>> '{address,postal_code}'),$o$,
 $n$'city', coalesce(nullif(btrim(coalesce(payload #>> '{address,city}', '')), ''), settings.city, ''), 'state', upper(coalesce(nullif(btrim(coalesce(payload #>> '{address,state}', '')), ''), settings.state, '')), 'postal_code', coalesce(nullif(btrim(coalesce(payload #>> '{address,postal_code}', '')), ''), settings.postal_code, ''),$n$);
 
+-- One step (each patch must leave the function valid on its own).
 select public._wayne_patch_function('public.wayne_create_pos_order(jsonb)'::regprocedure,
-$o$      insert into public.customer_addresses (customer_id, address1, address2, city, state, postal_code, delivery_instructions, is_default) values (created_customer_id,$o$,
+$o$      insert into public.customer_addresses (customer_id, address1, address2, city, state, postal_code, delivery_instructions, is_default) values (created_customer_id, address_snapshot ->> 'address1', address_snapshot ->> 'address2', address_snapshot ->> 'city', address_snapshot ->> 'state', address_snapshot ->> 'postal_code', address_snapshot ->> 'delivery_instructions', not exists (select 1 from public.customer_addresses where customer_id = created_customer_id)) returning id into address_id;$o$,
 $n$      if created_customer_id is not null and (address_snapshot ->> 'city') <> '' and (address_snapshot ->> 'state') <> '' and (address_snapshot ->> 'postal_code') <> '' then
-      insert into public.customer_addresses (customer_id, address1, address2, city, state, postal_code, delivery_instructions, is_default) values (created_customer_id,$n$);
-
-select public._wayne_patch_function('public.wayne_create_pos_order(jsonb)'::regprocedure,
-$o$not exists (select 1 from public.customer_addresses where customer_id = created_customer_id)) returning id into address_id;$o$,
-$n$not exists (select 1 from public.customer_addresses where customer_id = created_customer_id)) returning id into address_id;
+      insert into public.customer_addresses (customer_id, address1, address2, city, state, postal_code, delivery_instructions, is_default) values (created_customer_id, address_snapshot ->> 'address1', address_snapshot ->> 'address2', address_snapshot ->> 'city', address_snapshot ->> 'state', address_snapshot ->> 'postal_code', address_snapshot ->> 'delivery_instructions', not exists (select 1 from public.customer_addresses where customer_id = created_customer_id)) returning id into address_id;
       end if;$n$);
 
 select public._wayne_patch_function('public.wayne_create_pos_order(jsonb)'::regprocedure,
