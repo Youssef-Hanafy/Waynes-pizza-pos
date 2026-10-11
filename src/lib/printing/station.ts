@@ -78,6 +78,7 @@ export function createKitchenStationAdapter(options: {
   return {
     async print(job) {
       guard(job, now);
+      if (!job.order_id) throw new PrinterUnavailableError("This print job has no order to print.");
       let doc: PrintDocument;
       try {
         doc = await options.loadDocument(job.order_id);
@@ -109,6 +110,7 @@ export function createOnlineOrderStationAdapter(options: {
         return settle(await options.openDrawer());
       }
       guard(job, now);
+      if (!job.order_id) throw new PrinterUnavailableError("This print job has no order to print.");
       if (job.job_type === "online_order") {
         return settle(await options.printer.printOnlineOrder(job.order_id, { tipSlip: tipSlipWanted(options.tipSlip, job.payload.payment_method) }));
       }

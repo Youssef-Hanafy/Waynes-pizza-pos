@@ -47,6 +47,8 @@ export async function POST(request: Request) {
         return supabase.rpc("wayne_close_shift", {
           payload: { shift_id: input.shift_id, counted_cash_cents: input.counted_cash_cents, close_note: input.close_note },
         });
+      case "no_sale":
+        return supabase.rpc("wayne_pos_open_drawer", { reason: input.reason });
       case "cash_payment":
         return supabase.rpc("wayne_take_cash_payment", {
           payload: {

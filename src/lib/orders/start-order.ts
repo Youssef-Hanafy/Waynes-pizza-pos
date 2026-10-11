@@ -23,14 +23,13 @@ export function phoneDigits(value: string) {
 export function startProblem(draft: PosDraft, kind: OrderKind | null, settings: StoreSettings): string {
   if (!kind) return "Choose Walk-in, Pickup or Delivery.";
   if (kind === "walkin") return "";
-  if (!draft.firstName.trim() || !draft.lastName.trim()) return "Enter the customer's first and last name, or pick them from the matches.";
-  if (phoneDigits(draft.phone).length !== 10) return "Enter a 10-digit phone number.";
+  // Nothing about the customer is required — in a rush the cashier can skip
+  // it all (owner, 2026-10-11).  A phone that was typed must be a real number.
+  const digits = phoneDigits(draft.phone).length;
+  if (digits > 0 && digits !== 10) return "Enter a 10-digit phone number, or leave the phone blank.";
   if (kind === "delivery") {
     if (!settings.delivery_enabled) return "Delivery is switched off in Admin → Settings.";
-    if (!draft.addressId) {
-      const address = draft.address;
-      if (!address.address1.trim() || !address.city.trim() || !address.state.trim() || !address.postal_code.trim()) return "Pick a saved address or enter the street, city, state and ZIP.";
-    }
+    if (!draft.addressId && !draft.address.address1.trim()) return "Enter the street address (city, state and ZIP can be left blank).";
   }
   return "";
 }

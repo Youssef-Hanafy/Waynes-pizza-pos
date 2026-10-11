@@ -55,6 +55,8 @@ export const posDraftSchema = z.object({
   manualValue: z.string(),
   manualReason: z.string(),
   paymentMethod: z.enum(["test_manual", "cash"]),
+  /** A practice ticket (kept out of sales, the drawer count and the CRM). */
+  isTest: z.boolean().optional().default(false),
   /** Server copy (Phase 6): the version last saved, and when. Never part of the ticket itself. */
   syncedVersion: z.number().int().nullable().optional().default(null),
   syncedAt: z.string().nullable().optional().default(null),
@@ -102,6 +104,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     manualValue: "",
     manualReason: "",
     paymentMethod: "test_manual",
+    isTest: false,
     syncedVersion: null,
     syncedAt: null,
     submitPending: false,
@@ -213,6 +216,7 @@ export function draftToOrderPayload(draft: PosDraft) {
     phone_line: draft.source === "phone" ? draft.phoneLine : null,
     fulfillment_type: noProfile ? "pickup" : draft.fulfillment,
     payment_method: draft.paymentMethod,
+    is_test: draft.isTest,
     first_name: draft.firstName,
     last_name: draft.lastName,
     phone: noProfile && draft.source === "pos" ? "" : draft.phone,

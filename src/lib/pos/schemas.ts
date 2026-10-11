@@ -44,6 +44,8 @@ export const posOrderInputSchema = z.object({
   phone_line: z.number().int().min(1).max(8).nullable().optional().default(null),
   fulfillment_type: z.enum(["pickup", "delivery"]),
   payment_method: z.enum(["test_manual", "cash"]),
+  /** A practice ticket: kept out of sales, the drawer count and the CRM. */
+  is_test: z.boolean().optional().default(false),
   first_name: z.string().trim().max(100),
   last_name: z.string().trim().max(100),
   phone: z.string().trim().max(40),
@@ -70,11 +72,14 @@ export const posOrderInputSchema = z.object({
   if (value.customer_mode === "walk_in" && value.fulfillment_type !== "pickup") {
     context.addIssue({ code: "custom", message: "Orders without a customer profile must be pickup orders.", path: ["fulfillment_type"] });
   }
-  if (value.customer_mode === "identified") {
-    if (!value.first_name || !value.last_name || value.phone.length < 10) context.addIssue({ code: "custom", message: "Customer name and phone are required.", path: ["phone"] });
+  // Nothing about the customer is required (rush orders, owner 2026-10-11),
+  // but a phone that was typed has to be a real number.
+  const digits = value.phone.replace(/\D/g, "");
+  if (value.customer_mode === "identified" && digits.length > 0 && !(digits.length === 10 || (digits.length === 11 && digits.startsWith("1")))) {
+    context.addIssue({ code: "custom", message: "Enter a 10-digit phone number, or leave the phone blank.", path: ["phone"] });
   }
-  if (value.fulfillment_type === "delivery" && !value.address_id && (!value.address.address1 || !value.address.city || !value.address.state || !value.address.postal_code)) {
-    context.addIssue({ code: "custom", message: "Complete or select a delivery address.", path: ["address"] });
+  if (value.fulfillment_type === "delivery" && !value.address_id && !value.address.address1) {
+    context.addIssue({ code: "custom", message: "Enter the street address for the delivery.", path: ["address"] });
   }
   if (value.promo_code && value.manual_discount_type) context.addIssue({ code: "custom", message: "Use a promotion or a manual discount, not both.", path: ["promo_code"] });
   if (value.manual_discount_type && (!value.manual_discount_value || value.manual_discount_reason.length < 3)) context.addIssue({ code: "custom", message: "Manual discounts require a value and reason.", path: ["manual_discount_reason"] });
@@ -90,8 +95,8 @@ export const posOrderCreatedSchema = z.object({
 /** Create or update a customer from the POS (§8 "Create customer + start order"). */
 export const posSaveCustomerSchema = z.object({
   customer_id: optionalUuid.optional().default(""),
-  first_name: z.string().trim().min(1, "First name is required.").max(100),
-  last_name: z.string().trim().min(1, "Last name is required.").max(100),
+  first_name: z.string().trim().max(100).optional().default(""),
+  last_name: z.string().trim().max(100).optional().default(""),
   phone: z.string().trim().min(10, "Enter a 10-digit phone number.").max(40),
   email: z.union([z.literal(""), z.email("Enter a valid email address.")]).optional().default(""),
   extra_phone: z.string().trim().max(40).optional().default(""),

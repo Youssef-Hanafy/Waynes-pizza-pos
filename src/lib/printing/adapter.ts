@@ -1,6 +1,7 @@
 export type PrinterJob = {
   id: string;
-  order_id: string;
+  /** Null only for a "no sale" drawer kick. */
+  order_id: string | null;
   destination: string;
   job_type: string;
   payload: Record<string, unknown>;

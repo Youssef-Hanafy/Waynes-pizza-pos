@@ -24,16 +24,28 @@ describe("New Order card (owner, 2026-09-30)", () => {
     expect(startProblem(blankDraft(), "walkin", settings)).toBe("");
   });
 
-  it("needs a full name and a 10-digit phone for pickup, like the order API", () => {
-    expect(startProblem(blankDraft({ customerMode: "identified", firstName: "Maria" }), "pickup", settings)).toMatch(/first and last name/);
-    expect(startProblem(blankDraft({ customerMode: "identified", ...person, phone: "555-0199" }), "pickup", settings)).toMatch(/10-digit/);
+  it("needs nothing about the customer for pickup — a rush can skip it all (owner, 2026-10-11)", () => {
+    expect(startProblem(blankDraft({ customerMode: "identified" }), "pickup", settings)).toBe("");
+    expect(startProblem(blankDraft({ customerMode: "identified", firstName: "Maria" }), "pickup", settings)).toBe("");
     expect(startProblem(blankDraft({ customerMode: "identified", ...person, phone: "1-508-555-0199" }), "pickup", settings)).toBe("");
+  });
+
+  it("still checks a phone number that was typed", () => {
+    expect(startProblem(blankDraft({ customerMode: "identified", ...person, phone: "555-0199" }), "pickup", settings)).toMatch(/10-digit/);
+  });
+
+  it("starts a test ticket like any other, flagged for the order API", () => {
+    const draft = blankDraft({ customerMode: "identified", isTest: true });
+    expect(startProblem(draft, "pickup", settings)).toBe("");
+    expect(blankDraft().isTest).toBe(false);
   });
 
   it("needs an address for delivery, saved or typed", () => {
     const draft = blankDraft({ customerMode: "identified", fulfillment: "delivery", ...person });
     expect(startProblem(draft, "delivery", settings)).toMatch(/address/);
     expect(startProblem({ ...draft, address }, "delivery", settings)).toBe("");
+    // The street alone is enough; city, state and ZIP fall back to the store's.
+    expect(startProblem({ ...draft, firstName: "", lastName: "", phone: "", address: { ...address, city: "", state: "", postal_code: "" } }, "delivery", settings)).toBe("");
     expect(startProblem({ ...draft, addressId: "5e0f1c3a-9d3c-4f86-9c1e-2f7c1f6b7a10" }, "delivery", settings)).toBe("");
     expect(startProblem({ ...draft, address }, "delivery", { ...settings, delivery_enabled: false })).toMatch(/switched off/);
   });

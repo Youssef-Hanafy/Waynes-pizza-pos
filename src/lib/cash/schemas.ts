@@ -107,9 +107,11 @@ export const drawerActionSchema = z.discriminatedUnion("action", [
     counted_cash_cents: z.number().int().min(0).max(10_000_000), close_note: z.string().trim().max(1000).default(""),
   }),
   z.object({
-    action: z.literal("cash_payment"), shift_id: z.uuid(), order_id: z.uuid(),
+    action: z.literal("cash_payment"), shift_id: z.union([z.literal(""), z.uuid()]).optional().default(""), order_id: z.uuid(),
     tendered_cents: z.number().int().min(0).max(10_000_000), idempotency_key: z.string().min(16).max(160),
   }),
+  /** Pop the drawer open with no sale (making change, a forgotten bill). */
+  z.object({ action: z.literal("no_sale"), reason: z.string().trim().max(200).default("") }),
 ]);
 
 /**

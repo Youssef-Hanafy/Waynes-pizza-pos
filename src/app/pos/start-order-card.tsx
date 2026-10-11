@@ -71,6 +71,14 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     update({ started: true });
   }
 
+  /** Straight to the menu with nothing filled in (a fast talker, a rush). */
+  function quickOrder() {
+    setError("");
+    setKind("walkin");
+    if (fromCall) update({ customerMode: "walk_in", fulfillment: "pickup", started: true });
+    else update({ source: "pos", customerMode: "walk_in", fulfillment: "pickup", customer: null, lastName: "", phone: "", email: "", addressId: "", started: true });
+  }
+
   const zip = kind === "delivery" ? deliveryZip(draft) : "";
   const outsideArea = kind === "delivery" && outsideDeliveryArea(zip, settings.delivery_postal_codes);
   const editing = draft.cart.length > 0;
@@ -98,10 +106,15 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
         </div> : null}
       </div>
 
+      {!editing ? <button className="mt-5 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-wayne-green bg-wayne-green/5 px-4 text-left transition hover:bg-wayne-green/10 active:scale-[0.99]" onClick={quickOrder} type="button">
+        <span aria-hidden className="text-3xl leading-none">⚡</span>
+        <span><strong className="block text-xl font-black">Quick order — skip all details</strong><span className="block text-sm font-bold text-wayne-muted">Go straight to the menu. Add a name or phone later from the ticket bar if there&apos;s time.</span></span>
+      </button> : null}
+
       <Step n={1} title="Order type">
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {tile("walkin", "🚶", fromCall ? "No profile" : "Walk-in", fromCall ? "Pickup, name only" : "At the counter")}
-          {tile("pickup", "🛍️", "Pickup", "Saved customer")}
+          {tile("pickup", "🛍️", "Pickup", "Details optional")}
           {tile("delivery", "🚗", "Delivery", settings.delivery_enabled ? `+${formatCents(settings.delivery_fee_cents)} fee` : "Switched off", !settings.delivery_enabled)}
         </div>
         {(kind === "pickup" || kind === "delivery") && !fromCall ? <div aria-label="How they ordered" className="mt-3 inline-flex rounded-xl bg-wayne-cream p-1" role="group">
@@ -114,7 +127,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
         {fromCall ? <p className="mt-2 text-sm text-wayne-muted">No customer profile is saved. Pickup only.</p> : null}
       </Step> : null}
 
-      {kind === "pickup" || kind === "delivery" ? <Step n={2} title="Customer">
+      {kind === "pickup" || kind === "delivery" ? <Step n={2} title="Customer (all optional)">
         {draft.customer ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-wayne-ok bg-wayne-ok-soft p-3">
           <div>
             <p className="text-lg font-black">✓ {draft.customer.first_name} {draft.customer.last_name}</p>
@@ -124,14 +137,15 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
           <Button onClick={() => update({ customer: null, addressId: "" })} size="sm" variant="secondary">Not them</Button>
         </div> : <>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <Input autoComplete="off" id="start-phone" inputMode="tel" label="Phone" onChange={(event) => editIdentity({ phone: event.target.value })} placeholder="(508) 555-0123" type="tel" value={draft.phone} />
-            <Input autoComplete="off" id="start-first" label="First name" onChange={(event) => editIdentity({ firstName: event.target.value })} value={draft.firstName} />
-            <Input autoComplete="off" id="start-last" label="Last name" onChange={(event) => editIdentity({ lastName: event.target.value })} value={draft.lastName} />
+            <Input autoComplete="off" id="start-phone" inputMode="tel" label="Phone (optional)" onChange={(event) => editIdentity({ phone: event.target.value })} placeholder="(508) 555-0123" type="tel" value={draft.phone} />
+            <Input autoComplete="off" id="start-first" label="First name (optional)" onChange={(event) => editIdentity({ firstName: event.target.value })} value={draft.firstName} />
+            <Input autoComplete="off" id="start-last" label="Last name (optional)" onChange={(event) => editIdentity({ lastName: event.target.value })} value={draft.lastName} />
           </div>
           <div aria-live="polite" className="mt-2 min-h-6">
             {search.busy && !matches.length ? <p className="text-sm font-bold text-wayne-muted">Looking…</p> : null}
             {search.error ? <p className="text-sm font-bold text-wayne-alert">{search.error}</p> : null}
-            {!search.busy && !search.error && search.searched && !matches.length ? <p className="text-sm font-bold text-wayne-muted">New customer — they&apos;ll be saved with this order.</p> : null}
+            {!search.busy && !search.error && search.searched && !matches.length ? <p className="text-sm font-bold text-wayne-muted">{phoneDigits(draft.phone).length === 10 ? "New customer — they'll be saved with this order." : "No match. Add a phone to save them as a customer, or just carry on."}</p> : null}
+            {!draft.phone.trim() && !search.searched ? <p className="text-sm font-bold text-wayne-muted">Skip any of this in a rush. Without a phone the order still goes through, just without a customer profile.</p> : null}
           </div>
           {matches.length ? <ul aria-label="Matching customers" className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             {matches.map((customer) => {
@@ -149,10 +163,15 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
         </>}
       </Step> : null}
 
-      {kind === "delivery" ? <Step n={3} title="Delivery address">
+      {kind === "delivery" ? <Step n={3} title="Delivery address (street is enough)">
         <AddressPicker address={draft.address} addressId={draft.addressId} customer={draft.customer} onAddress={(address) => update({ address })} onAddressId={(addressId) => update({ addressId })} />
         {outsideArea ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">⚠ ZIP {zip} is outside the delivery area set in Admin → Settings. Check with the manager before sending a driver.</p> : null}
       </Step> : null}
+
+      <label className={`mt-6 flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 ${draft.isTest ? "border-wayne-gold bg-wayne-gold/20" : "border-wayne-border bg-white"}`}>
+        <input checked={draft.isTest} className="size-6 accent-wayne-green" onChange={(event) => update({ isTest: event.target.checked })} type="checkbox" />
+        <span><strong className="block text-base font-black">🧪 Test order</strong><span className="block text-xs font-bold text-wayne-muted">Prints, opens the drawer and can take a payment, but isn&apos;t counted in sales and no customer is saved or texted.</span></span>
+      </label>
 
       {error ? <p className="mt-5 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
       <Button className="mt-6 min-h-16 w-full text-xl" disabled={!kind} onClick={start} size="lg">{editing ? "Back to the order →" : kind === "delivery" ? "Start delivery order →" : kind === "pickup" ? "Start pickup order →" : kind === "walkin" ? "Start walk-in order →" : "Start order →"}</Button>
@@ -183,9 +202,9 @@ function AddressPicker({ address, addressId, customer, onAddress, onAddressId }:
       <div className="pos-address min-w-0"><GoogleAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onAddress({ ...address, ...selected })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} /></div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem_7rem]">
         <Input id="start-address2" label="Apt / unit" onChange={(event) => onAddress({ ...address, address2: event.target.value })} value={address.address2} />
-        <Input id="start-city" label="City" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
+        <Input id="start-city" label="City (optional)" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
         <Input id="start-state" label="State" maxLength={2} onChange={(event) => onAddress({ ...address, state: event.target.value.toUpperCase() })} value={address.state} />
-        <Input id="start-zip" inputMode="numeric" label="ZIP" maxLength={10} onChange={(event) => onAddress({ ...address, postal_code: event.target.value })} value={address.postal_code} />
+        <Input id="start-zip" inputMode="numeric" label="ZIP (optional)" maxLength={10} onChange={(event) => onAddress({ ...address, postal_code: event.target.value })} value={address.postal_code} />
       </div>
       <Input id="start-delivery-instructions" label="Delivery instructions (optional)" onChange={(event) => onAddress({ ...address, delivery_instructions: event.target.value })} placeholder="Side door, ring bell, 2nd floor…" value={address.delivery_instructions} />
     </div> : null}

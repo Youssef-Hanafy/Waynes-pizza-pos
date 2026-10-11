@@ -224,7 +224,8 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
 
   async function record() {
     if (change === null) { onError(`Still owed ${formatCents(due - tendered)}.`); return; }
-    if (!shiftId) { await onDrawerChanged(); onError("Open the drawer first (the Drawer button at the top), then take cash."); return; }
+    // No drawer count needed first: with no open drawer the database opens
+    // one at $0.00 so a sale is never blocked (owner, 2026-10-11).
     setBusy(true); onError("");
     try {
       const response = await fetch("/api/pos/drawer", {
@@ -234,6 +235,7 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
       });
       if (!response.ok) throw new Error(await readError(response, "The cash could not be recorded."));
       const body = await response.json().catch(() => ({})) as { result?: { change_cents?: number } };
+      if (!shiftId) void onDrawerChanged();
       onPaid({ order, method: "cash", changeCents: Number(body.result?.change_cents ?? change), tenderedCents: tendered });
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "The cash could not be recorded.");
@@ -252,7 +254,6 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
       <div className="mt-3 grid grid-cols-3 gap-2">
         {quickCashAmounts(due).map((amount) => <Button key={amount} onClick={() => { onError(""); setDigits(String(amount)); }} size="lg" variant="secondary">{amount === due ? "Exact" : formatCents(amount)}</Button>)}
       </div>
-      {!shiftId ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">The drawer isn&apos;t open on this register yet. Open it with the Drawer button at the top before taking cash.</p> : null}
     </div>
     <div>
       <div className="grid grid-cols-3 gap-2">

@@ -24,6 +24,8 @@ import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
 import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
+import { OpenDrawerButton } from "./open-drawer-button";
+import { TestOrdersPanel } from "./test-orders-panel";
 import { OpenOrdersPanel } from "./open-orders-panel";
 import { OrderScreen } from "./order-screen";
 import { PaymentsScreen } from "./payments-screen";
@@ -172,6 +174,7 @@ export function PosApp(props: Props) {
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
       <PrintStationBadge />
+      <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />
       <span className="hidden text-sm font-bold text-wayne-cream/80 sm:inline">{staffName}</span>
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">Admin</Link></Button> : null}
@@ -249,6 +252,7 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
       </section>
       {hardware.payment_terminal_mode === "integrated" ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Card reader</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Stripe Reader M2 over Bluetooth. Press its button once to wake it; it stays connected to this tablet.</p><StripeReaderStatus /></section> : null}
       <PrintStationPanel />
+      <TestOrdersPanel />
       {hardware.simulator_enabled ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Test calls</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Rings a line through the same path the real caller ID box will use.</p><SimulatorPanel lineCount={hardware.caller_line_count} /></section> : null}
     </div>
   </div>;
