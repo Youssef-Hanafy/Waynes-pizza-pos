@@ -3,11 +3,10 @@
 -- 1. Customer screen: a second tablet at the counter (a Fire tablet) mirrors the
 --    ticket a register is ringing up, asks the customer for a tip before a card
 --    is run on the reader, and takes their signature afterwards.
--- 2. Card deliveries are HELD, not charged: a card keyed in for a delivery holds
---    the order total + 30% on the card.  At the driver's cash-out the real total
---    with the tip is charged once (one card fee) and the rest of the hold is
---    released.  The capture itself happens on Stripe (server route) just before
---    wayne_pos_driver_cashout records it.
+-- 2. Card deliveries: the tip is asked for on the phone and charged with the
+--    order, once, right away (owner, 2026-10-11).  At cash-out those card tips
+--    are paid to the driver from the drawer.  (A card that was only held —
+--    'authorized' — is still handled, but the POS no longer holds cards.)
 -- 3. Driver cash-out, Thrive-style, from the POS Deliveries tab: send orders out
 --    with a driver, then enter each order's tip and cash the driver out.  Cash
 --    orders become cash payments in the drawer, the driver's tips are paid out
@@ -477,6 +476,7 @@ declare
   v_detail jsonb := '[]'::jsonb;
   v_paid_by text;
   v_line_cash integer;
+  v_add_tip boolean;
 begin
   if not (public.wayne_has_permission('cash.manage') or public.wayne_has_permission('delivery.dispatch')) then
     raise exception 'Cash management permission required' using errcode = '42501';
@@ -505,6 +505,7 @@ begin
       from jsonb_array_elements(coalesce(tips, '[]'::jsonb)) t where t.value ->> 'order_id' = v_order.id::text limit 1;
     v_tip := least(greatest(coalesce(v_tip, 0), 0), 50000);
     v_line_cash := 0;
+    v_add_tip := true;
 
     if v_paid_by = 'card_held' then
       v_capture := null;
@@ -541,15 +542,20 @@ begin
         v_shift_id, auth.uid(), jsonb_build_object('kind', 'driver_tip', 'driver_id', target_driver_id, 'cashout_id', v_cashout_id))
       on conflict (provider, provider_payment_id) do nothing;
       v_cash_tips := v_cash_tips + v_tip;
+    elsif v_paid_by in ('card', 'paid') then
+      -- The tip was charged with the order (taken on the phone, or online):
+      -- it is already on the order; the store owes it to the driver.
+      v_tip := greatest(coalesce(v_order.tip_cents, 0), 0);
+      v_add_tip := false;
+      v_card_tips := v_card_tips + v_tip;
     else
-      -- Already charged (card or online): a tip can't be added to that charge.
       v_tip := 0;
     end if;
 
     if not v_order.is_test then v_real_tips := v_real_tips + v_tip; end if;
     update public.orders o set
-      tip_cents = o.tip_cents + v_tip,
-      total_cents = o.total_cents + v_tip,
+      tip_cents = o.tip_cents + case when v_add_tip then v_tip else 0 end,
+      total_cents = o.total_cents + case when v_add_tip then v_tip else 0 end,
       payment_method = case when v_paid_by = 'cash' then 'cash' when v_paid_by = 'card_held' then 'card' else o.payment_method end,
       payment_status = case when v_paid_by in ('cash', 'card_held') then 'paid' else o.payment_status end
      where o.id = v_order.id;
@@ -571,7 +577,7 @@ begin
 
     v_count := v_count + 1;
     v_detail := v_detail || jsonb_build_array(jsonb_build_object('order_id', v_order.id, 'order_number', v_order.order_number,
-      'paid_by', v_paid_by, 'total_cents', v_order.total_cents + v_tip, 'tip_cents', v_tip, 'cash_cents', v_line_cash));
+      'paid_by', v_paid_by, 'total_cents', v_order.total_cents + case when v_add_tip then v_tip else 0 end, 'tip_cents', v_tip, 'cash_cents', v_line_cash));
   end loop;
 
   if v_count = 0 then raise exception 'This driver has no deliveries to cash out' using errcode = '22023'; end if;

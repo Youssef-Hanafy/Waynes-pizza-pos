@@ -8,11 +8,8 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 /**
  * Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone).
- *
- * Delivery orders only HOLD the card (owner, 2026-10-11): order total + 30%, so the
- * driver's tip can be added at cash-out and the card is charged once, one fee.
+ * The tip is asked for on the phone and is already on the order, so the card is charged once, right away (owner, 2026-10-11).
  */
-const DELIVERY_HOLD_MULTIPLIER = 1.3;
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
   if (!hasPermission(access, "pos.access") || !access?.workspace_id) return Response.json({ error: "POS access required." }, { status: 403 });
@@ -43,7 +40,7 @@ export async function POST(request: Request) {
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
-      const holdCents = order.fulfillment_type === "delivery" ? Math.ceil(begun.amount_cents * DELIVERY_HOLD_MULTIPLIER) : null;
+      const holdCents: number | null = null;
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
         note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (${holdCents ? "delivery card hold" : "keyed card"})`, paymentId: begun.payment_id, receiptEmail: null,

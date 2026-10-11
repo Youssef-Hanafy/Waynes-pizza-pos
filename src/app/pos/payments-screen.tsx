@@ -395,11 +395,27 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   const [message, setMessage] = useState("");
   const onReady = useCallback((confirm: StripeCardConfirm | null) => { confirmRef.current = confirm; }, []);
   const onStatus = useCallback((next: string) => setMessage(next), []);
+  // The tip is asked for on the phone and charged with the order, once (owner, 2026-10-11).
+  const [baseCents, setBaseCents] = useState(order.total_cents);
+  const [tipCents, setTipCents] = useState(0);
+  const [tipSaved, setTipSaved] = useState(0);
+  const [payable, setPayable] = useState(order);
 
   async function charge() {
     if (!confirmRef.current) { onError("Secure card entry is still loading."); return; }
     setBusy(true); onError(""); setMessage("Preparing Stripe payment…");
     try {
+      let current = payable;
+      if (tipCents !== tipSaved) {
+        setMessage("Adding the tip…");
+        const tipResponse = await fetch(`/api/pos/orders/${order.id}/tip`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tip_cents: tipCents }), signal: AbortSignal.timeout(12_000),
+        });
+        if (!tipResponse.ok) throw new Error(await readError(tipResponse, "The tip could not be added."));
+        const tipped = await tipResponse.json() as { tip_cents: number; total_cents: number };
+        current = { ...payable, total_cents: tipped.total_cents };
+        setPayable(current); setTipSaved(tipped.tip_cents); setBaseCents(tipped.total_cents - tipped.tip_cents);
+      }
       const intentResponse = await fetch("/api/pos/keyed-card/intent", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-keyed-card-${order.id}-${uuid()}` }), signal: AbortSignal.timeout(15_000),
@@ -416,8 +432,8 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
       if (confirmed.error) throw new Error(confirmed.error.message ?? "The card was declined. Try another card.");
       if (!confirmResponse.ok) throw new Error(await readError(confirmResponse, "We could not verify the payment."));
       const result = await confirmResponse.json().catch(() => null) as { payment_status?: string } | null;
-      if (result?.payment_status === "captured") { onPaid({ order, method: "card", changeCents: 0, tenderedCents: null }); return; }
-      if (result?.payment_status === "authorized") { onPaid({ order, method: "card", changeCents: 0, tenderedCents: null, held: true }); return; }
+      if (result?.payment_status === "captured") { onPaid({ order: current, method: "card", changeCents: 0, tenderedCents: null }); return; }
+      if (result?.payment_status === "authorized") { onPaid({ order: current, method: "card", changeCents: 0, tenderedCents: null, held: true }); return; }
       if (result?.payment_status === "pending") throw new Error("Stripe is still processing this payment. Do not enter the card again; check Payments shortly.");
       throw new Error("The card was declined. Try another card.");
     } catch (cause) {
@@ -430,9 +446,34 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   return <div className="rounded-2xl border-2 border-wayne-green p-4">
     <h2 className="text-xl font-black">Key in the card</h2>
     <p className="mt-1 text-sm text-wayne-muted">Type the card number, expiry, CVC and ZIP the customer reads out. The details go straight to Stripe and are never stored by the POS.</p>
-    {order.fulfillment_type === "delivery" ? <p className="mt-2 rounded-xl bg-wayne-cream p-3 text-sm font-bold">Delivery: the card is only <strong>held</strong> now ({formatCents(Math.ceil(order.total_cents * 1.3))}, the order + 30% room for a tip). At the driver&apos;s cash-out it&apos;s charged once — the real total with the tip — and the rest is released.</p> : null}
+    <TipPicker baseCents={baseCents} disabled={busy || order.payment_status === "paid"} onChange={setTipCents} tipCents={tipCents} />
     <div className="mt-3"><StripeCardField config={config} onReady={onReady} onStatus={onStatus} /></div>
     {message ? <p aria-live="polite" className="mt-2 text-sm font-bold">{message}</p> : null}
-    <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void charge(); }} size="lg">{busy ? "Processing…" : order.fulfillment_type === "delivery" ? `Hold card for ${formatCents(order.total_cents)} + tip` : `Charge ${formatCents(order.total_cents)} with Stripe`}</Button>
+    <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void charge(); }} size="lg">{busy ? "Processing…" : `Charge ${formatCents(baseCents + tipCents)}${tipCents ? ` (incl. ${formatCents(tipCents)} tip)` : ""} with Stripe`}</Button>
+  </div>;
+}
+
+/** Tip asked for on the phone, before the card is charged (owner, 2026-10-11). */
+function TipPicker({ baseCents, tipCents, onChange, disabled }: { baseCents: number; tipCents: number; onChange: (cents: number) => void; disabled: boolean }) {
+  const [custom, setCustom] = useState("");
+  const percent = (value: number) => Math.round((baseCents * value) / 100);
+  const choice = (label: string, cents: number, key: string) => <button aria-pressed={tipCents === cents && !custom} className={`min-h-14 rounded-xl border-2 px-2 text-center font-black transition disabled:opacity-40 ${tipCents === cents && !custom ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-white"}`} disabled={disabled} key={key} onClick={() => { setCustom(""); onChange(cents); }} type="button"><span className="block text-base">{label}</span>{cents ? <span className="block text-xs font-bold opacity-80">{formatCents(cents)}</span> : null}</button>;
+  return <div className="mt-3">
+    <p className="text-sm font-black">Tip for the driver? <span className="font-bold text-wayne-muted">Ask on the phone — it&apos;s charged with the order.</span></p>
+    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+      {choice("No tip", 0, "none")}
+      {choice("15%", percent(15), "15")}
+      {choice("18%", percent(18), "18")}
+      {choice("20%", percent(20), "20")}
+      <label className={`flex min-h-14 items-center gap-1 rounded-xl border-2 px-2 ${custom ? "border-wayne-green" : "border-wayne-border"}`}>
+        <span className="text-sm font-black">$</span>
+        <input aria-label="Custom tip" className="w-full min-w-0 bg-transparent text-base font-black outline-none" disabled={disabled} inputMode="decimal" onChange={(event) => {
+          const raw = event.target.value.replace(/[^0-9.]/g, "");
+          setCustom(raw);
+          const cents = Math.round(Number(raw || "0") * 100);
+          if (Number.isFinite(cents)) onChange(Math.max(0, Math.min(cents, 100_000)));
+        }} placeholder="Other" value={custom} />
+      </label>
+    </div>
   </div>;
 }

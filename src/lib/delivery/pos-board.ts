@@ -69,6 +69,7 @@ export type PosCashoutResult = z.infer<typeof posCashoutResultSchema>;
 
 /** Whether a tip typed at cash-out can be taken for this order. */
 export function tipAllowed(order: Pick<PosDeliveryOrder, "paid_by">) {
+  // Card / online orders: the tip was charged with the order (asked on the phone).
   return order.paid_by === "card_held" || order.paid_by === "cash" || order.paid_by === "cash_paid";
 }
 
@@ -83,6 +84,7 @@ export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cent
  *   cash orders    – the order totals the driver collected at the door (tips excluded)
  *   tips           – every tip, which the driver keeps
  *   hand in        – cash orders minus the card tips the store owes the driver
+ *                    (card tips were charged with the order, on the phone or online)
  * (cash tips are already in the driver's pocket, so they cancel out).
  */
 export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, number>) {
@@ -90,6 +92,7 @@ export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, 
   let cashTips = 0;
   let cardTips = 0;
   for (const order of orders) {
+    if (order.paid_by === "card" || order.paid_by === "paid") { cardTips += Math.max(0, order.tip_cents); continue; }
     const tip = tipAllowed(order) ? Math.min(Math.max(0, tips[order.order_id] ?? 0), maxTipCents(order)) : 0;
     if (order.paid_by === "cash") { cashOrders += order.total_cents; cashTips += tip; }
     else if (order.paid_by === "cash_paid") cashTips += tip;

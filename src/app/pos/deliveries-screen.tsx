@@ -193,7 +193,7 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
                     <td className="py-2 pr-2">{allowed ? <>
                       <input aria-label={`Tip for order ${order.order_number}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
-                    </> : <span className="text-xs text-wayne-muted">Already charged</span>}</td>
+                    </> : <span className="text-sm font-bold">{order.tip_cents ? formatCents(order.tip_cents) : "—"}<span className="block text-xs font-normal text-wayne-muted">on the card</span></span>}</td>
                     <td className="py-2 text-right">{order.status === "out_for_delivery" ? <button className="min-h-9 text-xs font-bold underline" disabled={busy !== null} onClick={() => { void act(`back-${order.order_id}`, { action: "unassign", order_id: order.order_id }); }} type="button">Take back</button> : null}</td>
                   </tr>;
                 })}</tbody>
@@ -207,7 +207,7 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
                 <dt className="text-wayne-muted">Cash tips (driver keeps)</dt><dd className="text-right text-wayne-muted">{formatCents(summary.cashTips)}</dd>
               </dl>
               <p className="mt-3 border-t border-wayne-border pt-3 text-3xl font-black">{summary.handIn >= 0 ? `${driver.name} hands in ${formatCents(summary.handIn)}` : `Pay ${driver.name} ${formatCents(-summary.handIn)}`}</p>
-              {orders.some((order) => order.paid_by === "card_held") ? <p className="mt-1 text-sm text-wayne-muted">Held cards are charged now — once each, with the tip.</p> : null}
+              {summary.cardTips ? <p className="mt-1 text-sm text-wayne-muted">Card tips were charged with the orders; the drawer pays them to the driver.</p> : null}
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Button className="text-lg" disabled={busy !== null} onClick={() => { void cashOut(driver.driver_id, orders); }} size="lg">{busy === `cashout-${driver.driver_id}` ? "Cashing out…" : `Confirm cash out`}</Button>
                 <Button disabled={busy !== null} onClick={() => setCashingOut(null)} size="lg" variant="secondary">Back</Button>
