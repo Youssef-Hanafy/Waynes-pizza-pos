@@ -13,12 +13,12 @@ begin;
 
 create schema if not exists archive;
 revoke all on schema archive from public, anon, authenticated;
-create table archive.orders_20261012 as select * from public.orders;
-create table archive.order_items_20261012 as select * from public.order_items;
-create table archive.payments_20261012 as select * from public.payments;
-create table archive.driver_cashouts_20261012 as select * from public.driver_cashouts;
-create table archive.register_shifts_20261012 as select * from public.register_shifts;
-create table archive.cash_movements_20261012 as select * from public.cash_movements;
+create table archive.orders_20261012b as select * from public.orders;
+create table archive.order_items_20261012b as select * from public.order_items;
+create table archive.payments_20261012b as select * from public.payments;
+create table archive.driver_cashouts_20261012b as select * from public.driver_cashouts;
+create table archive.register_shifts_20261012b as select * from public.register_shifts;
+create table archive.cash_movements_20261012b as select * from public.cash_movements;
 
 select public.wayne_purge_orders(array(select id from public.orders));
 
