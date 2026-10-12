@@ -9,6 +9,7 @@ import { getPosKeyedCardConfig, getPosStripeReaderEnabled } from "@/lib/payments
 import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { SupportPill } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
+import { OneTab } from "./one-tab";
 import { PosApp } from "./pos-app";
 
 export const metadata: Metadata = { title: "Front POS", robots: { index: false, follow: false } };
@@ -33,7 +34,7 @@ export default async function PosPage() {
   // The menu (sold-out items, prices) refreshes in the background; open tickets live in the draft store and are kept.
   return <>
     <WorkspaceScope defaultCity={settings.city} defaultState={settings.state} legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} />
-    <PosApp
+    <OneTab><PosApp
       callerIdEnabled={hasService(access, "caller_id")}
       deliveryEnabled={hasService(access, "delivery")}
       workspaceName={settings.store_name || access.workspace_name || "POS"}
@@ -47,7 +48,7 @@ export default async function PosPage() {
       profileId={access.profile_id}
       settings={settings}
       staffName={access.display_name}
-    />
+    /></OneTab>
     <SupportPill access={access} />
     <div className="sr-only"><AutoRefresh intervalMs={60_000} label="Menu refreshes every minute" /></div>
   </>;
