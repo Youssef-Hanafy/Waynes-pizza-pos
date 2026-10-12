@@ -15,7 +15,12 @@ import { createStore, useStore } from "./create-store";
  * can never open one business's tickets in the other.
  */
 const LEGACY_STORAGE_KEY = "wayne.pos.drafts.v1";
-let STORAGE_KEY = workspaceStorageKey(null, "pos-drafts.v1");
+// v2 (2026-10-11): a tab still running an older copy of the POS kept writing
+// its own idea of the tickets to v1, and the two tabs fought over it (the
+// screen flipped between the menu and the New Order card).  A new key means
+// an old tab can never touch the tickets of this one.
+let STORAGE_KEY = workspaceStorageKey(null, "pos-drafts.v2");
+const PREVIOUS_KEY_NAME = "pos-drafts.v1";
 
 const serverSnapshot = initialDrafts();
 export const orderStore = createStore<DraftsState>(serverSnapshot);
@@ -35,10 +40,12 @@ export function loadSavedDrafts() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
   const scope = getClientWorkspaceScope();
-  STORAGE_KEY = workspaceStorageKey(scope.workspaceId, "pos-drafts.v1");
+  STORAGE_KEY = workspaceStorageKey(scope.workspaceId, "pos-drafts.v2");
   let raw: string | null = null;
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
+    // Tickets saved under the old key are carried over once.
+    if (raw === null) raw = window.localStorage.getItem(workspaceStorageKey(scope.workspaceId, PREVIOUS_KEY_NAME));
     // One-time move of tickets saved before workspaces existed.  They can only
     // belong to the workspace the pre-platform POS served.
     if (raw === null && scope.workspaceId && scope.legacyOperations) {
@@ -54,12 +61,8 @@ export function loadSavedDrafts() {
   const saved = parseSavedDrafts(raw);
   if (saved) orderStore.set(saved);
   orderStore.subscribe(() => save(orderStore.get()));
-  // Another tab on the same device edited the tickets.
-  window.addEventListener("storage", (event) => {
-    if (event.key !== STORAGE_KEY) return;
-    const next = parseSavedDrafts(event.newValue);
-    if (next) orderStore.set(next);
-  });
+  // No cross-tab mirroring: only one tab runs the POS (see app/pos/one-tab.tsx).
+  // Two tabs mirroring each other's tickets is what made the screen shake.
 }
 
 export const orderActions = {
