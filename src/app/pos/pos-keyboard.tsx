@@ -38,12 +38,19 @@ export function setPosKeyboardSetting(value: Setting) {
   for (const listener of listeners) listener();
 }
 
-/** Auto: on for the Android register app and touch-only screens, off with a mouse. */
+/**
+ * Auto: on for the Android register app and touch-only tablets; off with a
+ * mouse, and off on phones (a driver's or the owner's own phone keeps its
+ * normal keyboard).  The choice in More → This register applies to every
+ * staff screen on that device — POS, Admin, Kitchen, Driver, sign-in.
+ */
 export function posKeyboardEnabled(setting: Setting = getPosKeyboardSetting()) {
   if (typeof window === "undefined") return false;
   if (setting !== "auto") return setting === "on";
   if ((window as unknown as { WaynesAndroid?: unknown }).WaynesAndroid) return true;
-  return window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(any-pointer: fine)").matches;
+  const touchOnly = window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(any-pointer: fine)").matches;
+  const tablet = Math.min(window.screen.width, window.screen.height) >= 560;
+  return touchOnly && tablet;
 }
 
 function subscribe(listener: () => void) {

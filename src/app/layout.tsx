@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
 import { StorefrontBrandProvider } from "@/components/site/storefront-brand";
+import { StaffKeyboard } from "@/components/ops/staff-keyboard";
 import { getStorefront } from "@/lib/content/queries";
 import { brandNames } from "@/lib/content/schemas";
 import "./globals.css";
@@ -28,7 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const theme = primary ? ({ "--color-wayne-red": primary, "--color-wayne-red-dark": `color-mix(in srgb, ${primary} 80%, black)`, "--color-wayne-red-soft": `color-mix(in srgb, ${primary} 12%, white)` } as React.CSSProperties) : undefined;
   return (
     <html className={`${inter.variable} ${archivo.variable}`} lang="en">
-      <body className="font-sans antialiased" style={theme}><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider></body>
+      <body className="font-sans antialiased" style={theme}><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider><StaffKeyboard /></body>
     </html>
   );
 }

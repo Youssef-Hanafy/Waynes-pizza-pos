@@ -149,3 +149,8 @@ gmp-place-autocomplete {
   border: 1px solid var(--color-wayne-border);
   border-radius: 0.75rem;
 }
+
+/* Wayne's on-screen keyboard on staff screens: the page stops above it. */
+body.wayne-kb-pad {
+  padding-bottom: var(--pos-kb-h, 0px);
+}

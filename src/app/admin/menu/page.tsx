@@ -13,6 +13,7 @@ import {
   setItemStateAction,
   updateCategoryAction,
 } from "./actions";
+import { MenuSearch } from "./menu-search";
 
 export const metadata: Metadata = { title: "Menu admin" };
 export const dynamic = "force-dynamic";
@@ -64,6 +65,10 @@ export default async function MenuAdminPage({
     ]);
   const categories = (categoryData ?? []) as Category[];
   const items = (itemData ?? []) as Item[];
+  // Archived categories (the old menu before the full load) used to show as a
+  // faint copy of every category.  They sit in one closed section now.
+  const live = categories.filter((category) => !category.archived_at);
+  const archived = categories.filter((category) => category.archived_at);
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
       <div className="flex flex-wrap items-end justify-between gap-5">
@@ -99,24 +104,40 @@ export default async function MenuAdminPage({
             <CategoryForm action={createCategoryAction} />
           </Card>
         </aside>
-        <div className="grid gap-6">
-          {categories.length ? (
-            categories.map((category) => (
+        {categories.length ? (
+          <MenuSearch categories={live.map((category) => ({ id: category.id, name: category.name }))}>
+            {live.map((category) => (
               <CategoryCard
                 category={category}
                 items={items.filter((item) => item.category_id === category.id)}
                 key={category.id}
               />
-            ))
-          ) : (
-            <Card className="p-8 text-center">
-              <h2 className="text-2xl font-black">Create the first category</h2>
-              <p className="mt-2 text-wayne-muted">
-                Items need a category before they can be added.
-              </p>
-            </Card>
-          )}
-        </div>
+            ))}
+            {archived.length ? (
+              <details className="rounded-2xl border border-dashed border-wayne-border-strong p-4" data-menu-archived>
+                <summary className="min-h-11 cursor-pointer content-center font-bold text-wayne-muted">
+                  Archived categories ({archived.length}) — not on the menu, kept for old orders
+                </summary>
+                <div className="mt-4 grid gap-6">
+                  {archived.map((category) => (
+                    <CategoryCard
+                      category={category}
+                      items={items.filter((item) => item.category_id === category.id)}
+                      key={category.id}
+                    />
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </MenuSearch>
+        ) : (
+          <Card className="p-8 text-center">
+            <h2 className="text-2xl font-black">Create the first category</h2>
+            <p className="mt-2 text-wayne-muted">
+              Items need a category before they can be added.
+            </p>
+          </Card>
+        )}
       </div>
     </main>
   );
@@ -137,6 +158,7 @@ function CategoryCard({
   const update = updateCategoryAction.bind(null, category.id);
   const imageUrl = getPublicAssetUrl(category.image_path);
   return (
+    <div className="scroll-mt-48" data-menu-category data-search={category.name.toLowerCase()} id={`category-${category.id}`}>
     <Card className={category.archived_at ? "p-6 opacity-60" : "p-6"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -192,6 +214,7 @@ function CategoryCard({
         )}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -211,6 +234,8 @@ function ItemRow({ item }: { item: Item }) {
   return (
     <div
       className={`flex flex-wrap items-center justify-between gap-4 py-4 ${item.archived_at ? "opacity-50" : ""}`}
+      data-menu-item
+      data-search={item.name.toLowerCase()}
     >
       <div>
         <Link
