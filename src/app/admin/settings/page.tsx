@@ -268,8 +268,14 @@ export default async function SettingsPage({
             />
             <Input
               defaultValue={settings.suggested_tip_percentages.join(", ")}
-              label="Suggested tips (%)"
+              label="Suggested tips (%) — checkout & customer screen"
               name="suggested_tip_percentages"
+            />
+            <Input
+              defaultValue={settings.suggested_tip_amounts_cents.map((cents) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))).join(", ")}
+              label="Dollar tip buttons on the customer screen ($)"
+              name="suggested_tip_amounts"
+              placeholder="1, 2, 3, 4, 5"
             />
           </div>
           <TextArea

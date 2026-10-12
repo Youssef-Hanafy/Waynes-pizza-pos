@@ -67,6 +67,7 @@ const contentSchema = z.object({
   tax_rate_basis_points: z.number().int().min(0).max(10_000),
   tips_enabled: z.boolean(),
   suggested_tip_percentages: z.array(z.number().int().min(0).max(100)).max(6),
+  suggested_tip_amounts_cents: z.array(z.number().int().min(1).max(100_000)).max(6),
   pickup_prep_minutes: z.number().int().min(0).max(1440),
   delivery_estimate_minutes: z.number().int().min(0).max(1440),
   delivery_area_text: z.string().trim().max(1000),
@@ -171,6 +172,13 @@ export async function updateWebsiteSettings(formData: FormData) {
       .filter(Boolean)
       .map(Number)
       .filter(Number.isFinite),
+    // Dollar tip buttons on the customer screen: "1, 2, 3, 4, 5" → $1–$5.
+    suggested_tip_amounts_cents: textField(formData, "suggested_tip_amounts")
+      .split(",")
+      .map((value) => value.replace(/[$\s]/g, ""))
+      .filter(Boolean)
+      .map((value) => Math.round(Number(value) * 100))
+      .filter((cents) => Number.isFinite(cents) && cents > 0),
     pickup_prep_minutes: Number(textField(formData, "pickup_prep_minutes")),
     delivery_estimate_minutes: Number(
       textField(formData, "delivery_estimate_minutes"),

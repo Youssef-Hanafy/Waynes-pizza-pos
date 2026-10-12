@@ -20,6 +20,16 @@ type Waiter = { requestId: string; resolve: (answer: Answer | null) => void };
 
 type LinkState = { screenOnline: boolean; key: string };
 
+/** The store's tip buttons (Admin → Settings), set once by the POS shell. */
+let tipOptions: { tip_percentages?: number[]; tip_amounts_cents?: number[] } = {};
+
+export function setCustomerTipOptions(percentages: number[], amountsCents: number[]) {
+  tipOptions = {
+    ...(percentages.length ? { tip_percentages: percentages.slice(0, 4) } : {}),
+    tip_amounts_cents: amountsCents.slice(0, 6),
+  };
+}
+
 let current: DisplayState = displayStateSchema.parse({});
 // Nothing to show yet: the first send is a heartbeat, so opening a second POS
 // (or reloading) never blanks a screen another register is using.
@@ -113,7 +123,7 @@ export function showOnCustomerScreen(next: Partial<DisplayState>) {
 export function askCustomer(next: Partial<DisplayState> & { phase: "tip" | "sign" }): { answer: Promise<Answer | null>; cancel: () => void } {
   if (waiter) { const old = waiter; waiter = null; old.resolve(null); }
   const requestId = uuid();
-  current = displayStateSchema.parse({ ...next, request_id: requestId });
+  current = displayStateSchema.parse({ ...(next.phase === "tip" ? tipOptions : {}), ...next, request_id: requestId });
   dirty = true;
   let cancel = () => {};
   const answer = new Promise<Answer | null>((resolve) => {

@@ -32,6 +32,8 @@ export const displayStateSchema = z.object({
   total_cents: z.number().int().default(0),
   /** Tip percentages offered (from Admin → Settings). */
   tip_percentages: z.array(z.number()).default([15, 18, 20, 25]),
+  /** Dollar tip buttons, in cents (Admin → Settings; owner, 2026-10-12). */
+  tip_amounts_cents: z.array(z.number().int()).max(6).default([100, 200, 300, 400, 500]),
   /** What the tip percentages apply to. */
   tip_base_cents: z.number().int().default(0),
   change_cents: z.number().int().nullable().default(null),

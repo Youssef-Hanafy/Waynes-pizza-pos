@@ -188,11 +188,17 @@ function TipChooser({ state, onAnswer }: { state: DisplayState; onAnswer: (tipCe
     <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">Order total {formatCents(base)}</p>
     <p className="mt-2 text-5xl font-black">Add a tip?</p>
     <div className="mt-8 grid w-full max-w-3xl grid-cols-2 gap-4 md:grid-cols-4">
-      {state.tip_percentages.slice(0, 4).map((percent) => <button className="flex min-h-32 flex-col items-center justify-center rounded-3xl bg-wayne-green text-white shadow-md active:scale-[0.98]" key={percent} onClick={() => onAnswer(tipFromPercent(base, percent))} type="button">
+      {state.tip_percentages.slice(0, 4).map((percent) => <button className="flex min-h-28 flex-col items-center justify-center rounded-3xl bg-wayne-green text-white shadow-md active:scale-[0.98]" key={percent} onClick={() => onAnswer(tipFromPercent(base, percent))} type="button">
         <span className="text-4xl font-black">{percent}%</span>
         <span className="mt-1 text-xl font-bold text-white/85">{formatCents(tipFromPercent(base, percent))}</span>
       </button>)}
     </div>
+    {/* Dollar tips (owner, 2026-10-12): $1–$5 by default, set in Admin → Settings. */}
+    {state.tip_amounts_cents.length ? <div className="mt-4 grid w-full max-w-3xl gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(state.tip_amounts_cents.length, 6)}, minmax(0, 1fr))` }}>
+      {state.tip_amounts_cents.slice(0, 6).map((cents) => <button className="min-h-20 rounded-3xl border-2 border-wayne-green bg-white text-3xl font-black text-wayne-green shadow-sm active:scale-[0.98]" key={cents} onClick={() => onAnswer(cents)} type="button">
+        {cents % 100 === 0 ? `$${cents / 100}` : formatCents(cents)}
+      </button>)}
+    </div> : null}
     <div className="mt-4 grid w-full max-w-3xl grid-cols-2 gap-4">
       <button className="min-h-20 rounded-3xl border-2 border-wayne-green bg-white text-2xl font-black text-wayne-green" onClick={() => setCustom("")} type="button">Custom amount</button>
       <button className="min-h-20 rounded-3xl border-2 border-wayne-border bg-white text-2xl font-black text-wayne-muted" onClick={() => onAnswer(0)} type="button">No tip</button>

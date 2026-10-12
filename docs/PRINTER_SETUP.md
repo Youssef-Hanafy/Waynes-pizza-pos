@@ -62,7 +62,7 @@ From then on:
 * Anything over an hour old isn't printed automatically. It waits in Admin → Printing.
 * If a second register is switched on by mistake, nothing prints twice: the database hands each ticket to one station only.
 
-The cash drawer opens **by itself for every payment taken at the store** — cash, a card reader linked to the POS, or a card run on a standalone reader and marked *Approved* on POS → Payments. Whichever register or phone takes the payment, the print station (the Android app at the counter) pulses the drawer through the TM-T20III within a second or two. Online card payments don't open it. If the receipt printer is off, the drawer is **not** opened later: after 2 minutes the kick is dropped and the key is used. The drawer can also be opened from Admin → Hardware → *Open cash drawer*.
+The cash drawer opens **only when cash goes into it** (owner, 2026-10-12): choose *Cash* on the payment screen, enter the amount handed over and tap *Record cash* — the print station (the Android app at the counter) pulses the drawer through the TM-T20III within a second or two. Sending an order, card-reader sales, keyed-in cards and online payments never open it; *No Sale* opens it on purpose. If the receipt printer is off, the drawer is **not** opened later: after 2 minutes the kick is dropped and the key is used. The drawer can also be opened from Admin → Hardware → *Open cash drawer*.
 
 ## Running alongside Thrive
 

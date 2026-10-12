@@ -56,8 +56,10 @@ type Phase = "idle" | "preparing" | "waiting" | "confirming" | "declined";
  * taps / inserts / swipes, and the server re-reads Stripe before the order is
  * marked paid.  A decline keeps the same payment open for the next card.
  */
-export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError, onPaid }: {
+export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError, onPaid, autoStart = false }: {
   orderId: string; totalCents: number; busy: boolean;
+  /** Send the total to the reader as soon as it's ready — no extra tap after the customer's tip (owner, 2026-10-12). */
+  autoStart?: boolean;
   setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (card: { brand: string | null; last4: string | null }) => void;
 }) {
   const reader = useStripeReader();
@@ -143,6 +145,15 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       setBusy(false);
     }
   }
+
+  // Once per opening: the customer picked a tip, so the reader asks for the card straight away.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !reader.available) return;
+    autoStarted.current = true;
+    void charge();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, reader.available]);
 
   const waiting = phase === "waiting";
   return <div className="rounded-2xl border-2 border-wayne-green p-4">

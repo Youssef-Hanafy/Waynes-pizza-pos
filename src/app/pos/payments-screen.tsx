@@ -41,8 +41,9 @@ async function readError(response: Response, fallback: string) {
  *           reader isn't linked (Boston North's standalone terminals) — run
  *           the total on the reader and tap Approved.
  *
- * Every payment taken here opens the cash drawer: the database queues a
- * drawer kick and the print station pulses the drawer on the receipt printer.
+ * Only cash opens the cash drawer (owner, 2026-10-12): recording the cash
+ * handed over queues a drawer kick and the print station pulses the drawer on
+ * the receipt printer.  Sending an order or a card payment never opens it.
  */
 export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean }) {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
@@ -138,7 +139,7 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
       <p className="mt-2 text-wayne-muted">When the driver brings back the signed slip, type the tip in Deliveries and cash them out — the card is charged once, order + tip.</p>
     </> : <p className="mt-6 text-5xl font-black">{formatCents(done.order.total_cents)} on card</p>}
     {done.order.is_test ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">🧪 Test order — no real card was charged.</p> : null}
-    {done.held ? null : <p className="mt-6 rounded-xl bg-wayne-cream p-3 font-bold">The cash drawer is opening.</p>}
+    {done.method === "cash" ? <p className="mt-6 rounded-xl bg-wayne-cream p-3 font-bold">The cash drawer is opening.</p> : null}
     <div className="mt-6 grid gap-2 sm:grid-cols-2">
       <Button onClick={() => { setNote("Printing…"); void requestReceipt(done.order.id).then((result) => setNote(result.message)); }} size="lg" variant="secondary">Print receipt</Button>
       <Button onClick={onNext} size="lg">Next order</Button>
@@ -201,8 +202,9 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
       {mode === "terminal" ? (screen.screenOnline && !tipAsked
         ? <CustomerTipStep onDone={tipDone} order={order} />
-        : order.is_test ? <TestCardTender busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />
-        : <CardTender busy={busy} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
+        // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
+        : order.is_test ? <TestCardTender autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />
+        : <CardTender autoStart busy={busy} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
       {mode === "keyed" && order.is_test ? <div className="mt-5"><TestCardTender busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div>
         : mode === "keyed" && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender busy={busy} config={keyedCardConfig} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div> : null}
     </>}
@@ -300,8 +302,9 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
   </div>;
 }
 
-function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeReader }: TenderProps & { terminals: Terminal[]; stripeReader: boolean }) {
-  const [terminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
+function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeReader, autoStart = false }: TenderProps & { terminals: Terminal[]; stripeReader: boolean; autoStart?: boolean }) {
+  const [pickedTerminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
+  const terminalId = pickedTerminalId || terminals[0]?.id || "";
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
   const [last4, setLast4] = useState("");
@@ -340,6 +343,15 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
       if (alive.current) { setCharging(false); setBusy(false); setNote(""); }
     }
   }
+
+  // A single linked reader (no Stripe M2): send it the total without waiting for a tap.
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (!autoStart || stripeReader || autoSent.current || terminals.length !== 1 || !terminalId) return;
+    autoSent.current = true;
+    void sendToReader();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, stripeReader, terminals.length, terminalId]);
 
   async function cancelOnReader() {
     try {
@@ -384,7 +396,7 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
 </div>;
 
   return <div className="mt-5 grid gap-4">
-    {stripeReader ? <StripeReaderTender busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
+    {stripeReader ? <StripeReaderTender autoStart={autoStart} busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
@@ -494,7 +506,7 @@ function TipPicker({ baseCents, tipCents, onChange, disabled }: { baseCents: num
  * reader, a card keyed in over the phone, a delivery card approved now and
  * charged with the tip at cash-out — but simulated, so nothing is charged.
  */
-function TestCardTender({ order, entry, busy, setBusy, onError, onPaid }: TenderProps & { entry: "card_reader" | "test_keyed" }) {
+function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStart = false }: TenderProps & { entry: "card_reader" | "test_keyed"; autoStart?: boolean }) {
   const delivery = order.fulfillment_type === "delivery" && entry === "test_keyed";
   const askTip = entry === "test_keyed" && !delivery;
   const [baseCents, setBaseCents] = useState(order.total_cents);
@@ -530,10 +542,27 @@ function TestCardTender({ order, entry, busy, setBusy, onError, onPaid }: Tender
     }
   }
 
+  // Like the real reader, the test reader starts on its own: the "customer taps" after a few seconds.
+  const simulated = entry === "card_reader" && autoStart;
+  const [tapIn, setTapIn] = useState<number | null>(simulated ? 4 : null);
+  useEffect(() => {
+    if (tapIn === null) return;
+    const timer = window.setTimeout(() => {
+      if (tapIn <= 1) { setTapIn(null); void approve(); return; }
+      setTapIn((value) => (value === null ? null : value - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tapIn]);
+
   return <div className="mt-5 rounded-2xl border-2 border-dashed border-wayne-gold p-4">
     <h2 className="text-xl font-black">🧪 {entry === "card_reader" ? "Test card reader" : "Test card — keyed in"}</h2>
+    {tapIn !== null ? <div aria-live="polite" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-green p-4 text-white">
+      <p className="text-2xl font-black">Waiting for the customer to tap… ({tapIn})</p>
+      <Button onClick={() => setTapIn(null)} variant="secondary">Stop</Button>
+    </div> : null}
     <p className="mt-1 text-sm text-wayne-muted">{entry === "card_reader"
-      ? "Pretend the customer tapped their card. The drawer opens like a real card sale."
+      ? "Pretend the customer tapped their card. Card sales don't open the cash drawer."
       : delivery ? "Delivery: the test card is approved for the order now; add the tip in Deliveries at the driver's cash-out, like a real one."
       : "Pretend the card number was typed in."}</p>
     {askTip ? <TipPicker baseCents={baseCents} disabled={busy} onChange={setTipCents} tipCents={tipCents} /> : null}

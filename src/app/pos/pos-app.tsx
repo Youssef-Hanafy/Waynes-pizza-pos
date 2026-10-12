@@ -26,7 +26,7 @@ import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenDrawerButton } from "./open-drawer-button";
 import { DeliveriesScreen } from "./deliveries-screen";
-import { startCustomerDisplayLink } from "@/stores/customer-display-link";
+import { setCustomerTipOptions, startCustomerDisplayLink } from "@/stores/customer-display-link";
 import { TestOrdersPanel } from "./test-orders-panel";
 import { ClockButton } from "./clock-button";
 import { OpenOrdersPanel } from "./open-orders-panel";
@@ -83,6 +83,8 @@ export function PosApp(props: Props) {
   useEffect(() => { sectionRef.current = section; }, [section]);
   // The customer screen (Fire tablet) mirrors this register.
   useEffect(() => startCustomerDisplayLink(), []);
+  // The tip buttons on the customer screen come from Admin → Settings.
+  useEffect(() => { setCustomerTipOptions(settings.suggested_tip_percentages, settings.suggested_tip_amounts_cents); }, [settings.suggested_tip_percentages, settings.suggested_tip_amounts_cents]);
   const badge = usePhoneBadge();
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
