@@ -64,6 +64,10 @@ export const posCashoutResultSchema = z.object({
   cash_tips_cents: z.number().int(),
   card_tips_cents: z.number().int(),
   hand_in_cents: z.number().int(),
+  detail: z.array(z.object({
+    order_id: z.uuid(), order_number: z.string(), paid_by: z.string(),
+    total_cents: z.number().int(), tip_cents: z.number().int(), cash_cents: z.number().int(),
+  })).default([]),
 });
 export type PosCashoutResult = z.infer<typeof posCashoutResultSchema>;
 
@@ -88,24 +92,47 @@ export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cent
   return Math.max(0, (order.hold_cents ?? order.total_cents) - order.total_cents);
 }
 
+/** One order on the driver's run, the way the cash-out reads it back. */
+export type CashoutLine = {
+  order: PosDeliveryOrder;
+  /** The tip that counts for this order. */
+  tip: number;
+  /** Cash the driver collected at the door for the order (tip not included). */
+  collected: number;
+  /** Tip the store owes the driver out of the drawer (card / online tips). */
+  storePays: number;
+  /** Cash tip the driver already has in their pocket. */
+  keeps: number;
+};
+
 /**
- * What a cash-out comes to, before it is sent:
+ * What a cash-out comes to, order by order and in total, before it is sent:
  *   cash orders    – the order totals the driver collected at the door (tips excluded)
- *   tips           – every tip, which the driver keeps
- *   hand in        – cash orders minus the card tips the store owes the driver
- *                    (card tips were charged with the order, on the phone or online)
- * (cash tips are already in the driver's pocket, so they cancel out).
+ *   card tips      – card / online tips: the store pays these out of the drawer
+ *   cash tips      – the driver keeps them, so they cancel out
+ *   hand in        – cash orders minus the card tips (negative = pay the driver)
  */
+export function cashoutLines(orders: PosDeliveryOrder[], tips: Record<string, number>): CashoutLine[] {
+  return orders.map((order) => {
+    if (order.paid_by === "card" || order.paid_by === "paid") {
+      const tip = Math.max(0, order.tip_cents);
+      return { order, tip, collected: 0, storePays: tip, keeps: 0 };
+    }
+    const tip = tipAllowed(order) ? Math.min(Math.max(0, tips[order.order_id] ?? 0), maxTipCents(order)) : 0;
+    if (order.paid_by === "cash") return { order, tip, collected: order.total_cents, storePays: 0, keeps: tip };
+    if (order.paid_by === "cash_paid") return { order, tip, collected: 0, storePays: 0, keeps: tip };
+    return { order, tip, collected: 0, storePays: tip, keeps: 0 }; // card_held: tip added to the card
+  });
+}
+
 export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, number>) {
   let cashOrders = 0;
   let cashTips = 0;
   let cardTips = 0;
-  for (const order of orders) {
-    if (order.paid_by === "card" || order.paid_by === "paid") { cardTips += Math.max(0, order.tip_cents); continue; }
-    const tip = tipAllowed(order) ? Math.min(Math.max(0, tips[order.order_id] ?? 0), maxTipCents(order)) : 0;
-    if (order.paid_by === "cash") { cashOrders += order.total_cents; cashTips += tip; }
-    else if (order.paid_by === "cash_paid") cashTips += tip;
-    else if (order.paid_by === "card_held") cardTips += tip;
+  for (const line of cashoutLines(orders, tips)) {
+    cashOrders += line.collected;
+    cashTips += line.keeps;
+    cardTips += line.storePays;
   }
   return { cashOrders, cashTips, cardTips, tips: cashTips + cardTips, handIn: cashOrders - cardTips };
 }
@@ -113,7 +140,7 @@ export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, 
 export function paidByLabel(order: Pick<PosDeliveryOrder, "paid_by" | "card_label">) {
   switch (order.paid_by) {
     case "card_held": return `${order.card_label || "Card"} · add tip`;
-    case "card": return `${order.card_label || "Card"} · charged`;
+    case "card": return `${order.card_label || "Card"} · charged at counter`;
     case "paid": return "Paid online";
     case "cash_paid": return "Cash (collected)";
     default: return "Cash";

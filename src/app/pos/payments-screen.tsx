@@ -171,6 +171,9 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   if (signing) return <CustomerSignStep onFinished={signed} order={signing.order} tipCents={Math.max(0, signing.order.total_cents - openedOrder.total_cents)} />;
   const alreadyPaid = order.payment_status === "paid";
   const cardHeld = order.payment_status === "authorized";
+  // Delivery (owner, 2026-10-11): a phone card is keyed in and the slip's tip is
+  // added at the driver's cash-out; cash is collected at the door by the driver.
+  const isDelivery = order.fulfillment_type === "delivery";
 
   const option = (value: Exclude<Mode, "choose">, icon: string, title: string, note: string, disabled = false) => (
     <button aria-pressed={mode === value} className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => { setMode(value); setError(""); }} type="button">
@@ -189,10 +192,10 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       : cardHeld ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Card approved for this delivery. Add the tip from the signed slip in Deliveries — the card is charged once, order + tip, at the driver&apos;s cash-out.</p> : <>
       {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
       <div className={`mt-5 grid grid-cols-2 gap-3 ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
-        {option("cash", "💵", "Cash", "Change shown")}
-        {option("terminal", "💳", "Card reader", stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
-        {option("keyed", "⌨️", "Key in card", order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
-        {onPayLater ? <button className="flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40" disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className="text-2xl leading-none">⏱</span><strong className="mt-1 text-lg font-black leading-tight">Pay later</strong><span className="text-xs font-bold text-wayne-muted">At pickup / the door</span></button> : null}
+        {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
+        {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · charged now" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
+        {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? `Phone order · tip at cash-out${order.is_test ? " (test)" : ""}` : "Needs Stripe") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
+        {onPayLater ? <button className="flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40" disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className="text-2xl leading-none">{isDelivery ? "🚗" : "⏱"}</span><strong className="mt-1 text-lg font-black leading-tight">{isDelivery ? "Cash at the door" : "Pay later"}</strong><span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span></button> : null}
       </div>
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}

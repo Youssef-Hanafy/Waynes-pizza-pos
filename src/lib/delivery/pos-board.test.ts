@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cashoutSummary, maxTipCents, posDeliveryOrderSchema, tipAllowed } from "./pos-board";
+import { cashoutLines, cashoutSummary, maxTipCents, posDeliveryOrderSchema, tipAllowed } from "./pos-board";
 
 const base = { order_number: "W001018", status: "out_for_delivery", payment_status: "unpaid", payment_method: "cash", placed_at: null };
 const cash = posDeliveryOrderSchema.parse({ ...base, order_id: "a0000000-0000-4000-8000-000000000001", total_cents: 2300, paid_by: "cash" });
@@ -27,5 +27,18 @@ describe("driver cash-out (owner, 2026-10-11)", () => {
     expect(tipAllowed(charged)).toBe(false);
     expect(tipAllowed(held)).toBe(true);
     expect(tipAllowed(cash)).toBe(true);
+  });
+
+  it("one cash-out covers a card run and a cash run together, each with its own tip", () => {
+    const lines = cashoutLines([held, cash], { [held.order_id]: 600, [cash.order_id]: 400 });
+    expect(lines.map(({ tip, collected, storePays, keeps }) => ({ tip, collected, storePays, keeps }))).toEqual([
+      { tip: 600, collected: 0, storePays: 600, keeps: 0 },     // card: tip added to the card, drawer pays the driver
+      { tip: 400, collected: 2300, storePays: 0, keeps: 400 }, // cash: driver hands in the order, keeps the tip
+    ]);
+    expect(cashoutSummary([held, cash], { [held.order_id]: 600, [cash.order_id]: 400 }).handIn).toBe(1700);
+  });
+
+  it("a run of only card orders means the drawer pays the driver", () => {
+    expect(cashoutSummary([held], { [held.order_id]: 500 }).handIn).toBe(-500);
   });
 });
