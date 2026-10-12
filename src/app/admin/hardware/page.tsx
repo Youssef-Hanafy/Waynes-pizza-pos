@@ -163,7 +163,7 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
   </main>;
 }
 
-type PrinterSettingsValue = { name?: string; model?: string; model_key?: string; ip?: string; port?: number | null; protocol?: string; paper_width_mm?: number; columns?: number | null };
+type PrinterSettingsValue = { name?: string; model?: string; model_key?: string; ip?: string; port?: number | null; protocol?: string; paper_width_mm?: number; columns?: number | null; text_size?: string };
 
 /** One printer: a full-width panel with its on/off switch in the header. */
 function PrinterPanel({ children, enabled, prefix, subtitle, title }: { children: ReactNode; enabled: boolean; prefix: string; subtitle: string; title: string }) {
@@ -198,6 +198,11 @@ function PrinterFields({ defaultPaper, namePlaceholder, prefix, printer }: { def
         options={[["", "Not chosen yet"], ["browser", "Device print dialog"], ["escpos", "Network (ESC/POS)"]]} />
       <SelectField defaultValue={String(paper)} id={`${prefix}_paper`} label="Paper" options={[["80", "80 mm"], ["76", "76 mm"], ["58", "58 mm"]]} />
       <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.columns ?? ""} label="Chars / line" max={64} min={24} name={`${prefix}_columns`} placeholder="Auto" type="number" />
+    </div>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <SelectField defaultValue={printer.text_size === "normal" || printer.text_size === "xlarge" ? printer.text_size : "large"} id={`${prefix}_text_size`} label="Text size"
+        options={[["normal", "Normal (small)"], ["large", "Large — taller letters"], ["xlarge", "Extra large — tall and wide"]]} />
+      <p className="self-end text-xs text-wayne-muted">Use Test print to see it. Extra large fits half as many letters per line.</p>
     </div>
   </>;
 }

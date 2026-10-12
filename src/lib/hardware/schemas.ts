@@ -18,6 +18,7 @@ const printerSchema = z.object({
   online_order_slips: z.boolean().optional(),
   tip_slip: z.string().max(10).optional(),
   auto_delivery_receipts: z.boolean().optional(),
+  text_size: z.string().max(10).optional(),
 });
 
 /** How a printer is spoken to. Nothing is assumed until the owner picks one for a confirmed model (§2.7). */
@@ -87,12 +88,14 @@ export const hardwareSettingsFormSchema = z.object({
     port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
     paper_width_mm: paperWidthSchema, columns: columnsSchema,
     online_order_slips: z.boolean(), tip_slip: z.enum(["always", "card", "never"]), auto_delivery_receipts: z.boolean(),
+    text_size: z.enum(["normal", "large", "xlarge"]),
   }).refine(networkReady, { message: networkMessage("receipt") }),
   kitchen_printer: z.object({
     name: z.string().trim().max(80), model: z.string().trim().max(120), model_key: printerModelKeySchema,
     ip: z.string().trim().max(64).regex(ipLike, "Leave blank or enter an IPv4 address."),
     port: z.number().int().min(1).max(65535).nullable(), protocol: printerProtocolSchema, enabled: z.boolean(),
     paper_width_mm: paperWidthSchema, columns: columnsSchema, two_color: z.boolean(),
+    text_size: z.enum(["normal", "large", "xlarge"]),
     routing_categories: z.array(z.string().trim().max(80)).max(40),
   }).refine(networkReady, { message: networkMessage("kitchen") }),
   cash_drawer: z.object({ connection: z.enum(["none", "receipt_printer"]), model: z.string().trim().max(120) }),

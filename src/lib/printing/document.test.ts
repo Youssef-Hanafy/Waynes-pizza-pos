@@ -104,4 +104,29 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(String.fromCharCode(...black)).not.toContain("\x1br\x01");
     expect(Array.from(encodeEscPos(layout, { cut: "none" })).slice(-3)).not.toEqual([0x1d, 0x56, 1]);
   });
+
+  it("says PAID or NOT PAID in big letters at the top of every slip (owner, 2026-10-12)", () => {
+    const unpaid = layoutToText(buildKitchenTicket(doc)!, 40);
+    expect(unpaid.slice(0, 3).join("\n")).toContain("!! NOT PAID !!");
+    expect(unpaid.join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
+    const paid = { ...doc, order: { ...doc.order, fulfillment_type: "pickup", payment_status: "paid", payment_method: "card" } };
+    const paidTicket = layoutToText(buildKitchenTicket(paid)!, 40).join("\n");
+    expect(paidTicket).toContain("** PAID - CARD **");
+    expect(paidTicket).not.toContain("NOT PAID");
+    expect(layoutToText(buildReceipt(paid), 48).join("\n")).toContain("** PAID - CARD **");
+    const held = { ...doc, order: { ...doc.order, payment_status: "authorized", payment_method: "card" } };
+    expect(layoutToText(buildKitchenTicket(held)!, 40).join("\n")).toContain("CARD ON FILE");
+  });
+
+  it("prints bigger text: taller by default, tall and wide on extra large", () => {
+    const layout = { title: "t", lines: [{ kind: "text" as const, text: "Hello" }] };
+    const sizeOf = (bytes: Uint8Array) => { const all = Array.from(bytes); const at = all.indexOf(0x21, 2); return all[at + 1]; };
+    expect(sizeOf(encodeEscPos(layout, { columns: 42 }))).toBe(0x01);
+    expect(sizeOf(encodeEscPos(layout, { columns: 42, textSize: "normal" }))).toBe(0x00);
+    expect(sizeOf(encodeEscPos(layout, { columns: 42, textSize: "xlarge" }))).toBe(0x11);
+    const long = { title: "t", lines: [{ kind: "text" as const, text: "x".repeat(30) }] };
+    const lines = String.fromCharCode(...encodeEscPos(long, { columns: 42, textSize: "xlarge", cut: "none" })).split("\n").filter((line) => line.includes("x"));
+    expect(lines.length).toBe(2);
+    expect(renderLayoutHtml(layout, 80, "xlarge")).toContain("font: 20px");
+  });
 });

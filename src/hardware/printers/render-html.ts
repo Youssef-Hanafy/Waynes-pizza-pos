@@ -1,4 +1,4 @@
-import type { PrintLayout } from "@/lib/printing/document";
+import type { PrintLayout, TextSize } from "@/lib/printing/document";
 
 function escape(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
@@ -8,7 +8,8 @@ function escape(value: string) {
  * A layout as a printable HTML page sized for receipt paper.  Used by the
  * browser print fallback today and for on-screen previews.
  */
-export function renderLayoutHtml(layout: PrintLayout, paperWidthMm = 80): string {
+export function renderLayoutHtml(layout: PrintLayout, paperWidthMm = 80, textSize: TextSize = "large"): string {
+  const base = textSize === "xlarge" ? 20 : textSize === "large" ? 15 : 12;
   const body = layout.lines.map((line) => {
     if (line.kind === "rule") return '<hr>';
     if (line.kind === "feed") return '<div class="feed"></div>'.repeat(line.lines);
@@ -18,8 +19,8 @@ export function renderLayoutHtml(layout: PrintLayout, paperWidthMm = 80): string
   }).join("\n");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(layout.title)}</title><style>
 @page { size: ${paperWidthMm}mm auto; margin: 3mm; }
-body { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #000; margin: 0; width: ${paperWidthMm - 6}mm; }
-.b { font-weight: 700; } .h { text-decoration: underline; } .l { font-size: 17px; } hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
+body { font: ${base}px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #000; margin: 0; width: ${paperWidthMm - 6}mm; }
+.b { font-weight: 700; } .h { text-decoration: underline; } .l { font-size: ${Math.round(base * 1.45)}px; } hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
 .pair { display: flex; justify-content: space-between; gap: 8px; } .feed { height: 1.35em; }
 </style></head><body>${body}</body></html>`;
 }

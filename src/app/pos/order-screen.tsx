@@ -20,6 +20,7 @@ import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt } from "./payments-screen";
+import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-print";
 import { StartOrderCard } from "./start-order-card";
 
 type MenuItem = PublicMenu[number]["items"][number];
@@ -70,6 +71,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       setPrintNote((await requestReceipt(created.order.id)).message);
       return;
     }
+    // Still waiting for the payment step: print the queued ticket now instead of a second copy.
+    if (await releaseOrderPrintNow(created.order.id)) { setPrintNote("Kitchen ticket is printing now."); return; }
     const runtime = getHardwareRuntime();
     if (!runtime) { setPrintNote("Printing is still starting up. Try again in a moment."); return; }
     setPrintNote("Printing…");
@@ -150,6 +153,13 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     orderActions.clearActive(); setError("");
   }
 
+  // The kitchen ticket waits for this payment step so it prints PAID / NOT PAID
+  // correctly (owner, 2026-10-12); leaving it lets the ticket print.
+  function closePayment() {
+    if (created) releaseOrderPrint(created.order.id);
+    setCreated(null);
+  }
+
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
     const resumable = held.filter(isWorthResuming);
@@ -158,15 +168,15 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
           <p className="font-black text-wayne-ok">✓ {created.duplicate ? "Already sent" : "Sent to the kitchen"} · {created.order.order_number}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print automatically" : "Kitchen ticket prints automatically"}</span>
+            <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once they pay or you tap {created.delivery ? "Cash at the door" : "Pay later"} — marked PAID / NOT PAID</span>
             <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
-            <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">Reprint kitchen</Button>
+            <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">Print kitchen now</Button>
           </div>
         </div>
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
         <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
-        <PaymentPrompt key={created.order.id} keyedCardConfig={keyedCardConfig} onFinished={() => setCreated(null)} onPayLater={() => setCreated(null)} order={created.order} stripeReader={stripeReader} />
-        {resumable.length ? <div className="mt-6 grid gap-2 border-t border-wayne-border pt-4"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p><div className="flex flex-wrap gap-2">{resumable.map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setCreated(null); }} size="sm" variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div></div> : null}
+        <PaymentPrompt key={created.order.id} keyedCardConfig={keyedCardConfig} onFinished={closePayment} onPayLater={closePayment} order={created.order} stripeReader={stripeReader} />
+        {resumable.length ? <div className="mt-6 grid gap-2 border-t border-wayne-border pt-4"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p><div className="flex flex-wrap gap-2">{resumable.map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); closePayment(); }} size="sm" variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div></div> : null}
       </section>
     </div>;
   }

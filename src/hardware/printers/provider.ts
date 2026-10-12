@@ -1,4 +1,4 @@
-import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, printDocumentSchema, type PrintDocument, type PrintLayout } from "@/lib/printing/document";
+import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, printDocumentSchema, textSizeFrom, type PrintDocument, type PrintLayout, type TextSize } from "@/lib/printing/document";
 import { status, type HardwareStatus, type PrintResult } from "../types";
 import { encodeEscPos } from "./escpos";
 import { columnsFor, printerModel } from "./models";
@@ -44,6 +44,8 @@ export type PrinterConfig = {
   /** Receipt printer: what prints for every online order. */
   onlineOrderSlips: boolean;
   tipSlip: "always" | "card" | "never";
+  /** How big the text prints (Admin → Hardware; default large). */
+  textSize: TextSize;
 };
 
 export function nativePrinter() {
@@ -135,7 +137,7 @@ export class BrowserPrintProvider extends LayoutPrinter {
     const frame = document.createElement("iframe");
     frame.setAttribute("aria-hidden", "true");
     frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
-    frame.srcdoc = renderLayoutHtml(layout, this.config.paperWidthMm);
+    frame.srcdoc = renderLayoutHtml(layout, this.config.paperWidthMm, this.config.textSize);
     document.body.appendChild(frame);
     await new Promise<void>((resolve) => { frame.onload = () => resolve(); window.setTimeout(resolve, 1500); });
     try {
@@ -166,7 +168,7 @@ export class NativeEscPosPrinterProvider extends LayoutPrinter {
     if (!this.config.ip || !this.config.port) return { ok: false, reason: `${this.label} has no IP address or port.`, notSent: true };
     const model = printerModel(this.config.modelKey);
     const data = toBase64(encodeEscPos(layout, {
-      columns: this.columns(), cut: model.cut, feedBeforeCut: model.feedBeforeCut, red: model.supportsRed && this.config.twoColor,
+      columns: this.columns(), cut: model.cut, feedBeforeCut: model.feedBeforeCut, red: model.supportsRed && this.config.twoColor, textSize: this.config.textSize,
     }));
     // Impact printers are slow; the socket only has to accept the bytes, but give it room.
     try {
@@ -254,5 +256,6 @@ export function printerConfigFrom(raw: Record<string, unknown> | undefined): Pri
     twoColor: value.two_color === true,
     onlineOrderSlips: value.online_order_slips !== false,
     tipSlip: tipSlip === "card" || tipSlip === "never" ? tipSlip : "always",
+    textSize: textSizeFrom(value.text_size),
   };
 }

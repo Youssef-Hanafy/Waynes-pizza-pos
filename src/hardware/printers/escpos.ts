@@ -1,4 +1,4 @@
-import { layoutToText, wrap, type PrintLayout } from "@/lib/printing/document";
+import { layoutToText, wrap, type PrintLayout, type TextSize } from "@/lib/printing/document";
 import type { CutStyle } from "./models";
 
 /**
@@ -34,14 +34,21 @@ export type EscPosOptions = {
   feedBeforeCut?: number;
   /** Print highlighted lines in red (two-colour ribbon fitted). */
   red?: boolean;
+  /** Bigger text (default "large": every line double height). */
+  textSize?: TextSize;
 };
 
 export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): Uint8Array {
-  const columns = options.columns ?? 42;
+  const size = options.textSize ?? "large";
+  // Extra large prints everything double width, so half as many characters fit on a line.
+  const columns = size === "xlarge" ? Math.floor((options.columns ?? 42) / 2) : options.columns ?? 42;
+  // GS ! n: high nibble = width ×(n+1), low nibble = height ×(n+1).
+  //   normal: 1×1, "large" lines 2×2.   large: 1×2, "large" lines 2×2.   xlarge: 2×2 everywhere (already the widest).
+  const sizeByte = (large: boolean) => (size === "xlarge" ? 0x11 : large ? 0x11 : size === "large" ? 0x01 : 0x00);
   const bytes: number[] = [ESC, 0x40];
   const align = (value: "left" | "center" | "right" = "left") => bytes.push(ESC, 0x61, value === "center" ? 1 : value === "right" ? 2 : 0);
   const style = (bold = false, large = false, highlight = false) => {
-    bytes.push(ESC, 0x45, bold ? 1 : 0, GS, 0x21, large ? 0x11 : 0x00);
+    bytes.push(ESC, 0x45, bold ? 1 : 0, GS, 0x21, sizeByte(large));
     if (options.red) bytes.push(ESC, 0x72, highlight ? 1 : 0);
   };
   for (const line of layout.lines) {
@@ -49,12 +56,12 @@ export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): 
     if (line.kind === "rule") { align(); style(); bytes.push(...latin1("-".repeat(columns)), 0x0a); continue; }
     if (line.kind === "pair") {
       align(); style(line.bold, line.large);
-      const text = layoutToText({ title: "", lines: [line] }, columns)[0] ?? "";
+      const text = layoutToText({ title: "", lines: [size === "xlarge" ? { ...line, large: false } : line] }, columns)[0] ?? "";
       bytes.push(...latin1(text), 0x0a);
       continue;
     }
     align(line.align); style(line.bold, line.large, line.highlight);
-    for (const chunk of wrap(line.text, line.large ? Math.floor(columns / 2) : columns)) bytes.push(...latin1(chunk), 0x0a);
+    for (const chunk of wrap(line.text, line.large && size !== "xlarge" ? Math.floor(columns / 2) : columns)) bytes.push(...latin1(chunk), 0x0a);
   }
   style();
   const cut: CutStyle = options.cut === false ? "none" : options.cut === true || options.cut === undefined ? "feed_and_cut" : options.cut;

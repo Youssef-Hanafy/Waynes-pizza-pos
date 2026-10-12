@@ -43,6 +43,17 @@ export type PrintLine =
 
 export type PrintLayout = { title: string; lines: PrintLine[] };
 
+/**
+ * How big slips print (Admin → Hardware, per printer; owner 2026-10-12 "make
+ * the text bigger").  normal = the printer's small font; large = every line
+ * twice as tall (same characters per line); xlarge = every line twice as tall
+ * and wide (half the characters per line).
+ */
+export type TextSize = "normal" | "large" | "xlarge";
+export function textSizeFrom(value: unknown): TextSize {
+  return value === "normal" || value === "xlarge" ? value : "large";
+}
+
 const money = (cents: number) => `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toFixed(2)}`;
 
 function when(iso: string | null, timeZone: string) {
@@ -55,10 +66,39 @@ function phone(value: string) {
   return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value;
 }
 
+/**
+ * Paid or not, big, at the top of every slip (owner, 2026-10-12): the slip in
+ * the bag says whether the customer still owes anything when they come back.
+ */
+export function paymentBanner(order: PrintDocument["order"]): PrintLine[] {
+  const method = order.payment_method === "cash" ? "CASH" : order.payment_method === "card" ? "CARD" : "";
+  switch (order.payment_status) {
+    case "paid":
+      return [{ kind: "text", text: `** PAID${method ? ` - ${method}` : ""} **`, align: "center", bold: true, large: true }];
+    case "authorized":
+      return [
+        { kind: "text", text: "** CARD ON FILE **", align: "center", bold: true, large: true },
+        { kind: "text", text: "Don't collect - tip added at cash-out", align: "center", bold: true },
+      ];
+    case "refunded":
+    case "partially_refunded":
+      return [{ kind: "text", text: order.payment_status === "refunded" ? "REFUNDED" : "PART REFUNDED", align: "center", bold: true, large: true }];
+    default: {
+      const due = order.fulfillment_type === "delivery" && order.payment_method === "cash" ? `COLLECT ${money(order.total_cents)} AT THE DOOR` : `COLLECT ${money(order.total_cents)}`;
+      return [
+        { kind: "text", text: "!! NOT PAID !!", align: "center", bold: true, large: true, highlight: true },
+        { kind: "text", text: due, align: "center", bold: true, highlight: true },
+      ];
+    }
+  }
+}
+
 function heading(doc: PrintDocument): PrintLine[] {
   const order = doc.order;
   const origin = order.source === "phone" ? `PHONE${order.phone_line ? ` · LINE ${order.phone_line}` : ""}` : order.source === "online" ? "ONLINE" : "COUNTER";
   const lines: PrintLine[] = [
+    ...paymentBanner(order),
+    { kind: "rule" },
     { kind: "text", text: `${order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP"} · ${origin}`, align: "center", bold: true },
     { kind: "text", text: `Order ${order.order_number}`, align: "center", bold: true, large: true },
     { kind: "text", text: `Placed ${when(order.placed_at, doc.store.timezone)}${order.promised_at ? ` · Ready ${when(order.promised_at, doc.store.timezone)}` : ""}`, align: "center" },
