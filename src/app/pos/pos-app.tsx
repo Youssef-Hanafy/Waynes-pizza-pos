@@ -30,6 +30,7 @@ import { setCustomerTipOptions, startCustomerDisplayLink } from "@/stores/custom
 import { TestOrdersPanel } from "./test-orders-panel";
 import { ClockButton } from "./clock-button";
 import { OpenOrdersPanel } from "./open-orders-panel";
+import { DayOrdersScreen } from "./day-orders-screen";
 import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
@@ -37,7 +38,7 @@ import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 
-type Section = "order" | "phone" | "pay" | "orders" | "customers" | "delivery" | "more";
+type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "more";
 
 type Props = {
   menu: PublicMenu;
@@ -177,6 +178,7 @@ export function PosApp(props: Props) {
     ...(callerIdEnabled ? [{ id: "phone" as const, label: badge.waiting ? `Phone (${badge.waiting})` : "Phone" }] : []),
     { id: "pay", label: "Payments" },
     ...(canManageOrders ? [{ id: "orders" as const, label: "Orders" }] : []),
+    { id: "today", label: "Today's Orders" },
     { id: "customers", label: "Customers" },
     ...(canManageOrders && deliveryEnabled && settings.delivery_enabled ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
     { id: "more", label: "More" },
@@ -216,6 +218,7 @@ export function PosApp(props: Props) {
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} /> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
+    {section === "today" ? <DayOrdersScreen onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
