@@ -80,11 +80,14 @@ describe("Hanafy Platform Phase 9 integration registry + payment connectors", ()
 
   afterAll(async () => database.close());
 
-  it("records Wayne's counter as the processor's own terminal run by hand, with nothing online", async () => {
+  it("records Wayne's counter as the processor's own terminal run by hand, and online checkout on Stripe", async () => {
     const counter = await resolveFor(waynesWorkspaceId, waynesLocationId, "counter");
     expect(counter).toMatchObject({ provider: "manual_external", status: "manual", purpose: "counter", workspace_id: waynesWorkspaceId });
     expect(counter?.capabilities).toMatchObject({ card_present: true, card_present_integrated: false, manual_confirmation: true, online_card: false });
-    expect(await resolveFor(waynesWorkspaceId, waynesLocationId, "online")).toBeNull();
+    // Online checkout moved to Stripe (migration 20261017080000); the counter terminal is untouched.
+    expect(await resolveFor(waynesWorkspaceId, waynesLocationId, "online")).toMatchObject({
+      provider: "stripe", purpose: "online", status: "pending_verification", workspace_id: waynesWorkspaceId, secret_reference: "env:STRIPE",
+    });
 
     const terminal = await one<{ label: string; terminal_type: string }>(`select label, terminal_type from public.payment_terminals where workspace_id = '${waynesWorkspaceId}'`);
     expect(terminal).toEqual({ label: "Counter card terminal (Boston North)", terminal_type: "external_manual" });
@@ -195,7 +198,8 @@ describe("Hanafy Platform Phase 9 integration registry + payment connectors", ()
     expect(square).toEqual({ purpose: "online", status: "pending_verification", merchant_reference: "LWAYNE", secret_reference: "env:SQUARE" });
     const counter = await resolveFor(waynesWorkspaceId, waynesLocationId, "counter");
     expect(counter?.provider).toBe("manual_external");
-    await database.exec(`update public.location_payment_configurations set provider = 'none', application_id = '', provider_location_id = '' where location_id = '${waynesLocationId}'`);
+    // Turning card payments off entirely (online checkout is on since the Stripe switch).
+    await database.exec(`update public.location_payment_configurations set provider = 'none', application_id = '', provider_location_id = '', online_card_enabled = false, terminal_card_enabled = false where location_id = '${waynesLocationId}'`);
     expect(await resolveFor(waynesWorkspaceId, waynesLocationId, "online")).toBeNull();
   });
 });

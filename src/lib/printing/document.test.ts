@@ -108,7 +108,8 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("says PAID or NOT PAID in big letters at the top of every slip (owner, 2026-10-12)", () => {
     const unpaid = layoutToText(buildKitchenTicket(doc)!, 40);
     expect(unpaid.slice(0, 3).join("\n")).toContain("!! NOT PAID !!");
-    expect(unpaid.join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
+    expect(unpaid.join("\n")).toContain("COLLECT AT THE DOOR");
+    expect(layoutToText(buildReceipt(doc), 48).join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
     const paid = { ...doc, order: { ...doc.order, fulfillment_type: "pickup", payment_status: "paid", payment_method: "card" } };
     const paidTicket = layoutToText(buildKitchenTicket(paid)!, 40).join("\n");
     expect(paidTicket).toContain("** PAID - CARD **");

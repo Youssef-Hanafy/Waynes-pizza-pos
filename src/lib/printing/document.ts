@@ -70,7 +70,7 @@ function phone(value: string) {
  * Paid or not, big, at the top of every slip (owner, 2026-10-12): the slip in
  * the bag says whether the customer still owes anything when they come back.
  */
-export function paymentBanner(order: PrintDocument["order"]): PrintLine[] {
+export function paymentBanner(order: PrintDocument["order"], withAmount = true): PrintLine[] {
   const method = order.payment_method === "cash" ? "CASH" : order.payment_method === "card" ? "CARD" : "";
   switch (order.payment_status) {
     case "paid":
@@ -84,7 +84,9 @@ export function paymentBanner(order: PrintDocument["order"]): PrintLine[] {
     case "partially_refunded":
       return [{ kind: "text", text: order.payment_status === "refunded" ? "REFUNDED" : "PART REFUNDED", align: "center", bold: true, large: true }];
     default: {
-      const due = order.fulfillment_type === "delivery" && order.payment_method === "cash" ? `COLLECT ${money(order.total_cents)} AT THE DOOR` : `COLLECT ${money(order.total_cents)}`;
+      // Kitchen tickets never show prices.
+      const amount = withAmount ? ` ${money(order.total_cents)}` : "";
+      const due = order.fulfillment_type === "delivery" && order.payment_method === "cash" ? `COLLECT${amount} AT THE DOOR` : `COLLECT${amount || " PAYMENT"}`;
       return [
         { kind: "text", text: "!! NOT PAID !!", align: "center", bold: true, large: true, highlight: true },
         { kind: "text", text: due, align: "center", bold: true, highlight: true },
@@ -93,11 +95,11 @@ export function paymentBanner(order: PrintDocument["order"]): PrintLine[] {
   }
 }
 
-function heading(doc: PrintDocument): PrintLine[] {
+function heading(doc: PrintDocument, withPrices = true): PrintLine[] {
   const order = doc.order;
   const origin = order.source === "phone" ? `PHONE${order.phone_line ? ` · LINE ${order.phone_line}` : ""}` : order.source === "online" ? "ONLINE" : "COUNTER";
   const lines: PrintLine[] = [
-    ...paymentBanner(order),
+    ...paymentBanner(order, withPrices),
     { kind: "rule" },
     { kind: "text", text: `${order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP"} · ${origin}`, align: "center", bold: true },
     { kind: "text", text: `Order ${order.order_number}`, align: "center", bold: true, large: true },
@@ -234,7 +236,7 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
   return {
     title: `Kitchen ${doc.order.order_number}`,
     lines: [
-      ...heading(doc),
+      ...heading(doc, false),
       { kind: "rule" },
       ...items.flatMap((item) => [...itemLines(item, false), { kind: "feed" as const, lines: 1 }]),
       ...(doc.order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${doc.order.special_instructions}`, bold: true, highlight: true }] : []),
