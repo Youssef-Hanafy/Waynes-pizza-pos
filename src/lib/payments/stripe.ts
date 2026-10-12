@@ -19,6 +19,11 @@ type StripePaymentIntent = {
   last_payment_error?: { code?: string; message?: string };
   payment_method?: { card?: StripeCard } | string | null;
   charges?: { data?: Array<{ receipt_url?: string; payment_method_details?: { card?: StripeCard } }> };
+  amount_capturable?: number;
+  latest_charge?: string | {
+    receipt_url?: string;
+    payment_method_details?: { card?: StripeCard & { overcapture?: { maximum_amount_capturable?: number; status?: string } } };
+  } | null;
 };
 type StripeRefund = { id?: string; status?: string; failure_reason?: string | null };
 type StripeErrorBody = { error?: { type?: string; code?: string; message?: string } };
@@ -34,7 +39,16 @@ function stripeStatus(status: string | undefined): ProviderPayment["status"] {
 }
 
 function mapIntent(intent: StripePaymentIntent): ProviderPayment {
-  const card = typeof intent.payment_method === "object" ? intent.payment_method?.card : intent.charges?.data?.[0]?.payment_method_details?.card;
+  const charge = intent.latest_charge && typeof intent.latest_charge === "object" ? intent.latest_charge : null;
+  const card = typeof intent.payment_method === "object" && intent.payment_method?.card ? intent.payment_method.card
+    : charge?.payment_method_details?.card ?? intent.charges?.data?.[0]?.payment_method_details?.card;
+  // Overcapture (tip added after the driver returns): Stripe says per card how far it can go.
+  const overcapture = charge?.payment_method_details?.card?.overcapture;
+  const maxCapturableCents = intent.status === "requires_capture"
+    ? (overcapture?.status === "available" && typeof overcapture.maximum_amount_capturable === "number"
+      ? overcapture.maximum_amount_capturable
+      : typeof intent.amount_capturable === "number" ? intent.amount_capturable : intent.amount ?? null)
+    : null;
   return {
     providerPaymentId: intent.id ?? null,
     status: stripeStatus(intent.status),
@@ -42,8 +56,9 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     amountCents: typeof intent.amount === "number" ? intent.amount : null,
     cardBrand: card?.brand ?? null,
     cardLast4: card?.last4 ?? null,
-    receiptUrl: intent.charges?.data?.[0]?.receipt_url ?? null,
+    receiptUrl: charge?.receipt_url ?? intent.charges?.data?.[0]?.receipt_url ?? null,
     failureReason: intent.last_payment_error ? "The card was declined. Try another card." : null,
+    maxCapturableCents,
   };
 }
 
@@ -90,7 +105,7 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
   }
 
   async function readIntent(providerPaymentId: string): Promise<ProviderOnlinePaymentIntent> {
-    const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}`, { method: "GET" }, "The payment status could not be read.");
+    const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}?expand[]=latest_charge`, { method: "GET" }, "The payment status could not be read.");
     const mapped = mapIntent(intent);
     if (!intent.client_secret || !mapped.providerPaymentId) throw new PaymentProviderError("Stripe returned an incomplete payment intent.", "INVALID_RESPONSE");
     return { ...mapped, clientSecret: intent.client_secret };
@@ -103,15 +118,20 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       throw new PaymentProviderError("This Stripe checkout must be confirmed in the secure card form.", "UNSUPPORTED_OPERATION");
     },
 
-    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents }) {
+    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents, tipAdjust }) {
       const hold = holdCents && holdCents > 0 ? Math.round(holdCents) : null;
+      const manual = Boolean(hold) || Boolean(tipAdjust);
       const intent = await call<StripePaymentIntent>("/v1/payment_intents", {
         method: "POST",
         idempotencyKey,
         body: form({
           amount: hold ?? amountCents,
-          // A held card (delivery): authorised now, charged at the driver's cash-out with the tip.
-          capture_method: hold ? "manual" : undefined,
+          // A delivery card (owner, 2026-10-11): authorised for the order now, captured at the
+          // driver's cash-out for the order PLUS the tip on the slip — one charge, one fee.
+          // Stripe "overcapture" lets the capture be larger than the authorisation.
+          capture_method: manual ? "manual" : undefined,
+          "payment_method_options[card][request_overcapture]": tipAdjust ? "if_available" : undefined,
+          "metadata[wayne_tip_adjust]": tipAdjust ? "true" : undefined,
           "metadata[wayne_hold_cents]": hold ?? undefined,
           currency: "usd",
           "payment_method_types[]": "card",
@@ -142,8 +162,8 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/capture`, {
         method: "POST",
         idempotencyKey: options?.idempotencyKey,
-        body: options?.amountCents ? form({ amount_to_capture: Math.round(options.amountCents) }) : undefined,
-      }, "The held card could not be charged.");
+        body: form({ amount_to_capture: options?.amountCents ? Math.round(options.amountCents) : undefined, "expand[]": "latest_charge" }),
+      }, "The card could not be charged.");
       return mapIntent(intent);
     },
     async voidPayment(providerPaymentId) {
@@ -163,7 +183,7 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       };
     },
     async getPaymentStatus(providerPaymentId) {
-      return mapIntent(await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}`, { method: "GET" }, "The payment status could not be read."));
+      return mapIntent(await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}?expand[]=latest_charge`, { method: "GET" }, "The payment status could not be read."));
     },
     handleWebhook({ rawBody, signature }): WebhookEnvelope {
       let parsed: Record<string, unknown> = {};

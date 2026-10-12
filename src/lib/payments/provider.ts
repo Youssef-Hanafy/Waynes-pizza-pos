@@ -14,6 +14,12 @@ export type ProviderPayment = {
   cardLast4: string | null;
   receiptUrl: string | null;
   failureReason: string | null;
+  /**
+   * An authorised (not yet captured) card that may be captured for MORE than
+   * was authorised — Stripe "overcapture", used to add a delivery tip after the
+   * driver returns (owner, 2026-10-11).  Null when the card can't be increased.
+   */
+  maxCapturableCents?: number | null;
 };
 
 export type ProviderTerminalCheckout = ProviderPayment & { checkoutId: string };
@@ -47,7 +53,12 @@ export interface PaymentProvider {
   /** Create an online PaymentIntent before Stripe.js collects the card details. */
   createOnlinePaymentIntent(input: { amountCents: number; idempotencyKey: string; referenceId: string; note: string; paymentId: string; receiptEmail?: string | null;
     /** Only HOLD this much on the card (manual capture); charged later with capturePayment. */
-    holdCents?: number | null }): Promise<ProviderOnlinePaymentIntent>;
+    holdCents?: number | null;
+    /**
+     * Authorise the amount now and capture later (with a tip added) — the
+     * restaurant "tip adjust" flow for delivery cards keyed in over the phone.
+     */
+    tipAdjust?: boolean }): Promise<ProviderOnlinePaymentIntent>;
   getOnlinePaymentIntent(providerPaymentId: string): Promise<ProviderOnlinePaymentIntent>;
   /** Ask a paired card reader to collect a card-present payment. */
   createCardPresentPayment(input: { amountCents: number; idempotencyKey: string; deviceId: string; referenceId: string; note: string }): Promise<ProviderTerminalCheckout>;

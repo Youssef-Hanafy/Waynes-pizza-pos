@@ -176,7 +176,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
 
     {message ? <p aria-live="polite" className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{message}</p> : null}
 
-    {!creating && !closed ? <div className="mt-6 grid gap-2 sm:grid-cols-2">
+    {!creating ? <div className="mt-6 grid gap-2 sm:grid-cols-2">
       {chosen ? <>
         <Button className="text-lg sm:col-span-2" disabled={busy || (heldElsewhere && !claimedMessage)} onClick={() => void start(chosen)} size="lg">{call.status === "order_started" && call.claimedById === profileId ? "Resume phone order" : "Start phone order"}</Button>
         <Button onClick={() => onOpenCustomer(chosen)} size="lg" variant="secondary">Order history &amp; details</Button>
@@ -184,7 +184,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
         <Button className="text-lg sm:col-span-2" disabled={busy} onClick={() => setCreating(true)} size="lg">Create customer + start order</Button>
         <Button disabled={busy} onClick={() => void start(null, true)} size="lg" variant="secondary">Start order without profile</Button>
       </> : null}
-      <Button disabled={busy} onClick={() => void dismiss(heldElsewhere && Boolean(claimedMessage))} size="lg" variant="ghost">Dismiss</Button>
+      {!closed ? <Button disabled={busy} onClick={() => void dismiss(heldElsewhere && Boolean(claimedMessage))} size="lg" variant="ghost">Dismiss</Button> : null}
     </div> : null}
   </section>;
 }

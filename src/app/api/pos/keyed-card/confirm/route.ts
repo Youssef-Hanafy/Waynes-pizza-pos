@@ -24,13 +24,14 @@ export async function POST(request: Request) {
 
   try {
     const result = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
-    // A delivery card is only held: the ledger keeps the order amount, the hold is in metadata.
+    // A delivery card is authorised for the order; the tip is added when it is captured at cash-out.
+    // max_capture_cents is how far Stripe lets this card be captured (order + the most tip it can take).
     const held = result.status === "authorized";
     if (result.status !== "pending") {
       const { error } = await service.rpc("wayne_settle_payment", { payload: {
         payment_id: payment.id, status: result.status, provider_payment_id: result.providerPaymentId, provider_status: result.providerStatus,
         amount_cents: held ? payment.amount_cents : result.amountCents, card_brand: result.cardBrand, card_last4: result.cardLast4, receipt_url: result.receiptUrl,
-        failure_reason: result.failureReason, metadata: { source: "pos_keyed_card", ...(held ? { hold_cents: result.amountCents } : {}) },
+        failure_reason: result.failureReason, metadata: { source: "pos_keyed_card", ...(held ? { max_capture_cents: result.maxCapturableCents ?? payment.amount_cents } : {}) },
       } });
       if (error) throw new Error("The payment was approved, but the ticket could not be finalized.");
     }

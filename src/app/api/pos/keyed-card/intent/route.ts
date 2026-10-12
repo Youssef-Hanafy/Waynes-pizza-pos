@@ -8,7 +8,11 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 /**
  * Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone).
- * The tip is asked for on the phone and is already on the order, so the card is charged once, right away (owner, 2026-10-11).
+ *
+ * Pickup: charged once, right away, with any tip asked for on the phone.
+ * Delivery (owner, 2026-10-11): the restaurant "tip adjust" flow — the card is
+ * authorised for the order now; when the driver brings back the signed slip the
+ * tip is typed into Deliveries and the card is captured ONCE for order + tip.
  */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
@@ -40,14 +44,14 @@ export async function POST(request: Request) {
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
-      const holdCents: number | null = null;
+      const tipAdjust = order.fulfillment_type === "delivery";
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (${holdCents ? "delivery card hold" : "keyed card"})`, paymentId: begun.payment_id, receiptEmail: null,
-        holdCents,
+        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (${tipAdjust ? "delivery — tip added at cash-out" : "keyed card"})`, paymentId: begun.payment_id, receiptEmail: null,
+        tipAdjust,
       });
       const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
-      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), ...(holdCents ? { hold_cents: holdCents, held_for: "delivery_tip" } : {}) };
+      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), ...(tipAdjust ? { tip_adjust: true, held_for: "delivery_tip" } : {}) };
       const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
     }

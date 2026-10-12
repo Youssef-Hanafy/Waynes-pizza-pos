@@ -21,7 +21,11 @@ type Waiter = { requestId: string; resolve: (answer: Answer | null) => void };
 type LinkState = { screenOnline: boolean; key: string };
 
 let current: DisplayState = displayStateSchema.parse({});
-let dirty = true;
+// Nothing to show yet: the first send is a heartbeat, so opening a second POS
+// (or reloading) never blanks a screen another register is using.
+let dirty = false;
+/** This copy of the POS.  The screen follows whichever POS last really changed it. */
+let publisherId = "";
 let lastSent = 0;
 let timer: number | null = null;
 let sending = false;
@@ -39,13 +43,15 @@ function emit(next: Partial<LinkState>) {
 async function send() {
   if (sending || typeof window === "undefined") return;
   const key = getTerminalLabel();
+  if (!publisherId) publisherId = uuid();
+  const changed = dirty;
   sending = true;
   dirty = false;
   lastSent = Date.now();
   try {
     const response = await fetch("/api/pos/display", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "publish", key, state: current }),
+      body: JSON.stringify({ kind: "publish", key, state: current, publisher: publisherId, changed }),
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) { emit({ screenOnline: false, key }); return; }
@@ -70,11 +76,23 @@ function tick() {
   if (dirty || Date.now() - lastSent >= interval) void send();
 }
 
-/** Start talking to the customer screen (once, from the POS shell). */
+/** Start talking to the customer screen (once, from the POS shell). Returns the stop. */
 export function startCustomerDisplayLink() {
-  if (timer !== null || typeof window === "undefined") return;
+  if (timer !== null || typeof window === "undefined") return stopCustomerDisplayLink;
   timer = window.setInterval(tick, 500);
   void send();
+  return stopCustomerDisplayLink;
+}
+
+/**
+ * Stop publishing (the POS was left, e.g. this tablet became the customer
+ * screen).  Before this, a tablet that opened the POS and then the customer
+ * screen kept sending an empty screen every 4 s — the flicker (2026-10-11).
+ */
+export function stopCustomerDisplayLink() {
+  if (timer !== null && typeof window !== "undefined") window.clearInterval(timer);
+  timer = null;
+  clearCustomerRequest();
 }
 
 /** Show this on the customer screen (anything left out keeps its default). */

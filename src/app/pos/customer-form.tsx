@@ -8,6 +8,19 @@ import { blankAddress } from "@/lib/orders/drafts";
 import { formatPhone } from "@/lib/phone/normalize";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
 
+/** The customer who already has this phone number, if any. */
+async function findByPhone(digits: string): Promise<PosCustomer | null> {
+  const ten = digits.slice(-10);
+  try {
+    const response = await fetch(`/api/pos/customers?q=${encodeURIComponent(ten)}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const parsed = posCustomerSchema.array().safeParse(response.ok ? await response.json() : null);
+    if (!parsed.success) return null;
+    return parsed.data.find((candidate) => candidate.phone.replace(/\D/g, "").endsWith(ten)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Create or edit a customer from the POS (§14).  Used by the phone screen's
  * "Create customer + start order" and by the Customers section.  Nothing is
@@ -35,6 +48,7 @@ export function CustomerForm({ customer, initialPhone = "", submitLabel, onSaved
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const useSecondary = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -55,11 +69,29 @@ export function CustomerForm({ customer, initialPhone = "", submitLabel, onSaved
         signal: AbortSignal.timeout(12_000),
       });
       const body: unknown = await response.json().catch(() => null);
+      // Already a customer with this number (saved a moment ago, or a second tap):
+      // carry on with that customer instead of stopping (owner, 2026-10-11).
+      if (response.status === 409 && !customer) {
+        const existing = await findByPhone(digits);
+        if (existing && address.address1.trim()) {
+          // Keep the address that was just typed: add it to that customer.
+          const again = await fetch("/api/pos/customers", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_id: existing.id, first_name: firstName || existing.first_name, last_name: lastName || existing.last_name, phone, email, extra_phone: extraPhone, address }),
+            signal: AbortSignal.timeout(12_000),
+          });
+          const updated = posCustomerSchema.safeParse(again.ok ? await again.json().catch(() => null) : null);
+          done(updated.success ? updated.data : existing);
+          return;
+        }
+        if (existing) { done(existing); return; }
+      }
       const parsed = posCustomerSchema.safeParse(body);
       if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The customer could not be saved.");
       done(parsed.data);
     } catch (saveError) {
       setError(saveError instanceof TypeError ? "No connection. The customer was not saved." : saveError instanceof Error ? saveError.message : "The customer could not be saved.");
+      window.setTimeout(() => errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
     } finally { setBusy(false); }
   }
 
@@ -82,7 +114,7 @@ export function CustomerForm({ customer, initialPhone = "", submitLabel, onSaved
       </div>
       <Input id="cf-instructions" label="Delivery instructions" onChange={(e) => setAddress({ ...address, delivery_instructions: e.target.value })} value={address.delivery_instructions} />
     </fieldset> : <Button onClick={() => setShowAddress(true)} size="sm" type="button" variant="ghost">+ Add an address</Button>}
-    {error ? <p aria-live="polite" className="rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}</p> : null}
+    {error ? <p aria-live="polite" className="rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" ref={errorRef}>{error}</p> : null}
     <div className="flex flex-wrap gap-2">
       <Button disabled={busy} onClick={() => { useSecondary.current = false; }} size="lg" type="submit">{busy ? "Saving…" : submitLabel}</Button>
       {secondary ? <Button disabled={busy} onClick={() => { useSecondary.current = true; }} size="lg" type="submit" variant="secondary">{secondary.label}</Button> : null}

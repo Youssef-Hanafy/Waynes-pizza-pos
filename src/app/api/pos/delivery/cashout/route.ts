@@ -12,15 +12,18 @@ type Capture = { order_id: string; payment_id: string; captured_cents: number; t
 /**
  * Cash a driver out (owner, 2026-10-11).
  *
- * 1. Every card held for one of the driver's deliveries is charged on Stripe —
- *    once — for the order total plus the tip typed in (never more than the
- *    hold), and the rest of the hold is released.
+ * 1. Every delivery card (keyed in over the phone, authorised for the order)
+ *    is captured on Stripe — once — for the order total plus the tip written on
+ *    the slip.  This is the restaurant "tip adjust": one charge, one card fee.
+ *    Stripe says per card how far it can be captured (overcapture); a tip
+ *    above that is left off the card and reported.
  * 2. wayne_pos_driver_cashout records the cash orders, the tips, the drawer
  *    payout and the cash-out itself.
  *
- * A held card that can't be charged (expired, network) is left out of this
- * cash-out and stays on the driver's list, so nothing is recorded as paid
- * that wasn't.  Retrying is safe: each capture uses a fixed idempotency key.
+ * Test orders' cards were never real: they are "captured" here without Stripe.
+ * A card that can't be charged (expired, network) is left out of this cash-out
+ * and stays on the driver's list, so nothing is recorded as paid that wasn't.
+ * Retrying is safe: each capture uses a fixed idempotency key.
  */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
@@ -48,14 +51,21 @@ export async function POST(request: Request) {
     const resolved = await resolvePaymentProvider("online", { workspaceId: access.workspace_id, locationId: access.location_id ?? null });
     const service = createServiceSupabaseClient();
     const { data: payments } = await service.from("payments")
-      .select("id, order_id, provider_payment_id, card_brand, card_last4")
-      .in("order_id", held.map((order) => order.order_id)).eq("provider", "stripe").eq("status", "authorized")
+      .select("id, order_id, provider, provider_payment_id, card_brand, card_last4")
+      .in("order_id", held.map((order) => order.order_id)).in("provider", ["stripe", "test"]).eq("status", "authorized")
       .eq("workspace_id", access.workspace_id);
 
     for (const order of held) {
       const payment = payments?.find((candidate) => candidate.order_id === order.order_id);
-      const tip = Math.min(Math.max(0, tipFor.get(order.order_id) ?? 0), maxTipCents(order));
+      const wanted = Math.max(0, tipFor.get(order.order_id) ?? 0);
+      const tip = Math.min(wanted, maxTipCents(order));
       const amount = order.total_cents + tip;
+      if (wanted > tip) problems.push(`Order ${order.order_number}: this card could only take a ${tip ? `tip of ${(tip / 100).toFixed(2)}` : "tip of $0"} (Stripe's limit for this card), so ${((wanted - tip) / 100).toFixed(2)} of the tip was not charged.`);
+      // A test order's card was simulated: capture it without Stripe.
+      if (payment?.provider === "test") {
+        captures.push({ order_id: order.order_id, payment_id: payment.id, captured_cents: amount, tip_cents: tip, card_brand: payment.card_brand ?? "test", card_last4: payment.card_last4 ?? "4242" });
+        continue;
+      }
       if (!resolved.ok || !payment?.provider_payment_id) {
         skipped.push(order.order_id);
         problems.push(`Order ${order.order_number}: the held card could not be reached${resolved.ok ? "" : " (Stripe isn't set up)"}. It stays on the list.`);

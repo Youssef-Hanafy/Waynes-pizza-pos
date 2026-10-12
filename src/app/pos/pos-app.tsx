@@ -30,6 +30,7 @@ import { startCustomerDisplayLink } from "@/stores/customer-display-link";
 import { TestOrdersPanel } from "./test-orders-panel";
 import { OpenOrdersPanel } from "./open-orders-panel";
 import { OrderScreen } from "./order-screen";
+import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
@@ -77,7 +78,7 @@ export function PosApp(props: Props) {
   const sectionRef = useRef<Section>(section);
   useEffect(() => { sectionRef.current = section; }, [section]);
   // The customer screen (Fire tablet) mirrors this register.
-  useEffect(() => { startCustomerDisplayLink(); }, []);
+  useEffect(() => startCustomerDisplayLink(), []);
   const badge = usePhoneBadge();
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
@@ -106,7 +107,9 @@ export function PosApp(props: Props) {
   const startPhoneOrder: StartPhoneOrder = async (call, customer, options = {}) => {
     const result = await phoneActions.startOrderFromCall(call.key, options.force ?? false);
     if (!result.ok && result.reason === "claimed") return { ok: false, claimed: true, message: result.message };
-    if (!result.ok && result.reason === "closed") return { ok: false, message: result.message };
+    // A call that already ended or timed out on the screen (the caller hung up
+    // while their details were being typed) still gets its order — refusing it
+    // here is what made "Create customer + start order" look broken (2026-10-11).
     // Offline: the order is still taken; the call links when the order is sent.
     const current = result.ok ? result.call : call;
     orderActions.startOrResumeForCall(call.key, draftFromCall({
@@ -173,7 +176,9 @@ export function PosApp(props: Props) {
     { id: "more", label: "More" },
   ];
 
-  return <div className="flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden">
+  // --pos-kb-h: the on-screen keyboard's height, so the page sits above it.
+  return <div className="flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden" style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
+    <PosKeyboard />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
@@ -197,7 +202,8 @@ export function PosApp(props: Props) {
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
       {/* Open this on the tablet that faces the customer (owner, 2026-10-11). */}
-      <Link className="ml-auto flex min-h-11 items-center whitespace-nowrap rounded-xl border border-dashed border-wayne-border-strong px-4 text-sm font-black text-wayne-ink hover:bg-wayne-cream" href="/pos/display">🖥 Customer screen</Link>
+      {/* A full page load (not a client-side link), so this tablet stops acting as a register. */}
+      <a className="ml-auto flex min-h-11 items-center whitespace-nowrap rounded-xl border border-dashed border-wayne-border-strong px-4 text-sm font-black text-wayne-ink hover:bg-wayne-cream" href="/pos/display">🖥 Customer screen</a>
     </nav>
 
     {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} /> : null}
@@ -221,8 +227,9 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
   const [saved, setSaved] = useState(false);
   const [autoOpen, setAutoOpen] = useState(true);
   const [chime, setChime] = useState(true);
+  const [keyboard, setKeyboard] = useState<"auto" | "on" | "off">("auto");
   useEffect(() => {
-    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); setChime(getOnlineChimeEnabled()); }, 0);
+    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); setChime(getOnlineChimeEnabled()); setKeyboard(getPosKeyboardSetting()); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -243,6 +250,13 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
           <input checked={autoOpen} className="mt-1 size-5" onChange={(event) => { setAutoOpen(event.target.checked); setAutoOpenCalls(event.target.checked); }} type="checkbox" />
           <span><strong className="block text-base">Pick up calls automatically</strong>When Line 1 or Line 2 rings and this register isn&apos;t in the middle of a ticket, the caller&apos;s card opens by itself. Turn off on a register that shouldn&apos;t jump to the phone (e.g. a kitchen tablet).</span>
         </label>
+        <div className="mt-4 text-sm">
+          <strong className="block text-base">On-screen keyboard</strong>
+          <span>Wayne&apos;s compact keyboard along the bottom, instead of the tablet&apos;s own (which covers half the screen). Auto = on for the counter tablet, off with a mouse.</span>
+          <div className="mt-2 inline-flex rounded-xl bg-wayne-cream p-1" role="group">
+            {(["auto", "on", "off"] as const).map((value) => <button aria-pressed={keyboard === value} className={`min-h-11 rounded-lg px-4 font-black ${keyboard === value ? "bg-wayne-green text-white" : ""}`} key={value} onClick={() => { setKeyboard(value); setPosKeyboardSetting(value); }} type="button">{value === "auto" ? "Auto" : value === "on" ? "Wayne's keyboard" : "Tablet keyboard"}</button>)}
+          </div>
+        </div>
       </section>
       <section className="rounded-3xl bg-white p-5 shadow-sm">
         <h2 className="text-xl font-black">Hardware</h2>

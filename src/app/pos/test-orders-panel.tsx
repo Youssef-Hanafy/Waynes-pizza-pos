@@ -26,7 +26,7 @@ export function TestOrdersPanel() {
 
   return <section className="rounded-3xl bg-white p-5 shadow-sm">
     <h2 className="text-xl font-black">🧪 Test orders</h2>
-    <p className="mt-1 text-sm text-wayne-muted">Tick <strong>Test order</strong> on the New Order card to practise: the ticket prints, the drawer opens and you can take cash or a card for real, but it never counts in sales or the drawer total, and no customer is saved or texted. Refund any real card test from the order before deleting it.</p>
+    <p className="mt-1 text-sm text-wayne-muted">Tick <strong>Test order</strong> on the New Order card to practise: the ticket prints, the drawer opens, and every payment screen works the same — but card payments are simulated (no card is ever charged). Test orders never count in sales, the drawer total, the calendar or Admin → Orders, and no customer is saved or texted.</p>
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <Button disabled={busy} onClick={() => { void clear(); }} variant={confirming ? "primary" : "secondary"}>{busy ? "Deleting…" : confirming ? "Tap again to delete all test orders" : "Delete all test orders"}</Button>
       {confirming ? <Button onClick={() => setConfirming(false)} variant="ghost">Cancel</Button> : null}

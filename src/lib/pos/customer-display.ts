@@ -59,7 +59,13 @@ export const displayPublishResultSchema = z.object({
 });
 
 export const displayRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("publish"), key: z.string().trim().min(1).max(60), state: z.record(z.string(), z.unknown()) }),
+  z.object({
+    kind: z.literal("publish"), key: z.string().trim().min(1).max(60), state: z.record(z.string(), z.unknown()),
+    /** Which copy of the POS is sending; a heartbeat from another copy never replaces the screen. */
+    publisher: z.string().trim().max(80).optional().default(""),
+    /** False for a heartbeat (nothing new to show). */
+    changed: z.boolean().optional().default(true),
+  }),
   z.object({ kind: z.literal("respond"), key: z.string().trim().min(1).max(60), answer: z.record(z.string(), z.unknown()) }),
 ]);
 

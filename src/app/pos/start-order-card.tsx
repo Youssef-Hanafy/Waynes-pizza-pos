@@ -170,7 +170,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
 
       <label className={`mt-6 flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 ${draft.isTest ? "border-wayne-gold bg-wayne-gold/20" : "border-wayne-border bg-white"}`}>
         <input checked={draft.isTest} className="size-6 accent-wayne-green" onChange={(event) => update({ isTest: event.target.checked })} type="checkbox" />
-        <span><strong className="block text-base font-black">🧪 Test order</strong><span className="block text-xs font-bold text-wayne-muted">Prints, opens the drawer and can take a payment, but isn&apos;t counted in sales and no customer is saved or texted.</span></span>
+        <span><strong className="block text-base font-black">🧪 Test order</strong><span className="block text-xs font-bold text-wayne-muted">Prints and opens the drawer like a real order; card payments are simulated. Not counted anywhere, no customer saved or texted.</span></span>
       </label>
 
       {error ? <p className="mt-5 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}

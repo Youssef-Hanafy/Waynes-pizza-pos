@@ -107,8 +107,9 @@ export function CheckoutClient({
   const subtotal = cartSubtotalCents(menu, cart);
   const deliveryFee =
     fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
+  // The delivery fee is not taxed (owner, 2026-10-11).
   const tax = Math.round(
-    ((subtotal + deliveryFee) * settings.tax_rate_basis_points) / 10_000,
+    (subtotal * settings.tax_rate_basis_points) / 10_000,
   );
   const total = subtotal + deliveryFee + tax + tipCents;
   const minimum =

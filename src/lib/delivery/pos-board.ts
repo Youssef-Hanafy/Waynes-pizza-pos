@@ -67,13 +67,22 @@ export const posCashoutResultSchema = z.object({
 });
 export type PosCashoutResult = z.infer<typeof posCashoutResultSchema>;
 
-/** Whether a tip typed at cash-out can be taken for this order. */
+/**
+ * Whether a tip typed at cash-out can be taken for this order.
+ *   card_held  – a delivery card authorised for the order: the tip on the slip
+ *                is added when it is captured (tip adjust, owner 2026-10-11)
+ *   cash       – tip kept by the driver
+ *   card/paid  – charged already (pickup card, online): the tip came with it
+ */
 export function tipAllowed(order: Pick<PosDeliveryOrder, "paid_by">) {
-  // Card / online orders: the tip was charged with the order (asked on the phone).
   return order.paid_by === "card_held" || order.paid_by === "cash" || order.paid_by === "cash_paid";
 }
 
-/** The most a held card can be charged: the hold (order + 30%). */
+/**
+ * The biggest tip that can go on this order.  For a delivery card it is what
+ * Stripe says the card can be captured for, less the order (hold_cents carries
+ * that maximum); 0 means Stripe won't let this card be increased.
+ */
 export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cents" | "total_cents">) {
   if (order.paid_by !== "card_held") return 50_000;
   return Math.max(0, (order.hold_cents ?? order.total_cents) - order.total_cents);
@@ -103,7 +112,7 @@ export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, 
 
 export function paidByLabel(order: Pick<PosDeliveryOrder, "paid_by" | "card_label">) {
   switch (order.paid_by) {
-    case "card_held": return `${order.card_label || "Card"} · held`;
+    case "card_held": return `${order.card_label || "Card"} · add tip`;
     case "card": return `${order.card_label || "Card"} · charged`;
     case "paid": return "Paid online";
     case "cash_paid": return "Cash (collected)";

@@ -3,8 +3,47 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { formatCents } from "@/lib/menu/schemas";
 import { displayReadSchema, displayStateSchema, signatureSvg, tipFromPercent, type DisplayState } from "@/lib/pos/customer-display";
+import { stopCustomerDisplayLink } from "@/stores/customer-display-link";
 
 const KEY_STORAGE = "wayne-customer-screen-register";
+
+function isFullscreen() {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement);
+}
+
+/** Browsers only allow full screen from a tap, so every tap asks for it until it sticks. */
+function goFullscreen() {
+  if (isFullscreen()) return;
+  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  try {
+    if (root.requestFullscreen) void root.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+    else root.webkitRequestFullscreen?.();
+  } catch { /* not allowed here; the Add to Home screen app opens full screen anyway */ }
+}
+
+/** Full screen, always (owner, 2026-10-11): re-entered on the next tap if it is ever left. */
+function useFullscreen() {
+  const [full, setFull] = useState(true);
+  const [tapped, setTapped] = useState(false);
+  useEffect(() => {
+    // This tablet is the customer screen now, not a register.
+    stopCustomerDisplayLink();
+    const update = () => setFull(isFullscreen() || window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches);
+    update();
+    document.addEventListener("fullscreenchange", update);
+    document.addEventListener("webkitfullscreenchange", update);
+    const onTap = () => { goFullscreen(); setTapped(true); };
+    window.addEventListener("pointerdown", onTap, { capture: true });
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      document.removeEventListener("webkitfullscreenchange", update);
+      window.removeEventListener("pointerdown", onTap, { capture: true });
+    };
+  }, []);
+  // The "tap to start" cover only shows until the first tap, even where a browser refuses full screen.
+  return full || tapped;
+}
 
 function readKey() {
   try { return window.localStorage.getItem(KEY_STORAGE) ?? ""; } catch { return ""; }
@@ -25,6 +64,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   const [registerOnline, setRegisterOnline] = useState(true);
   const [answered, setAnswered] = useState("");
   const [problem, setProblem] = useState("");
+  const full = useFullscreen();
 
   useEffect(() => {
     const timer = window.setTimeout(() => { const saved = readKey(); setKey(saved); setChoosing(!saved); }, 0);
@@ -71,7 +111,8 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
 
   const waitingOnRegister = answered && answered === state.request_id;
 
-  return <div className="relative flex min-h-screen flex-col bg-wayne-cream text-wayne-ink">
+  return <div className="fixed inset-0 flex select-none flex-col overflow-hidden bg-wayne-cream text-wayne-ink">
+    {!full ? <button className="absolute inset-0 z-20 flex items-center justify-center bg-wayne-cream/95 text-3xl font-black text-wayne-green" onClick={goFullscreen} type="button">Tap anywhere to start</button> : null}
     <button aria-label="Screen settings" className="absolute right-2 top-2 z-10 size-10 rounded-full text-xl text-wayne-muted opacity-40 hover:opacity-100" onClick={() => setChoosing(true)} type="button">⚙</button>
     {problem || !registerOnline ? <p className="absolute left-2 top-2 rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-wayne-muted">{problem || "Waiting for the register…"}</p> : null}
 
@@ -85,7 +126,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">{children}</div>;
+  return <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-8 text-center">{children}</div>;
 }
 
 function Welcome({ storeName }: { storeName: string }) {
@@ -110,7 +151,7 @@ function Totals({ state, big = true }: { state: DisplayState; big?: boolean }) {
 }
 
 function OrderView({ state }: { state: DisplayState }) {
-  return <div className="grid flex-1 gap-4 p-4 md:grid-cols-[1fr_24rem] md:p-6">
+  return <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[1fr_24rem] md:p-6">
     <section className="min-h-0 overflow-y-auto rounded-3xl bg-white p-5 shadow-sm">
       <h1 className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">Your order{state.order_number ? ` · #${state.order_number.replace(/^W0*/, "")}` : ""}</h1>
       {state.lines.length ? <ul className="mt-3 divide-y divide-wayne-border">{state.lines.map((line, index) => <li className="flex justify-between gap-4 py-3" key={`${line.name}-${index}`}>
@@ -208,7 +249,7 @@ function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg
     onAnswer(signatureSvg(strokes.current, element.clientWidth, element.clientHeight));
   }
 
-  return <div className="flex flex-1 flex-col p-4 md:p-6">
+  return <div className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <p className="text-4xl font-black">Please sign</p>
       <p className="text-3xl font-black tabular-nums">Total {formatCents(state.total_cents)}</p>
@@ -245,7 +286,7 @@ function RegisterPicker({ current, onPick }: { current: string; onPick: (key: st
     const timer = window.setInterval(() => { void load(); }, 4000);
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
-  return <div className="flex min-h-screen items-center justify-center bg-wayne-cream-deep p-6">
+  return <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-wayne-cream-deep p-6">
     <section className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-xl">
       <h1 className="text-3xl font-black">Customer screen</h1>
       <p className="mt-2 text-wayne-muted">Which register does this screen face? Registers show up here once they are open (their name is in POS → More → This register).</p>
@@ -257,7 +298,7 @@ function RegisterPicker({ current, onPick }: { current: string; onPick: (key: st
         <input className="min-h-12 flex-1 rounded-xl border border-wayne-border px-3" onChange={(event) => setTyped(event.target.value)} placeholder="Or type the register name" value={typed} />
         <button className="min-h-12 rounded-xl bg-wayne-green px-4 font-black text-white" type="submit">Use</button>
       </form>
-      <button className="mt-4 min-h-12 w-full rounded-xl border border-wayne-border font-bold" onClick={() => { void document.documentElement.requestFullscreen?.().catch(() => undefined); }} type="button">Full screen</button>
+      <p className="mt-4 text-sm text-wayne-muted">The screen goes full screen on the first tap. For the cleanest setup, open the browser menu → <strong>Add to Home screen</strong> and start the customer screen from that icon — it always opens full screen with no address bar.</p>
     </section>
   </div>;
 }

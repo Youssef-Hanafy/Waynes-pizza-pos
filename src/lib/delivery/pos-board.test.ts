@@ -13,9 +13,14 @@ describe("driver cash-out (owner, 2026-10-11)", () => {
     expect(summary).toEqual({ cashOrders: 2300, cashTips: 300, cardTips: 900, tips: 1200, handIn: 1400 });
   });
 
-  it("caps a card tip at the hold (order + 30%)", () => {
+  it("caps a delivery card's tip at what Stripe lets that card be captured for", () => {
     expect(maxTipCents(held)).toBe(975);
     expect(cashoutSummary([held], { [held.order_id]: 5000 }).cardTips).toBe(975);
+  });
+
+  it("a card Stripe won't increase takes no tip", () => {
+    const fixed = posDeliveryOrderSchema.parse({ ...base, order_id: "a0000000-0000-4000-8000-000000000004", total_cents: 3250, paid_by: "card_held", hold_cents: 3250 });
+    expect(maxTipCents(fixed)).toBe(0);
   });
 
   it("a charged card's tip comes from the order, not the tip box", () => {

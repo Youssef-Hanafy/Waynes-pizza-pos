@@ -19,7 +19,7 @@ const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
 
 type Done = { order: OpenOrder; method: "cash" | "card"; changeCents: number; tenderedCents: number | null;
-  /** A delivery card that was only held — charged with the tip at the driver's cash-out. */
+  /** A delivery card approved for the order — charged with the tip on the slip at the driver's cash-out. */
   held?: boolean };
 type Mode = "choose" | "cash" | "terminal" | "keyed";
 type KeyedConfig = Extract<CheckoutPaymentConfig, { provider: "stripe" }>;
@@ -134,9 +134,10 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
       <p className="text-7xl font-black text-wayne-ok">{formatCents(done.changeCents)}</p>
       <p className="mt-2 text-wayne-muted">Received {formatCents(done.tenderedCents ?? done.order.total_cents)} for {formatCents(done.order.total_cents)}</p>
     </> : done.held ? <>
-      <p className="mt-6 text-5xl font-black">Card held · {formatCents(done.order.total_cents)}</p>
-      <p className="mt-2 text-wayne-muted">Nothing is charged yet. The card is charged once, with the driver&apos;s tip, when the driver is cashed out in Deliveries.</p>
+      <p className="mt-6 text-5xl font-black">Card approved · {formatCents(done.order.total_cents)}</p>
+      <p className="mt-2 text-wayne-muted">When the driver brings back the signed slip, type the tip in Deliveries and cash them out — the card is charged once, order + tip.</p>
     </> : <p className="mt-6 text-5xl font-black">{formatCents(done.order.total_cents)} on card</p>}
+    {done.order.is_test ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">🧪 Test order — no real card was charged.</p> : null}
     {done.held ? null : <p className="mt-6 rounded-xl bg-wayne-cream p-3 font-bold">The cash drawer is opening.</p>}
     <div className="mt-6 grid gap-2 sm:grid-cols-2">
       <Button onClick={() => { setNote("Printing…"); void requestReceipt(done.order.id).then((result) => setNote(result.message)); }} size="lg" variant="secondary">Print receipt</Button>
@@ -185,19 +186,22 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       <div className="text-right"><p className="text-sm font-bold">Amount due</p><p className="text-5xl font-black">{formatCents(due)}</p></div>
     </div>
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
-      : cardHeld ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Card held for this delivery. It is charged with the driver&apos;s tip at cash-out (Deliveries).</p> : <>
+      : cardHeld ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Card approved for this delivery. Add the tip from the signed slip in Deliveries — the card is charged once, order + tip, at the driver&apos;s cash-out.</p> : <>
+      {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
       <div className={`mt-5 grid grid-cols-2 gap-3 ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         {option("cash", "💵", "Cash", "Change shown")}
         {option("terminal", "💳", "Card reader", stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
-        {option("keyed", "⌨️", "Key in card", keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig)}
+        {option("keyed", "⌨️", "Key in card", order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
         {onPayLater ? <button className="flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40" disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className="text-2xl leading-none">⏱</span><strong className="mt-1 text-lg font-black leading-tight">Pay later</strong><span className="text-xs font-bold text-wayne-muted">At pickup / the door</span></button> : null}
       </div>
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
       {mode === "terminal" ? (screen.screenOnline && !tipAsked
         ? <CustomerTipStep onDone={tipDone} order={order} />
+        : order.is_test ? <TestCardTender busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />
         : <CardTender busy={busy} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
-      {mode === "keyed" && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender busy={busy} config={keyedCardConfig} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div> : null}
+      {mode === "keyed" && order.is_test ? <div className="mt-5"><TestCardTender busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div>
+        : mode === "keyed" && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender busy={busy} config={keyedCardConfig} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div> : null}
     </>}
   </div>;
 }
@@ -395,7 +399,10 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   const [message, setMessage] = useState("");
   const onReady = useCallback((confirm: StripeCardConfirm | null) => { confirmRef.current = confirm; }, []);
   const onStatus = useCallback((next: string) => setMessage(next), []);
-  // The tip is asked for on the phone and charged with the order, once (owner, 2026-10-11).
+  // Pickup: the tip is asked for on the phone and charged with the order, once.
+  // Delivery: the card is approved for the order; the tip on the signed slip is
+  // added at the driver's cash-out and the card is charged once then (owner, 2026-10-11).
+  const delivery = order.fulfillment_type === "delivery";
   const [baseCents, setBaseCents] = useState(order.total_cents);
   const [tipCents, setTipCents] = useState(0);
   const [tipSaved, setTipSaved] = useState(0);
@@ -446,10 +453,11 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   return <div className="rounded-2xl border-2 border-wayne-green p-4">
     <h2 className="text-xl font-black">Key in the card</h2>
     <p className="mt-1 text-sm text-wayne-muted">Type the card number, expiry, CVC and ZIP the customer reads out. The details go straight to Stripe and are never stored by the POS.</p>
-    <TipPicker baseCents={baseCents} disabled={busy || order.payment_status === "paid"} onChange={setTipCents} tipCents={tipCents} />
+    {delivery ? <p className="mt-3 rounded-xl bg-wayne-cream p-3 text-sm font-bold">Delivery: the card is approved for {formatCents(baseCents)} now. The driver&apos;s tip from the signed slip is added in Deliveries, and the card is charged once — order + tip.</p>
+      : <TipPicker baseCents={baseCents} disabled={busy || order.payment_status === "paid"} onChange={setTipCents} tipCents={tipCents} />}
     <div className="mt-3"><StripeCardField config={config} onReady={onReady} onStatus={onStatus} /></div>
     {message ? <p aria-live="polite" className="mt-2 text-sm font-bold">{message}</p> : null}
-    <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void charge(); }} size="lg">{busy ? "Processing…" : `Charge ${formatCents(baseCents + tipCents)}${tipCents ? ` (incl. ${formatCents(tipCents)} tip)` : ""} with Stripe`}</Button>
+    <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void charge(); }} size="lg">{busy ? "Processing…" : delivery ? `Approve ${formatCents(baseCents)} on the card · tip added later` : `Charge ${formatCents(baseCents + tipCents)}${tipCents ? ` (incl. ${formatCents(tipCents)} tip)` : ""} with Stripe`}</Button>
   </div>;
 }
 
@@ -459,7 +467,7 @@ function TipPicker({ baseCents, tipCents, onChange, disabled }: { baseCents: num
   const percent = (value: number) => Math.round((baseCents * value) / 100);
   const choice = (label: string, cents: number, key: string) => <button aria-pressed={tipCents === cents && !custom} className={`min-h-14 rounded-xl border-2 px-2 text-center font-black transition disabled:opacity-40 ${tipCents === cents && !custom ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-white"}`} disabled={disabled} key={key} onClick={() => { setCustom(""); onChange(cents); }} type="button"><span className="block text-base">{label}</span>{cents ? <span className="block text-xs font-bold opacity-80">{formatCents(cents)}</span> : null}</button>;
   return <div className="mt-3">
-    <p className="text-sm font-black">Tip for the driver? <span className="font-bold text-wayne-muted">Ask on the phone — it&apos;s charged with the order.</span></p>
+    <p className="text-sm font-black">Tip? <span className="font-bold text-wayne-muted">Ask on the phone — it&apos;s charged with the order.</span></p>
     <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
       {choice("No tip", 0, "none")}
       {choice("15%", percent(15), "15")}
@@ -474,6 +482,61 @@ function TipPicker({ baseCents, tipCents, onChange, disabled }: { baseCents: num
           if (Number.isFinite(cents)) onChange(Math.max(0, Math.min(cents, 100_000)));
         }} placeholder="Other" value={custom} />
       </label>
+    </div>
+  </div>;
+}
+
+/**
+ * A test order's card (owner, 2026-10-11): the same steps as a real card — the
+ * reader, a card keyed in over the phone, a delivery card approved now and
+ * charged with the tip at cash-out — but simulated, so nothing is charged.
+ */
+function TestCardTender({ order, entry, busy, setBusy, onError, onPaid }: TenderProps & { entry: "card_reader" | "test_keyed" }) {
+  const delivery = order.fulfillment_type === "delivery" && entry === "test_keyed";
+  const askTip = entry === "test_keyed" && !delivery;
+  const [baseCents, setBaseCents] = useState(order.total_cents);
+  const [tipCents, setTipCents] = useState(0);
+  const [tipSaved, setTipSaved] = useState(0);
+  const [payable, setPayable] = useState(order);
+
+  async function approve() {
+    setBusy(true); onError("");
+    try {
+      let current = payable;
+      if (askTip && tipCents !== tipSaved) {
+        const tipResponse = await fetch(`/api/pos/orders/${order.id}/tip`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tip_cents: tipCents }), signal: AbortSignal.timeout(12_000),
+        });
+        if (!tipResponse.ok) throw new Error(await readError(tipResponse, "The tip could not be added."));
+        const tipped = await tipResponse.json() as { tip_cents: number; total_cents: number };
+        current = { ...payable, total_cents: tipped.total_cents };
+        setPayable(current); setTipSaved(tipped.tip_cents); setBaseCents(tipped.total_cents - tipped.tip_cents);
+      }
+      const response = await fetch("/api/pos/test-payment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: order.id, entry, authorize_only: delivery, idempotency_key: `pos-test-card-${order.id}-${uuid()}` }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(await readError(response, "The test payment could not be recorded."));
+      const result = await response.json().catch(() => null) as { payment_status?: string } | null;
+      onPaid({ order: current, method: "card", changeCents: 0, tenderedCents: null, held: result?.payment_status === "authorized" });
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "The test payment could not be recorded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="mt-5 rounded-2xl border-2 border-dashed border-wayne-gold p-4">
+    <h2 className="text-xl font-black">🧪 {entry === "card_reader" ? "Test card reader" : "Test card — keyed in"}</h2>
+    <p className="mt-1 text-sm text-wayne-muted">{entry === "card_reader"
+      ? "Pretend the customer tapped their card. The drawer opens like a real card sale."
+      : delivery ? "Delivery: the test card is approved for the order now; add the tip in Deliveries at the driver's cash-out, like a real one."
+      : "Pretend the card number was typed in."}</p>
+    {askTip ? <TipPicker baseCents={baseCents} disabled={busy} onChange={setTipCents} tipCents={tipCents} /> : null}
+    <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <Button className="text-xl" disabled={busy} onClick={() => { void approve(); }} size="lg">{busy ? "Processing…" : delivery ? `Approve test card · ${formatCents(baseCents)}` : `Test card approved · ${formatCents(baseCents + (askTip ? tipCents : 0))}`}</Button>
+      <Button disabled={busy} onClick={() => onError("Test decline — the card was declined. Try another card.")} size="lg" variant="secondary">Simulate decline</Button>
     </div>
   </div>;
 }

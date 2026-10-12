@@ -86,7 +86,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const manualInput = Number(draft.manualValue) || 0;
   const previewDiscount = draft.manualType === "fixed" ? Math.min(subtotal, Math.round(manualInput * 100)) : draft.manualType === "percent" ? Math.min(subtotal, Math.round(subtotal * manualInput / 100)) : 0;
   const deliveryFee = draft.fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
-  const tax = Math.round((subtotal - previewDiscount + deliveryFee) * settings.tax_rate_basis_points / 10_000);
+  // The $2 delivery fee is not taxed (owner, 2026-10-11) — same as the database.
+  const tax = Math.round((subtotal - previewDiscount) * settings.tax_rate_basis_points / 10_000);
   const previewTotal = subtotal - previewDiscount + deliveryFee + tax;
 
   // The customer screen follows the ticket as it is rung up (owner, 2026-10-11).
@@ -127,6 +128,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           id: result.order.id, order_number: result.order.order_number, total_cents: result.order.total_cents,
           customer_name: customerName, fulfillment_type: delivery ? "delivery" : "pickup", source,
           status: "placed", payment_method: "", payment_status: "unpaid", placed_at: now, promised_at: null, ready_at: null,
+          is_test: draft.isTest,
         },
       });
       return;

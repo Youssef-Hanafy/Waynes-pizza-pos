@@ -51,5 +51,7 @@ export const openOrderSchema = z.object({
   placed_at: z.string(),
   promised_at: z.string().nullable(),
   ready_at: z.string().nullable(),
+  /** A practice ticket: card payments on it are simulated. */
+  is_test: z.boolean().optional().default(false),
 });
 export type OpenOrder = z.infer<typeof openOrderSchema>;

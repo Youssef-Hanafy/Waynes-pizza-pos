@@ -35,7 +35,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid customer screen request." }, { status: 400 });
   const supabase = await createServerSupabaseClient();
   if (parsed.data.kind === "publish") {
-    const { data, error } = await supabase.rpc("wayne_display_publish", { screen_key: parsed.data.key, screen_state: parsed.data.state });
+    const { data, error } = await supabase.rpc("wayne_display_publish", {
+      screen_key: parsed.data.key, screen_state: parsed.data.state, publisher: parsed.data.publisher, changed: parsed.data.changed,
+    });
     if (error) return Response.json({ error: "The customer screen could not be updated." }, { status: 400 });
     const result = displayPublishResultSchema.safeParse(data);
     return Response.json(result.success ? result.data : { response: {}, screen_online: false }, { headers: { "Cache-Control": "no-store" } });

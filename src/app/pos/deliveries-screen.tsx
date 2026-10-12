@@ -34,8 +34,8 @@ function minutesAgo(iso: string | null | undefined) {
  *   Each driver       → their run: ticket, name, address, how it was paid,
  *                        and a tip box per order.
  *   Cash out          → shows what the driver hands in, then records the cash,
- *                        charges each held card once with its tip, and pays the
- *                        driver's tips out of the drawer.
+ *                        charges each delivery card once (order + the tip on
+ *                        the signed slip), and pays the tips out of the drawer.
  */
 export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
   const [board, setBoard] = useState<PosDeliveryBoard | null>(null);
@@ -185,12 +185,13 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
                   const cap = maxTipCents(order);
                   const over = cents !== null && cents > cap;
                   const staleHold = order.paid_by === "card_held" && order.held_at && Date.now() - Date.parse(order.held_at) > 5 * 86_400_000;
+                  const noCardTip = order.paid_by === "card_held" && cap === 0;
                   return <tr className="border-b border-wayne-border align-top last:border-0" key={order.order_id}>
                     <td className="py-2 pr-2 font-black">{order.order_number.replace(/^W0*/, "")}</td>
-                    <td className="py-2 pr-2"><strong className="block">{order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</strong><span className="block text-xs text-wayne-muted">{order.address}{order.city ? `, ${order.city}` : ""}</span>{staleHold ? <span className="block text-xs font-bold text-wayne-alert">Card hold expires soon — cash out today</span> : null}</td>
+                    <td className="py-2 pr-2"><strong className="block">{order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</strong><span className="block text-xs text-wayne-muted">{order.address}{order.city ? `, ${order.city}` : ""}</span>{staleHold ? <span className="block text-xs font-bold text-wayne-alert">Card approval expires soon — cash out today</span> : null}</td>
                     <td className="py-2 pr-2 text-xs font-bold">{paidByLabel(order)}</td>
                     <td className="py-2 pr-2 text-right font-bold">{formatCents(order.total_cents)}</td>
-                    <td className="py-2 pr-2">{allowed ? <>
+                    <td className="py-2 pr-2">{noCardTip ? <span className="text-xs font-bold text-wayne-alert">This card can&apos;t take a tip after the order (Stripe). The order is charged as is.</span> : allowed ? <>
                       <input aria-label={`Tip for order ${order.order_number}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
                     </> : <span className="text-sm font-bold">{order.tip_cents ? formatCents(order.tip_cents) : "—"}<span className="block text-xs font-normal text-wayne-muted">on the card</span></span>}</td>
@@ -207,7 +208,7 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
                 <dt className="text-wayne-muted">Cash tips (driver keeps)</dt><dd className="text-right text-wayne-muted">{formatCents(summary.cashTips)}</dd>
               </dl>
               <p className="mt-3 border-t border-wayne-border pt-3 text-3xl font-black">{summary.handIn >= 0 ? `${driver.name} hands in ${formatCents(summary.handIn)}` : `Pay ${driver.name} ${formatCents(-summary.handIn)}`}</p>
-              {summary.cardTips ? <p className="mt-1 text-sm text-wayne-muted">Card tips were charged with the orders; the drawer pays them to the driver.</p> : null}
+              {summary.cardTips ? <p className="mt-1 text-sm text-wayne-muted">Confirming charges each delivery card once — the order plus its tip. The drawer pays the card tips to the driver.</p> : null}
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Button className="text-lg" disabled={busy !== null} onClick={() => { void cashOut(driver.driver_id, orders); }} size="lg">{busy === `cashout-${driver.driver_id}` ? "Cashing out…" : `Confirm cash out`}</Button>
                 <Button disabled={busy !== null} onClick={() => setCashingOut(null)} size="lg" variant="secondary">Back</Button>
