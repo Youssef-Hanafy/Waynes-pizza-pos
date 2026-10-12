@@ -266,17 +266,7 @@ export default async function SettingsPage({
               required
               type="number"
             />
-            <Input
-              defaultValue={settings.suggested_tip_percentages.join(", ")}
-              label="Suggested tips (%) — checkout & customer screen"
-              name="suggested_tip_percentages"
-            />
-            <Input
-              defaultValue={settings.suggested_tip_amounts_cents.map((cents) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))).join(", ")}
-              label="Dollar tip buttons on the customer screen ($)"
-              name="suggested_tip_amounts"
-              placeholder="1, 2, 3, 4, 5"
-            />
+            <p className="self-end text-sm text-wayne-muted">Tip buttons are in <a className="font-bold underline" href="/admin/tips">Admin → Tips</a>.</p>
           </div>
           <TextArea
             defaultValue={settings.delivery_area_text}
@@ -294,11 +284,6 @@ export default async function SettingsPage({
               defaultChecked={settings.test_ordering_enabled}
               label="Accept TEST / MANUAL orders"
               name="test_ordering_enabled"
-            />
-            <Check
-              defaultChecked={settings.tips_enabled}
-              label="Allow tips"
-              name="tips_enabled"
             />
           </div>
         </SettingsSection>

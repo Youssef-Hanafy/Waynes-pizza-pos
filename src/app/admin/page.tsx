@@ -28,6 +28,7 @@ const areas: Array<{ href: string; title: string; description: string; permissio
   { href: "/admin/promotions", title: "Promotions", description: "Promo codes, schedules, and usage limits.", permission: "promotions.manage" },
   { href: "/admin/menu", title: "Menu", description: "Categories, items, sizes, modifiers, photos, sold-out.", permission: "menu.manage" },
   { href: "/admin/settings", title: "Website & business settings", description: "Hours, tax, delivery area, fees, and page copy.", permission: "content.manage" },
+  { href: "/admin/tips", title: "Tips", description: "The $ and % tip buttons on the customer screen and checkout.", permission: "content.manage" },
   { href: "/admin/staff", title: "Staff & roles", description: "Individual sign-ins and role access.", permission: "staff.view" },
   { href: "/admin/printing", title: "Print queue", description: "Pending and failed kitchen tickets.", permission: "printing.manage" },
   { href: "/admin/integrations", title: "Hanafy integration", description: "Event delivery health and safe replay.", permission: "integrations.manage" },

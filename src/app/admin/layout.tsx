@@ -64,6 +64,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       links: [
         hasPermission(access, "menu.manage") && ["/admin/menu", "Menu"],
         hasPermission(access, "content.manage") && ["/admin/settings", "Website"],
+        hasPermission(access, "content.manage") && ["/admin/tips", "Tips"],
         hasPermission(access, "printing.manage") && ["/admin/printing", "Printing"],
         hasPermission(access, "hardware.manage") && ["/admin/hardware", "Hardware"],
         hasPermission(access, "pilot.manage") && ["/admin/pilot", "Pilot"],
