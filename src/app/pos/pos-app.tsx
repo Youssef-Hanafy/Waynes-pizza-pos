@@ -28,6 +28,7 @@ import { OpenDrawerButton } from "./open-drawer-button";
 import { DeliveriesScreen } from "./deliveries-screen";
 import { startCustomerDisplayLink } from "@/stores/customer-display-link";
 import { TestOrdersPanel } from "./test-orders-panel";
+import { ClockButton } from "./clock-button";
 import { OpenOrdersPanel } from "./open-orders-panel";
 import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
@@ -66,6 +67,9 @@ type Props = {
  */
 export function PosApp(props: Props) {
   const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = props;
+  // Coming back to the register locks Admin again: the next person has to type
+  // a manager PIN to get in (owner, 2026-10-12).
+  useEffect(() => { void fetch("/api/admin-lock", { method: "POST" }).catch(() => undefined); }, []);
   const [section, setSection] = useState<Section>("order");
   const [customerFocus, setCustomerFocus] = useState<PosCustomer | null>(null);
   const [phoneFocus, setPhoneFocus] = useState<{ key: string; n: number } | null>(null);
@@ -186,7 +190,8 @@ export function PosApp(props: Props) {
       <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />
       <span className="hidden text-sm font-bold text-wayne-cream/80 sm:inline">{staffName}</span>
-      {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">Admin</Link></Button> : null}
+      <ClockButton />
+      {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">🔒 Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
     {onlineAlerts.alerts.length ? <div className="flex shrink-0 flex-wrap items-center gap-3 bg-wayne-gold px-3 py-2 text-wayne-ink" role="alert">

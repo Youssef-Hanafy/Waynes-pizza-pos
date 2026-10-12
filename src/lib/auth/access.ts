@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE, parseWorkspaceSlug } from "@/lib/tenancy/active-workspace";
 import { missingServiceForPath } from "@/lib/tenancy/services";
+import { adminPinPath, adminUnlockState } from "./admin-lock";
 import { accessSchema, forLegacyOperations, hasPermission, type CurrentAccess, type Permission } from "./permissions";
 
 export type { AppRole, CurrentAccess, Permission } from "./permissions";
@@ -73,5 +74,9 @@ export async function requirePermission(permission: Permission, nextPath = "/adm
   const missing = access.enabled_services ? missingServiceForPath(nextPath, access.enabled_services) : null;
   if (missing && access.workspace_slug) redirect(`/w/${access.workspace_slug}?unavailable=${missing}`);
   if (!hasPermission(access, permission)) redirect("/unauthorized");
+  // Admin needs an owner's or manager's PIN on top of the sign-in (owner,
+  // 2026-10-12).  Checked here so every Admin page and action is covered.
+  // Hanafy support sessions are already time-boxed and audited.
+  if ((nextPath === "/admin" || nextPath.startsWith("/admin/")) && !access.support_session && !(await adminUnlockState()).unlocked) redirect(adminPinPath(nextPath));
   return access;
 }

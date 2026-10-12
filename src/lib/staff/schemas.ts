@@ -22,3 +22,11 @@ export const createStaffSchema = z.object({
 });
 export const updateStaffSchema = z.object({ id: z.uuid(), role: roleSchema, active: z.boolean(), display_name: z.string().trim().max(120) });
 export const resetPasswordSchema = z.object({ id: z.uuid(), password });
+
+/** Staff are added with a name, a role and a 4–6 number PIN (owner, 2026-10-12). */
+const pin = z.string().trim().regex(/^\d{4,6}$/, "The PIN must be 4 to 6 numbers.");
+export const createPinStaffSchema = z.object({ display_name: z.string().trim().min(1, "Enter a name.").max(120), role: roleSchema, pin });
+export const setStaffPinSchema = z.object({ id: z.uuid(), pin });
+export const staffPinStatusSchema = z.array(z.object({
+  profile_id: z.uuid(), has_pin: z.boolean(), pin_only: z.boolean(), clocked_in_at: z.string().nullable(),
+}));

@@ -7,6 +7,8 @@ import {
   type PosCashoutResult, type PosDeliveryBoard, type PosDeliveryOrder,
 } from "@/lib/delivery/pos-board";
 import { formatCents } from "@/lib/menu/schemas";
+import { PinPad } from "@/components/ui/pin-pad";
+import { ClockButton } from "./clock-button";
 
 async function readError(response: Response, fallback: string) {
   const body: unknown = await response.json().catch(() => null);
@@ -57,6 +59,12 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
   const [cashingOut, setCashingOut] = useState<string | null>(null);
   const [result, setResult] = useState<(PosCashoutResult & { problems: string[] }) | null>(null);
   const mounted = useRef(true);
+  // Orders ticked to go out together; the driver then types his PIN.
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +97,27 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
       setError(cause instanceof Error ? cause.message : "That could not be saved.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** The driver's PIN sends the ticked orders out with him and clocks him in. */
+  async function takeOutWithPin(pin: string) {
+    setPinBusy(true); setPinError("");
+    try {
+      const response = await fetch("/api/pos/delivery", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send_out_pin", order_ids: selected, pin }), signal: AbortSignal.timeout(20_000),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "That could not be saved.");
+      const result = body as { name?: string; count?: number };
+      setNotice(`🚗 ${result.count ?? selected.length} order${(result.count ?? selected.length) === 1 ? "" : "s"} out with ${result.name || "the driver"}.`);
+      setSelected([]); setPinOpen(false);
+      await load();
+    } catch (cause) {
+      setPinError(cause instanceof Error ? cause.message : "That could not be saved.");
+    } finally {
+      setPinBusy(false);
     }
   }
 
@@ -134,13 +163,24 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
   const time = (iso: string | null | undefined) => iso ? new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "";
   const drivers = board?.drivers ?? [];
   const waiting = board?.waiting ?? [];
+  const onShift = drivers.filter((driver) => driver.clocked_in);
+  const ticked = selected.filter((id) => waiting.some((order) => order.order_id === id));
 
   return <div className="min-h-0 flex-1 overflow-y-auto bg-wayne-cream-deep p-3 sm:p-4">
     <div className="mx-auto grid max-w-7xl gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-black">Deliveries</h1>
-        <Button onClick={() => { void load(); }} size="sm" variant="secondary">Refresh</Button>
+        <div className="flex flex-wrap gap-2">
+          <ClockButton className="min-h-11 rounded-xl border border-wayne-border bg-white px-4 text-sm font-black shadow-sm" label="⏱ Driver clock in/out" onClocked={() => { void load(); }} />
+          <Button onClick={() => { void load(); }} size="sm" variant="secondary">Refresh</Button>
+        </div>
       </div>
+      {notice ? <p className="flex items-center justify-between gap-3 rounded-xl bg-wayne-ok-soft p-3 font-bold text-wayne-ok" role="status">{notice}<button className="min-h-9 text-sm underline" onClick={() => setNotice("")} type="button">OK</button></p> : null}
+      {pinOpen ? <div aria-modal className="fixed inset-0 z-[80] grid place-items-center bg-black/50 p-4" role="dialog">
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+          <PinPad busy={pinBusy} error={pinError} note={`${ticked.length} order${ticked.length === 1 ? "" : "s"} will be assigned to the driver whose PIN this is.`} onCancel={() => { setPinOpen(false); setPinError(""); }} onSubmit={(pin) => void takeOutWithPin(pin)} submitLabel="Take them out" title="Driver: enter your PIN" />
+        </div>
+      </div> : null}
       {error ? <p className="rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
 
       {result ? <section aria-live="polite" className="rounded-3xl border-2 border-wayne-ok bg-white p-5 shadow-sm">
@@ -169,11 +209,18 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
       </section> : null}
 
       <section className="rounded-3xl bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-black uppercase tracking-[0.16em] text-wayne-muted">Waiting to go out ({waiting.length})</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-black uppercase tracking-[0.16em] text-wayne-muted">Waiting to go out ({waiting.length})</h2>
+          {waiting.length ? <div className="flex flex-wrap gap-2">
+            {ticked.length ? <Button onClick={() => setSelected([])} size="sm" variant="ghost">Clear</Button> : <Button onClick={() => setSelected(waiting.map((order) => order.order_id))} size="sm" variant="ghost">Select all</Button>}
+            <Button disabled={!ticked.length || busy !== null} onClick={() => { setPinError(""); setPinOpen(true); }} size="sm" variant="brand">🚗 Take {ticked.length || ""} out — driver PIN</Button>
+          </div> : null}
+        </div>
         {!board ? <p className="mt-3 text-wayne-muted">Loading…</p> : !waiting.length ? <p className="mt-3 text-wayne-muted">No delivery orders waiting.</p> : null}
         <ul className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {waiting.map((order) => <li className="rounded-2xl border-2 border-wayne-border p-3" key={order.order_id}>
-            <div className="flex items-start justify-between gap-2">
+          {waiting.map((order) => { const isTicked = ticked.includes(order.order_id); return <li className={`rounded-2xl border-2 p-3 ${isTicked ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border"}`} key={order.order_id}>
+            <div className="flex items-start gap-3">
+              <input aria-label={`Select order ${order.order_number}`} checked={isTicked} className="mt-1 h-7 w-7 shrink-0 accent-wayne-green" onChange={() => setSelected((current) => current.includes(order.order_id) ? current.filter((id) => id !== order.order_id) : [...current, order.order_id])} type="checkbox" />
               <div className="min-w-0">
                 <p className="text-lg font-black">#{order.order_number.replace(/^W0*/, "")} · {order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</p>
                 <p className="truncate text-sm">{order.address || "No address"}{order.city ? `, ${order.city}` : ""}</p>
@@ -181,10 +228,10 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {drivers.length ? drivers.map((driver) => <Button disabled={busy !== null} key={driver.driver_id} onClick={() => { void act(`send-${order.order_id}`, { action: "send_out", order_id: order.order_id, driver_id: driver.driver_id }); }} size="sm">{busy === `send-${order.order_id}` ? "Sending…" : `🚗 ${driver.name}`}</Button>)
-                : <p className="text-sm text-wayne-muted">No drivers set up. Give a staff member the Driver role in Admin → Staff.</p>}
+              {onShift.length ? onShift.map((driver) => <Button disabled={busy !== null} key={driver.driver_id} onClick={() => { void act(`send-${order.order_id}`, { action: "send_out", order_id: order.order_id, driver_id: driver.driver_id }); }} size="sm">{busy === `send-${order.order_id}` ? "Sending…" : `🚗 ${driver.name}`}</Button>)
+                : <p className="text-sm text-wayne-muted">No driver clocked in. Tick the orders and press “Take out — driver PIN”, or clock a driver in.</p>}
             </div>
-          </li>)}
+          </li>; })}
         </ul>
       </section>
 
@@ -196,7 +243,7 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
           const confirming = cashingOut === driver.driver_id;
           return <section className="rounded-3xl bg-white p-4 shadow-sm" key={driver.driver_id}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-2xl font-black">{driver.name}</h2>
+              <h2 className="text-2xl font-black">{driver.name}{driver.clocked_in ? "" : <span className="ml-2 align-middle text-xs font-bold uppercase tracking-wider text-wayne-muted">clocked out</span>}</h2>
               <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${out ? "bg-wayne-green text-white" : "bg-wayne-cream text-wayne-muted"}`}>{out ? `Out · ${out} order${out === 1 ? "" : "s"}` : orders.length ? "Back in store" : "No deliveries"}</span>
             </div>
             {driver.last_cashout_at ? <p className="text-xs text-wayne-muted">Last cashed out {time(driver.last_cashout_at)}</p> : null}

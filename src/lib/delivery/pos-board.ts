@@ -39,6 +39,7 @@ export const posDeliveryBoardSchema = z.object({
   drivers: z.array(z.object({
     driver_id: z.uuid(),
     name: z.string(),
+    clocked_in: z.boolean().default(false),
     last_cashout_at: z.string().nullable().optional().transform((value) => value ?? null),
     orders: z.array(posDeliveryOrderSchema).default([]),
   })).default([]),
@@ -48,6 +49,8 @@ export type PosDeliveryBoard = z.infer<typeof posDeliveryBoardSchema>;
 export const posDeliveryActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("send_out"), order_id: z.uuid(), driver_id: z.uuid() }),
   z.object({ action: z.literal("unassign"), order_id: z.uuid() }),
+  /** The driver types his PIN; the chosen orders go out with him (owner, 2026-10-12). */
+  z.object({ action: z.literal("send_out_pin"), order_ids: z.array(z.uuid()).min(1).max(30), pin: z.string().regex(/^\d{4,6}$/, "Wrong PIN.") }),
 ]);
 
 export const posCashoutRequestSchema = z.object({

@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/access";
 import { logger } from "@/lib/logging/logger";
-import { createStaffSchema, resetPasswordSchema, updateStaffSchema } from "@/lib/staff/schemas";
+import { createPinStaffSchema, createStaffSchema, resetPasswordSchema, setStaffPinSchema, updateStaffSchema } from "@/lib/staff/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 const back = (message: string, key: "error" | "saved" = "error") => redirect(`/admin/staff?${key}=${encodeURIComponent(message)}`);
-const safe = (message: string) => ["own role", "active owner", "Unknown role", "not found", "Display name"].some((part) => message.includes(part)) ? message : "The change could not be saved. Refresh and try again.";
+const safe = (message: string) => ["own role", "active owner", "Unknown role", "not found", "Display name", "PIN"].some((part) => message.includes(part)) ? message : "The change could not be saved. Refresh and try again.";
 
 export async function createStaffMember(form: FormData) {
   await requirePermission("staff.manage", "/admin/staff");
@@ -54,4 +54,28 @@ export async function resetStaffPassword(form: FormData) {
   const supabase = await createServerSupabaseClient();
   await supabase.rpc("wayne_record_staff_account_event", { target_profile_id: parsed.data!.id, event_type: "staff.password_reset" });
   back("Temporary password set. Share it privately.", "saved");
+}
+
+/** Add a person with just a name, a role and a PIN — no email or password. */
+export async function createPinStaffMember(form: FormData) {
+  await requirePermission("staff.manage", "/admin/staff");
+  const parsed = createPinStaffSchema.safeParse({ display_name: form.get("display_name"), role: form.get("role"), pin: form.get("pin") });
+  if (!parsed.success) back(parsed.error.issues[0]?.message ?? "Check the new staff details.");
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("wayne_admin_create_pin_staff", { display_name_value: parsed.data!.display_name, role_code: parsed.data!.role, pin_value: parsed.data!.pin });
+  if (error) back(safe(error.message));
+  revalidatePath("/admin/staff");
+  back(`${parsed.data!.display_name} is added. They clock in on the POS with their PIN.`, "saved");
+}
+
+/** Set or change someone's PIN. */
+export async function setStaffPin(form: FormData) {
+  await requirePermission("staff.manage", "/admin/staff");
+  const parsed = setStaffPinSchema.safeParse({ id: form.get("id"), pin: form.get("pin") });
+  if (!parsed.success) back(parsed.error.issues[0]?.message ?? "The PIN must be 4 to 6 numbers.");
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("wayne_admin_set_staff_pin", { target_profile_id: parsed.data!.id, pin_value: parsed.data!.pin });
+  if (error) back(safe(error.message));
+  revalidatePath("/admin/staff");
+  back("PIN saved.", "saved");
 }

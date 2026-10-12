@@ -8,12 +8,22 @@ import { SupportBanner } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { AdminNav } from "./admin-nav";
 import { signOut } from "./actions";
+import { adminUnlockState } from "@/lib/auth/admin-lock";
+import { lockAdmin } from "@/app/pos/admin-pin/actions";
+import { redirect } from "next/navigation";
 
 export const metadata = { robots: { index: false, follow: false } };
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const access = await requirePermission("admin.access", "/admin");
   const workspaceName = access.workspace_name ?? "Workspace";
+  const unlock = await adminUnlockState();
+
+  async function lockAndLeave() {
+    "use server";
+    await lockAdmin();
+    redirect("/pos");
+  }
 
   /*
    * Grouped the way a manager thinks about the evening: what is happening right
@@ -97,6 +107,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
               <p className="text-sm font-bold leading-tight">{access.display_name}</p>
               <Badge className="mt-0.5" tone={access.role === "hanafy_support" ? "warn" : "neutral"}>{access.role === "hanafy_support" ? "Hanafy support" : access.role}</Badge>
             </div>
+            {unlock.unlocked ? <form action={lockAndLeave}><Button size="sm" title={unlock.name ? `Opened with ${unlock.name}'s PIN` : undefined} variant="brand">🔒 Lock Admin</Button></form> : null}
             <form action={signOut}><Button size="sm" variant="secondary">Sign out</Button></form>
           </div>
         </div>
