@@ -15,6 +15,7 @@ type LinkRow = { menu_item_id: string; modifier_group_id: string; sort_order: nu
 type GroupRow = { id: string; customer_label: string; min_select: number; max_select: number; required: boolean; allow_quantities: boolean };
 type ChoiceRow = { id: string; modifier_group_id: string; name: string; price_delta_cents: number; sort_order: number };
 type PriceRow = { modifier_choice_id: string; menu_item_variant_id: string; price_delta_cents: number };
+type RuleRow = { modifier_group_id: string; size_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null };
 
 /**
  * Every option section of a category on one page (owner request 2026-10-08):
@@ -60,6 +61,10 @@ export default async function CategoryOptionsPage({
     ? await supabase.from("modifier_choice_variant_prices").select("modifier_choice_id,menu_item_variant_id,price_delta_cents").in("modifier_choice_id", choiceIds)
     : { data: [] };
   const prices = (priceData ?? []) as PriceRow[];
+  const { data: ruleData } = groupIds.length
+    ? await supabase.from("modifier_group_size_rules").select("modifier_group_id,size_name,included_count,max_portions,extra_each_cents").in("modifier_group_id", groupIds)
+    : { data: [] };
+  const rules = (ruleData ?? []) as RuleRow[];
 
   const sizeNames = [...new Map(variants.map((variant) => [variant.name.trim().toLowerCase(), variant.name.trim()])).values()];
   const variantById = new Map(variants.map((variant) => [variant.id, variant]));
@@ -74,7 +79,7 @@ export default async function CategoryOptionsPage({
     const key = group.customer_label.trim().toLowerCase();
     let section = sections.get(key);
     if (!section) {
-      section = { key: group.customer_label.trim(), label: group.customer_label.trim(), min_select: 0, max_select: 1, required: false, allow_quantities: false, item_count: 0, choices: [], order: link.sort_order, mins: [], maxes: [], requireds: [], quantities: [], itemSet: new Set() };
+      section = { key: group.customer_label.trim(), label: group.customer_label.trim(), min_select: 0, max_select: 1, required: false, allow_quantities: false, item_count: 0, choices: [], size_rules: {}, order: link.sort_order, mins: [], maxes: [], requireds: [], quantities: [], itemSet: new Set() };
       sections.set(key, section);
     }
     section.order = Math.min(section.order, link.sort_order);
@@ -119,10 +124,16 @@ export default async function CategoryOptionsPage({
     section.max_select = Math.max(...section.maxes);
     section.required = section.requireds.every(Boolean);
     section.allow_quantities = section.quantities.some(Boolean);
+    // Included portions per size, read from the first group that has any.
+    const ruleGroup = [...sectionGroupIds].find((groupId) => rules.some((rule) => rule.modifier_group_id === groupId));
+    section.size_rules = Object.fromEntries(rules.filter((rule) => rule.modifier_group_id === ruleGroup).map((rule) => [
+      rule.size_name.trim(), { included_count: rule.included_count, max_portions: rule.max_portions, extra_each_cents: rule.extra_each_cents },
+    ]));
   }
   const ordered: OptionSection[] = [...sections.values()].sort((a, b) => a.order - b.order).map((section) => ({
     key: section.key, label: section.label, min_select: section.min_select, max_select: section.max_select,
     required: section.required, allow_quantities: section.allow_quantities, item_count: section.item_count, choices: section.choices,
+    size_rules: section.size_rules,
   }));
 
   const [updated, added, removed] = (query.saved ?? "").split("-").map(Number);

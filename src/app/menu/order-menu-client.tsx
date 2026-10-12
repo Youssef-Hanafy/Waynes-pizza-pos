@@ -10,6 +10,8 @@ import { MenuImage } from "@/components/site/menu-image";
 import { Button } from "@/components/ui/button";
 import { isMenuItemAvailableNow } from "@/lib/menu/availability";
 import {
+  countedPortions,
+  groupSizeRule,
   choiceAllowsExtra,
   CART_STORAGE_KEY,
   cartLineUnitCents,
@@ -698,6 +700,8 @@ function ItemDialog({
         all.findIndex((other) => other.choice.id === entry.choice.id) === index,
     );
 
+  const sizeName = item.variants.find((variant) => variant.id === variantId)?.name ?? null;
+
   function setChoice(
     group: MenuItem["modifier_groups"][number],
     choiceId: string,
@@ -726,6 +730,12 @@ function ItemDialog({
         setError(
           `${group.customer_label}: choose ${group.min_select === group.max_select ? group.min_select : `${group.min_select}–${group.max_select}`}.`,
         );
+        return;
+      }
+      // Included portions per size: "a Large comes with 3, up to 5".
+      const rule = groupSizeRule(group, sizeName);
+      if (rule?.max_portions && countedPortions(group, selectedChoices) > rule.max_portions) {
+        setError(`${group.customer_label}: up to ${rule.max_portions}${sizeName ? ` on a ${sizeName}` : ""}.`);
         return;
       }
     }
@@ -827,9 +837,24 @@ function ItemDialog({
               <legend className="font-black">
                 {group.customer_label}{" "}
                 <span className="text-sm font-normal text-wayne-muted">
-                  ({group.min_select}–{group.max_select})
+                  ({group.min_select}–{groupSizeRule(group, sizeName)?.max_portions ?? group.max_select})
                 </span>
               </legend>
+              {(() => {
+                const rule = groupSizeRule(group, sizeName);
+                if (!rule) return null;
+                const used = countedPortions(group, selectedChoices);
+                return (
+                  <p className="mt-1 text-sm font-bold text-wayne-ok">
+                    {rule.included_count} included{sizeName ? ` with a ${sizeName}` : ""} — mix and match
+                    {used > rule.included_count
+                      ? ` · ${used - rule.included_count} extra${rule.extra_each_cents !== null ? ` at ${formatCents(rule.extra_each_cents)} each` : ""}`
+                      : rule.extra_each_cents !== null
+                        ? ` · extras ${formatCents(rule.extra_each_cents)} each`
+                        : ""}
+                  </p>
+                );
+              })()}
               <div className="mt-3 grid gap-2">
                 {[...group.choices]
                   .sort(
@@ -881,7 +906,7 @@ function ItemDialog({
                               {count ? "Included" : "Removed"}
                             </small>
                           ) : null}
-                          {delta && (!included || count > 0) ? (
+                          {delta && (!included || count > 0) && !groupSizeRule(group, sizeName) ? (
                             <small className="ml-2 text-wayne-muted">
                               {delta > 0 ? "+" : ""}
                               {formatCents(delta)}

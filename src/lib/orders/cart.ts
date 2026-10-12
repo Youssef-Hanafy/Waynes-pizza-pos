@@ -107,6 +107,59 @@ export function describeLineModifiers(item: ItemLike | undefined, line: Pick<Car
   return notes;
 }
 
+export type SizeRule = { variant_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null };
+type RuledGroup = { size_rules?: SizeRule[]; max_select: number; choices: ChoiceLike[] };
+
+/** "No Sauce", "Light Cheese": instructions, never a counted portion. */
+export function isInstructionChoice(choice: { name: string }) {
+  return /^(no|light|lite)\b/i.test(choice.name.trim());
+}
+
+/**
+ * The included-portions rule for a group on the chosen size: that size's own
+ * rule, else the "any size" one (mirrors wayne_group_size_rule_id).
+ */
+export function groupSizeRule(group: { size_rules?: SizeRule[] }, variantName: string | null | undefined): SizeRule | null {
+  const rules = group.size_rules ?? [];
+  if (!rules.length) return null;
+  const name = (variantName ?? "").trim().toLowerCase();
+  return (name ? rules.find((rule) => rule.variant_name.trim().toLowerCase() === name) : undefined)
+    ?? rules.find((rule) => rule.variant_name.trim() === "") ?? null;
+}
+
+/** The most portions this group takes on this size. */
+export function groupMaxPortions(group: { max_select: number }, rule: SizeRule | null) {
+  return rule?.max_portions ?? group.max_select;
+}
+
+export type AllowanceLine = { choice_id: string; portions: number; free: number; unit_cents: number; charge_cents: number };
+
+/**
+ * How the picks in a rule group are charged (mirrors
+ * wayne_group_allowance_lines): the first N portions are free, any mix and
+ * repeats allowed, given to the dearest picks first; each one after that costs
+ * the rule's extra price (or the option's own price when none is set).
+ */
+export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId: string | null | undefined, selected: { choice_id: string; quantity: number }[]): AllowanceLine[] {
+  const picks = selected.flatMap((pick) => {
+    const choice = group.choices.find((candidate) => candidate.id === pick.choice_id);
+    return choice && pick.quantity > 0 ? [{ choice, quantity: pick.quantity, unit: choicePriceDeltaCents(choice, variantId) }] : [];
+  }).sort((a, b) => (b.unit - a.unit) || (a.choice.id < b.choice.id ? -1 : a.choice.id > b.choice.id ? 1 : 0));
+  let freeLeft = rule.included_count;
+  return picks.map(({ choice, quantity, unit }) => {
+    if (isInstructionChoice(choice)) return { choice_id: choice.id, portions: quantity, free: 0, unit_cents: unit, charge_cents: unit * quantity };
+    const free = Math.min(quantity, freeLeft);
+    freeLeft -= free;
+    const each = rule.extra_each_cents ?? unit;
+    return { choice_id: choice.id, portions: quantity, free, unit_cents: each, charge_cents: (quantity - free) * each };
+  });
+}
+
+/** Portions picked in a group, not counting "No …" / "Light …". */
+export function countedPortions(group: { choices: ChoiceLike[] }, counts: Record<string, number>) {
+  return group.choices.reduce((total, choice) => total + (isInstructionChoice(choice) ? 0 : counts[choice.id] ?? 0), 0);
+}
+
 export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {
   const item = findMenuItem(menu, line.menu_item_id);
   if (!item) return 0;
@@ -114,15 +167,23 @@ export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {
     (candidate) => candidate.id === line.variant_id,
   );
   const base = variant?.price_cents ?? item.base_price_cents;
-  const choices = item.modifier_groups.flatMap((group) => group.choices);
-  return (
-    base +
-    line.modifiers.reduce((sum, selected) => {
-      const choice = choices.find((candidate) => candidate.id === selected.choice_id);
-      if (!choice) return sum;
-      return sum + choicePriceDeltaCents(choice, line.variant_id) * chargedPortions(choice, selected.quantity);
-    }, 0)
-  );
+  const counted = new Set<string>();
+  let modifiers = 0;
+  for (const group of item.modifier_groups) {
+    const picks = line.modifiers.filter((selected) => !counted.has(selected.choice_id) && group.choices.some((choice) => choice.id === selected.choice_id));
+    if (!picks.length) continue;
+    for (const pick of picks) counted.add(pick.choice_id);
+    const rule = groupSizeRule(group, variant?.name);
+    if (rule) {
+      modifiers += groupAllowanceLines(group, rule, line.variant_id, picks).reduce((sum, entry) => sum + entry.charge_cents, 0);
+      continue;
+    }
+    for (const pick of picks) {
+      const choice = group.choices.find((candidate) => candidate.id === pick.choice_id)!;
+      modifiers += choicePriceDeltaCents(choice, line.variant_id) * chargedPortions(choice, pick.quantity);
+    }
+  }
+  return base + modifiers;
 }
 
 export function cartSubtotalCents(menu: PublicMenu, lines: CartLine[]) {

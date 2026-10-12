@@ -372,6 +372,24 @@ function revalidateMenu() {
  * "comes with" toppings while names, prices and limits stay in step.
  */
 const categoryOptionsSchema = z.object({
+  size_rules: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(160),
+        rules: z
+          .array(
+            z.object({
+              size_name: z.string().trim().max(120),
+              included_count: z.number().int().min(0).max(20),
+              max_portions: z.number().int().min(1).max(20).nullable(),
+              extra_each_cents: z.number().int().min(0).max(100_000).nullable(),
+            }),
+          )
+          .max(50),
+      }),
+    )
+    .max(100)
+    .default([]),
   sections: z
     .array(
       z.object({
@@ -422,11 +440,21 @@ export async function saveCategoryOptionsAction(
     );
   }
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.rpc("wayne_save_category_options", {
-    target_category_id: categoryId,
-    payload: parsed.data,
-  });
+  const { data, error } = parsed.data!.sections.length
+    ? await supabase.rpc("wayne_save_category_options", {
+        target_category_id: categoryId,
+        payload: { sections: parsed.data!.sections },
+      })
+    : { data: {}, error: null };
   if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
+  // Included portions per size ("a Large comes with 3 sauces").
+  if (parsed.data!.size_rules.length) {
+    const saved = await supabase.rpc("wayne_save_category_size_rules", {
+      target_category_id: categoryId,
+      payload: { sections: parsed.data!.size_rules },
+    });
+    if (saved.error) redirect(`${back}?error=${encodeURIComponent(saved.error.message)}`);
+  }
   revalidateMenu();
   revalidatePath("/pos");
   revalidatePath(back);

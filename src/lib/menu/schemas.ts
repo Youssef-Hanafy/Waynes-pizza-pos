@@ -92,6 +92,16 @@ export const publicMenuGroupSchema = z.object({
   max_select: z.number().int().min(1).max(100),
   required: z.boolean(),
   allow_quantities: z.boolean(),
+  /**
+   * Included portions per size (owner, 2026-10-12): "a Large comes with 3
+   * sauces, up to 5, each extra $0.75".  variant_name "" = any size.
+   */
+  size_rules: z.array(z.object({
+    variant_name: z.string(),
+    included_count: z.number().int().min(0),
+    max_portions: z.number().int().min(1).nullable(),
+    extra_each_cents: z.number().int().min(0).nullable(),
+  })).default([]),
   choices: z.array(publicMenuChoiceSchema)
 });
 export const publicMenuVariantSchema = variantSchema.extend({ id: z.uuid() });

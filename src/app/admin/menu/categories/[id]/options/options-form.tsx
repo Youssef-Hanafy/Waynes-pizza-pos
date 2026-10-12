@@ -12,6 +12,11 @@ export type OptionSection = {
   allow_quantities: boolean;
   /** How many of the category's items have this section. */
   item_count: number;
+  /**
+   * Included portions per size (owner, 2026-10-12): "Large comes with 3
+   * sauces, up to 5, each extra $0.75".  Key "" = items without sizes.
+   */
+  size_rules: Record<string, { included_count: number; max_portions: number | null; extra_each_cents: number | null }>;
   choices: {
     key: string;
     name: string;
@@ -33,7 +38,9 @@ type ChoiceState = {
   remove: boolean;
   original: OptionSection["choices"][number] | null;
 };
+type RuleState = { included: string; max: string; extra: string };
 type SectionState = {
+  rules: Record<string, RuleState>;
   key: string;
   label: string;
   min: string;
@@ -54,6 +61,12 @@ function parseMoney(value: string): number | null | "bad" {
   return Math.round(Number(trimmed) * 100);
 }
 
+/** The saved included-portions rule of a section on one size, as form text. */
+function ruleOf(section: OptionSection, size: string): RuleState {
+  const rule = Object.entries(section.size_rules ?? {}).find(([name]) => name.trim().toLowerCase() === size.trim().toLowerCase())?.[1];
+  return { included: rule ? String(rule.included_count) : "", max: rule?.max_portions ? String(rule.max_portions) : "", extra: rule && rule.extra_each_cents !== null ? money(rule.extra_each_cents) : "" };
+}
+
 let counter = 0;
 const nextId = () => `new-${++counter}`;
 
@@ -64,7 +77,10 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
   sizeNames: string[];
 }) {
   const showSizes = sizeNames.length > 1;
+  // Included-portion rows: one per size, or one for the whole category.
+  const ruleSizes = useMemo(() => (sizeNames.length ? sizeNames : [""]), [sizeNames]);
   const [state, setState] = useState<SectionState[]>(() => sections.map((section) => ({
+    rules: Object.fromEntries(ruleSizes.map((size) => [size, ruleOf(section, size)])),
     key: section.key,
     label: section.label,
     min: String(section.min_select),
@@ -107,6 +123,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
   /** Only what changed goes to the server. */
   const payload = useMemo(() => {
     const problems: string[] = [];
+    const sizeRules: { label: string; rules: { size_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null }[] }[] = [];
     const out = state.map((section) => {
       const min = Number(section.min);
       const max = Number(section.max);
@@ -141,6 +158,29 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         return [];
       });
       const original = section.original;
+      const sizeRulesChanged = ruleSizes.some((size) => {
+        const now = section.rules[size]!;
+        const before = ruleOf(original, size);
+        return now.included.trim() !== before.included || now.max.trim() !== before.max || (parseMoney(now.extra) ?? null) !== (parseMoney(before.extra) ?? null);
+      });
+      if (sizeRulesChanged) {
+        const rules = ruleSizes.flatMap((size) => {
+          const row = section.rules[size]!;
+          const where = `${section.label}${size ? ` › ${size}` : ""}`;
+          if (!row.included.trim()) {
+            if (row.max.trim() || row.extra.trim()) problems.push(`${where}: fill in how many come included (0 is fine), or clear the row.`);
+            return [];
+          }
+          const included = Number(row.included);
+          const most = row.max.trim() ? Number(row.max) : null;
+          const extra = parseMoney(row.extra);
+          if (!Number.isInteger(included) || included < 0 || included > 20) { problems.push(`${where}: "included" must be 0 to 20.`); return []; }
+          if (most !== null && (!Number.isInteger(most) || most < 1 || most > 20 || most < included)) { problems.push(`${where}: "most" must be at least the number included (up to 20).`); return []; }
+          if (extra === "bad" || (typeof extra === "number" && extra < 0)) { problems.push(`${where}: extra price "${row.extra}" isn't a dollar amount.`); return []; }
+          return [{ size_name: size, included_count: included, max_portions: most, extra_each_cents: extra }];
+        });
+        sizeRules.push({ label: section.label.trim() || section.key, rules });
+      }
       const rulesChanged = section.label.trim() !== original.label || min !== original.min_select || max !== original.max_select || section.required !== original.required || section.allowQuantities !== original.allow_quantities;
       if (!rulesChanged && !choices.length && !section.addToAll) return null;
       return {
@@ -154,10 +194,10 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         choices,
       };
     }).filter(Boolean);
-    return { sections: out, problems };
-  }, [sizeNames, state]);
+    return { sections: out, sizeRules, problems };
+  }, [ruleSizes, sizeNames, state]);
 
-  const changes = payload.sections.length;
+  const changes = payload.sections.length + payload.sizeRules.length;
 
   return (
     <form
@@ -169,7 +209,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         setError("");
       }}
     >
-      <input name="configuration" type="hidden" value={JSON.stringify({ sections: payload.sections })} />
+      <input name="configuration" type="hidden" value={JSON.stringify({ sections: payload.sections, size_rules: payload.sizeRules })} />
       {state.map((section, sectionIndex) => (
         <section className="rounded-2xl border border-wayne-border bg-white p-5 shadow-sm" key={section.key}>
           <div className="flex flex-wrap items-end gap-3">
@@ -181,6 +221,22 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
             <label className="grid w-24 gap-1 text-sm font-bold">Most<input className="min-h-11 rounded-lg border border-wayne-border px-3" inputMode="numeric" onChange={(e) => patchSection(sectionIndex, { max: e.target.value })} value={section.max} /></label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold"><input checked={section.required} className="h-5 w-5 accent-wayne-red" onChange={(e) => patchSection(sectionIndex, { required: e.target.checked })} type="checkbox" />Required</label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold"><input checked={section.allowQuantities} className="h-5 w-5 accent-wayne-red" onChange={(e) => patchSection(sectionIndex, { allowQuantities: e.target.checked })} type="checkbox" />Extra portions allowed</label>
+          </div>
+          <div className="mt-4 rounded-xl border border-wayne-ok/40 bg-wayne-ok-soft/40 p-3">
+            <p className="text-sm font-black">Comes with (free) — e.g. a Large comes with 3 sauces, any mix, 2 of the same is fine</p>
+            <p className="text-xs text-wayne-muted">Leave &quot;Included&quot; blank for the normal way (only what each item comes with is free). &quot;Each extra&quot; blank = each option&apos;s own price. Turns on extra portions automatically.</p>
+            <div className="mt-2 grid gap-2">
+              {ruleSizes.map((size) => {
+                const row = section.rules[size]!;
+                const set = (patch: Partial<RuleState>) => patchSection(sectionIndex, { rules: { ...section.rules, [size]: { ...row, ...patch } } });
+                return <div className="grid grid-cols-[minmax(6rem,1fr)_7rem_7rem_8rem] items-end gap-2" key={size || "all"}>
+                  <span className="min-h-10 content-center text-sm font-bold">{size || "All sizes"}</span>
+                  <label className="grid gap-1 text-xs font-bold">Included<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="numeric" onChange={(e) => set({ included: e.target.value })} placeholder="—" value={row.included} /></label>
+                  <label className="grid gap-1 text-xs font-bold">Most<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="numeric" onChange={(e) => set({ max: e.target.value })} placeholder="no limit" value={row.max} /></label>
+                  <label className="grid gap-1 text-xs font-bold">Each extra $<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="decimal" onChange={(e) => set({ extra: e.target.value })} placeholder="option price" value={row.extra} /></label>
+                </div>;
+              })}
+            </div>
           </div>
           <p className="mt-2 text-sm text-wayne-muted">
             On {section.itemCount} of {itemCount} items.

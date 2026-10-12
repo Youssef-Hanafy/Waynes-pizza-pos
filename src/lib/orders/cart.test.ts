@@ -5,6 +5,8 @@ import {
   choiceAllowsExtra,
   choicePriceDeltaCents,
   describeLineModifiers,
+  groupAllowanceLines,
+  groupSizeRule,
   includedSelection,
   readCart,
 } from "./cart";
@@ -49,6 +51,7 @@ const menu = [
             max_select: 3,
             required: false,
             allow_quantities: true,
+            size_rules: [],
             choices: [
               {
                 id: crypto.randomUUID(),
@@ -123,6 +126,7 @@ describe("cart", () => {
                 max_select: 1,
                 required: true,
                 allow_quantities: false,
+                size_rules: [],
                 choices: [
                   {
                     id: choiceId,
@@ -208,7 +212,7 @@ describe("toppings an item comes with", () => {
     available_end: null,
     variants: [],
     modifier_groups: [
-      { id: crypto.randomUUID(), name: "Meats", customer_label: "Meats", min_select: 0, max_select: 10, required: false, allow_quantities: true, choices: [pepperoni, salami, mushrooms] },
+      { id: crypto.randomUUID(), name: "Meats", customer_label: "Meats", min_select: 0, max_select: 10, required: false, allow_quantities: true, size_rules: [], choices: [pepperoni, salami, mushrooms] },
     ],
   };
   const pizzaMenu = [{ id: crypto.randomUUID(), name: "Gourmet", description: "", image_path: null, image_alt: "", items: [meatLovers] }] satisfies PublicMenu;
@@ -240,5 +244,43 @@ describe("toppings an item comes with", () => {
     expect(choiceAllowsExtra(meats, { name: "No Cheese" })).toBe(false);
     expect(choiceAllowsExtra(meats, { name: "Light Cheese" })).toBe(false);
     expect(choiceAllowsExtra({ allow_quantities: false }, { name: "Ham" })).toBe(false);
+  });
+});
+
+describe("included portions per size (a Large calzone comes with 3 sauces)", () => {
+  const ranch = { id: "00000000-0000-4000-8000-0000000000a1", name: "Ranch", price_delta_cents: 75, default_selected: false, variant_prices: [] };
+  const bbq = { id: "00000000-0000-4000-8000-0000000000a2", name: "BBQ", price_delta_cents: 75, default_selected: false, variant_prices: [] };
+  const none = { id: "00000000-0000-4000-8000-0000000000a3", name: "No Sauce", price_delta_cents: 0, default_selected: false, variant_prices: [] };
+  const small = { id: "00000000-0000-4000-8000-0000000000b1", name: "Small", price_cents: 1000, sku: "", sort_order: 0 };
+  const large = { id: "00000000-0000-4000-8000-0000000000b2", name: "Large", price_cents: 1600, sku: "", sort_order: 1 };
+  const sauces = {
+    id: "00000000-0000-4000-8000-0000000000c1", name: "Calzone – Sauces", customer_label: "Sauces", min_select: 0, max_select: 5, required: false, allow_quantities: true,
+    size_rules: [
+      { variant_name: "Small", included_count: 1, max_portions: 3, extra_each_cents: 50 },
+      { variant_name: "Large", included_count: 3, max_portions: 5, extra_each_cents: null },
+    ],
+    choices: [ranch, bbq, none],
+  };
+  const calzone = { id: "00000000-0000-4000-8000-0000000000d1", name: "Calzone", description: "", image_path: null, image_alt: "", base_price_cents: 1000, included_count_label: "", sold_out: false, featured: false, available_days: [0, 1, 2, 3, 4, 5, 6], available_start: null, available_end: null, variants: [small, large], modifier_groups: [sauces] };
+  const calzoneMenu = [{ id: "00000000-0000-4000-8000-0000000000e1", name: "Calzones", description: "", image_path: null, image_alt: "", items: [calzone] }] as PublicMenu;
+  const line = (variant_id: string, modifiers: { choice_id: string; quantity: number }[]) => ({ line_id: "l", menu_item_id: calzone.id, variant_id, quantity: 1, special_instructions: "", modifiers });
+
+  it("picks the size's own rule", () => {
+    expect(groupSizeRule(sauces, "large")?.included_count).toBe(3);
+    expect(groupSizeRule(sauces, "Medium")).toBeNull();
+  });
+
+  it("2 Ranch + 1 BBQ on a Large are all free", () => {
+    expect(cartLineUnitCents(calzoneMenu, line(large.id, [{ choice_id: ranch.id, quantity: 2 }, { choice_id: bbq.id, quantity: 1 }]))).toBe(1600);
+  });
+
+  it("each sauce after the free ones costs extra (option price when no extra price is set)", () => {
+    expect(cartLineUnitCents(calzoneMenu, line(large.id, [{ choice_id: ranch.id, quantity: 3 }, { choice_id: bbq.id, quantity: 2 }]))).toBe(1600 + 2 * 75);
+    expect(cartLineUnitCents(calzoneMenu, line(small.id, [{ choice_id: ranch.id, quantity: 2 }]))).toBe(1000 + 50);
+  });
+
+  it("No Sauce never uses up a free one", () => {
+    const lines = groupAllowanceLines(sauces, sauces.size_rules[0]!, small.id, [{ choice_id: none.id, quantity: 1 }, { choice_id: ranch.id, quantity: 1 }]);
+    expect(lines.find((entry) => entry.choice_id === ranch.id)?.free).toBe(1);
   });
 });
