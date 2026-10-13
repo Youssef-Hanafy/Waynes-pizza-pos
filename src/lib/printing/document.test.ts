@@ -130,10 +130,17 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
 
   it("prints bigger text: taller by default, tall and wide on extra large", () => {
     const layout = { title: "t", lines: [{ kind: "text" as const, text: "Hello" }] };
-    const sizeOf = (bytes: Uint8Array) => { const all = Array.from(bytes); const at = all.indexOf(0x21, 2); return all[at + 1]; };
+    // The byte after the first GS ! (0x1d 0x21) and after the first ESC ! (0x1b 0x21).
+    const after = (bytes: Uint8Array, lead: number) => { const all = Array.from(bytes); const at = all.findIndex((value, index) => value === lead && all[index + 1] === 0x21); return all[at + 2]; };
+    const sizeOf = (bytes: Uint8Array) => after(bytes, 0x1d);
+    const modeOf = (bytes: Uint8Array) => after(bytes, 0x1b);
     expect(sizeOf(encodeEscPos(layout, { columns: 42 }))).toBe(0x01);
     expect(sizeOf(encodeEscPos(layout, { columns: 42, textSize: "normal" }))).toBe(0x00);
     expect(sizeOf(encodeEscPos(layout, { columns: 42, textSize: "xlarge" }))).toBe(0x11);
+    // ESC ! carries the same size for printers that ignore GS ! (the kitchen's TM-U220B, owner 2026-10-13).
+    expect(modeOf(encodeEscPos(layout, { columns: 42 }))).toBe(0x10);
+    expect(modeOf(encodeEscPos(layout, { columns: 42, textSize: "normal" }))).toBe(0x00);
+    expect(modeOf(encodeEscPos(layout, { columns: 42, textSize: "xlarge" }))).toBe(0x30);
     const long = { title: "t", lines: [{ kind: "text" as const, text: "x".repeat(30) }] };
     const lines = String.fromCharCode(...encodeEscPos(long, { columns: 42, textSize: "xlarge", cut: "none" })).split("\n").filter((line) => line.includes("x"));
     expect(lines.length).toBe(2);

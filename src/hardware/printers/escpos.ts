@@ -7,7 +7,8 @@ import type { CutStyle } from "./models";
  * (build sheet §2.7, §59: no protocol is assumed before then).
  *
  * Only the long-standing core commands are used: initialize (ESC @), justify
- * (ESC a), emphasis (ESC E), character size (GS !), feed (ESC d), partial cut
+ * (ESC a), print mode (ESC !, which the TM-U220B needs for big text), emphasis
+ * (ESC E), character size (GS !), feed (ESC d), partial cut
  * (GS V 66 n on the TM-T20III; ESC d then GS V 1 on the TM-U220B, whose
  * cutter sits below the print head), red ink (ESC r, two-colour ribbon on the
  * TM-U220B only), and the drawer pulse (ESC p) for a drawer wired to the
@@ -45,10 +46,17 @@ export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): 
   // GS ! n: high nibble = width ×(n+1), low nibble = height ×(n+1).
   //   normal: 1×1, "large" lines 2×2.   large: 1×2, "large" lines 2×2.   xlarge: 2×2 everywhere (already the widest).
   const sizeByte = (large: boolean) => (size === "xlarge" ? 0x11 : large ? 0x11 : size === "large" ? 0x01 : 0x00);
+  // The same size again as ESC ! (print mode): the kitchen's TM-U220B ignores
+  // GS ! and only grows the text with ESC ! — bit 3 bold, bit 4 double height,
+  // bit 5 double width (owner's photo, 2026-10-13: the ticket was still small).
+  const modeByte = (bold: boolean, large: boolean) => {
+    const value = sizeByte(large);
+    return (bold ? 0x08 : 0) | (value & 0x01 ? 0x10 : 0) | (value & 0x10 ? 0x20 : 0);
+  };
   const bytes: number[] = [ESC, 0x40];
   const align = (value: "left" | "center" | "right" = "left") => bytes.push(ESC, 0x61, value === "center" ? 1 : value === "right" ? 2 : 0);
   const style = (bold = false, large = false, highlight = false) => {
-    bytes.push(ESC, 0x45, bold ? 1 : 0, GS, 0x21, sizeByte(large));
+    bytes.push(ESC, 0x21, modeByte(bold, large), ESC, 0x45, bold ? 1 : 0, GS, 0x21, sizeByte(large));
     if (options.red) bytes.push(ESC, 0x72, highlight ? 1 : 0);
   };
   for (const line of layout.lines) {
