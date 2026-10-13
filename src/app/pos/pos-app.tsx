@@ -16,7 +16,7 @@ import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOp
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
 import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
-import { connectStripeReader, describeNativeApp, startStripeReader } from "@/stores/stripe-reader";
+import { connectStripeReader, describeNativeApp, keepStripeReaderConnected, startStripeReader } from "@/stores/stripe-reader";
 import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
 import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
@@ -30,7 +30,9 @@ import { setCustomerTipOptions, startCustomerDisplayLink } from "@/stores/custom
 import { TestOrdersPanel } from "./test-orders-panel";
 import { ClockButton } from "./clock-button";
 import { OpenOrdersPanel } from "./open-orders-panel";
+import { CurrentOrdersRail } from "./current-orders-rail";
 import { DayOrdersScreen } from "./day-orders-screen";
+import { CloseoutScreen } from "./closeout-screen";
 import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
@@ -38,7 +40,7 @@ import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 
-type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "more";
+type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "closeout" | "more";
 
 type Props = {
   menu: PublicMenu;
@@ -50,6 +52,8 @@ type Props = {
   canManageOrders: boolean;
   canOpenAdmin: boolean;
   canManageHardware: boolean;
+  /** Manager: sees and runs the end-of-day close out. */
+  canCloseOut: boolean;
   /** Phase 5: module-aware sections for this workspace. */
   callerIdEnabled: boolean;
   deliveryEnabled: boolean;
@@ -67,7 +71,7 @@ type Props = {
  * the cashier away from what they are doing (§6, §34.1).
  */
 export function PosApp(props: Props) {
-  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = props;
+  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, canCloseOut, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = props;
   // Coming back to the register locks Admin again: the next person has to type
   // a manager PIN to get in (owner, 2026-10-12).
   useEffect(() => { void fetch("/api/admin-lock", { method: "POST" }).catch(() => undefined); }, []);
@@ -101,9 +105,9 @@ export function PosApp(props: Props) {
     logDevice("pos.open", "", { payment_terminal_mode: hardware.payment_terminal_mode, runtime_ready: runtimeReady, ...describeNativeApp() });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per page load
   }, []);
-  // Stripe Reader M2: inside the POS app, reconnect the reader as soon as the register opens.
+  // Stripe Reader M2: inside the POS app, connect as soon as the register opens and keep it connected.
   useEffect(() => {
-    if (stripeReaderOn && runtimeReady && startStripeReader()) void connectStripeReader();
+    if (stripeReaderOn && runtimeReady && startStripeReader()) { void connectStripeReader(); keepStripeReaderConnected(); }
   }, [stripeReaderOn, runtimeReady]);
   const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
@@ -181,6 +185,7 @@ export function PosApp(props: Props) {
     { id: "today", label: "Today's Orders" },
     { id: "customers", label: "Customers" },
     ...(canManageOrders && deliveryEnabled && settings.delivery_enabled ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
+    ...(canCloseOut ? [{ id: "closeout" as const, label: "Close Out" }] : []),
     { id: "more", label: "More" },
   ];
 
@@ -215,13 +220,19 @@ export function PosApp(props: Props) {
       <a className="ml-auto flex min-h-11 items-center whitespace-nowrap rounded-xl border border-dashed border-wayne-border-strong px-4 text-sm font-black text-wayne-ink hover:bg-wayne-cream" href="/pos/display">🖥 Customer screen</a>
     </nav>
 
-    {section === "order" ? <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} /> : null}
+    {section === "order" ? <div className="flex min-h-0 flex-1">
+      <CurrentOrdersRail canSeeOrders={canManageOrders} onOpenOrders={() => { setPayFocus(null); setSection(canManageOrders ? "orders" : "today"); }} onPay={takePayment} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} />
+      </div>
+    </div> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
+    {section === "closeout" && canCloseOut ? <CloseoutScreen storeName={settings.store_name || workspaceName} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
 }

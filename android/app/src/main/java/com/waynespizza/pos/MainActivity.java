@@ -65,10 +65,12 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        // The counter must always start with the current production POS. Older
-        // Elo WebViews can otherwise retain an outdated HTML/RSC response and
-        // hide newly enabled hardware such as the Stripe Reader M2.
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // Faster start (owner, 2026-10-13 "make it easier to load the system"):
+        // the server marks every POS page no-store, so the screen itself is
+        // always fresh, while the app's code files — which never change under
+        // the same name — load from the tablet instead of being downloaded
+        // again on every launch.
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setAllowFileAccess(false);
@@ -92,7 +94,12 @@ public class MainActivity extends Activity {
         // Always start the register from the current production page instead.
         // Keep sign-in cookies, but discard only reusable web assets from a
         // prior deployment before requesting the screen again.
-        webView.clearCache(true);
+        // A new app version starts clean once; otherwise the cache is kept.
+        android.content.SharedPreferences prefs = getSharedPreferences("waynes-pos", MODE_PRIVATE);
+        if (prefs.getInt("cache_version", 0) != BuildConfig.VERSION_CODE) {
+            webView.clearCache(true);
+            prefs.edit().putInt("cache_version", BuildConfig.VERSION_CODE).apply();
+        }
         webView.loadUrl(BuildConfig.POS_URL);
         // Ask for the local network up front so the first ring and the first ticket don't wait on a dialog.
         withLocalNetwork(granted -> { });

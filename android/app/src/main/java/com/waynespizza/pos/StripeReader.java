@@ -603,7 +603,7 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
 
     @Override
     public void onDisconnect(DisconnectReason reason) {
-        main.post(() -> setState("disconnected", "The card reader disconnected. Press its button once, then Connect reader."));
+        main.post(() -> setState("disconnected", "The card reader disconnected — reconnecting by itself. If it stays off, press its button once."));
     }
 
     @Override
@@ -618,6 +618,6 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
 
     @Override
     public void onReaderReconnectFailed(Reader reader) {
-        main.post(() -> setState("disconnected", "Couldn't reconnect to the card reader. Press its button once, then Connect reader."));
+        main.post(() -> setState("disconnected", "Reconnecting to the card reader… If it stays off, press its button once."));
     }
 }

@@ -40,6 +40,7 @@ export default async function PosPage() {
       workspaceName={settings.store_name || access.workspace_name || "POS"}
       canManageDiscount={hasPermission(access, "pos.discount.manage")}
       canManageHardware={hasPermission(access, "hardware.manage")}
+      canCloseOut={hasPermission(access, "cash.manage") || hasPermission(access, "reports.view")}
       canManageOrders={hasPermission(access, "orders.manage")}
       canOpenAdmin={hasPermission(access, "admin.access")}
       hardware={effectiveHardware}

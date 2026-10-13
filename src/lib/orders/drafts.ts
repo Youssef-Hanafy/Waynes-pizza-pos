@@ -231,7 +231,8 @@ export function draftToOrderPayload(draft: PosDraft) {
     special_instructions: draft.orderNote,
     items: draft.cart.map((line: CartLine) => ({
       menu_item_id: line.menu_item_id, variant_id: line.variant_id, quantity: line.quantity,
-      special_instructions: line.special_instructions, modifiers: line.modifiers, lists_included: true,
+      special_instructions: line.special_instructions, modifiers: line.open_item ? [] : line.modifiers, lists_included: !line.open_item,
+      ...(line.open_item ? { open_item: line.open_item } : {}),
     })),
   };
 }

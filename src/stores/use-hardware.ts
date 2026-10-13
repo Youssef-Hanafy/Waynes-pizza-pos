@@ -33,7 +33,7 @@ export function useHardware(hardware: HardwareSettings, options: { drafts?: bool
     const [receipt, kitchen, drawer] = JSON.parse(printerKey) as [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>];
     const runtime = createHardwareRuntime({
       callerIdProvider: providerKind, simulatorEnabled, lineCount, udpPort, bindAddress, deviceIp,
-      receiptPrinter: printerConfigFrom(receipt), kitchenPrinter: printerConfigFrom(kitchen),
+      receiptPrinter: printerConfigFrom(receipt), kitchenPrinter: printerConfigFrom(kitchen, "kitchen"),
       drawerConnection: typeof drawer.connection === "string" ? drawer.connection : "none",
     }, hardwareEventBus, createBrowserSupabaseClient());
     setHardwareRuntime(runtime);

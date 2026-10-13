@@ -53,7 +53,7 @@ export async function persistHardwareSettings(form: FormData): Promise<HardwareS
       port: port(form, "kitchen_port"), protocol: text(form, "kitchen_protocol"), enabled: form.get("kitchen_enabled") === "on",
       paper_width_mm: Number(text(form, "kitchen_paper") || 76), columns: columns(form, "kitchen_columns"), two_color: form.get("kitchen_two_color") === "on",
       routing_categories: form.getAll("kitchen_categories").map(String),
-      text_size: text(form, "kitchen_text_size") || "large",
+      text_size: text(form, "kitchen_text_size") || "xlarge",
     },
     cash_drawer: { connection: text(form, "drawer_connection") || "none", model: text(form, "drawer_model") },
     payment_terminal_mode: text(form, "payment_terminal_mode") || "manual_external",

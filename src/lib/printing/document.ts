@@ -50,8 +50,8 @@ export type PrintLayout = { title: string; lines: PrintLine[] };
  * and wide (half the characters per line).
  */
 export type TextSize = "normal" | "large" | "xlarge";
-export function textSizeFrom(value: unknown): TextSize {
-  return value === "normal" || value === "xlarge" ? value : "large";
+export function textSizeFrom(value: unknown, fallback: TextSize = "large"): TextSize {
+  return value === "normal" || value === "large" || value === "xlarge" ? value : fallback;
 }
 
 const money = (cents: number) => `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toFixed(2)}`;
@@ -84,7 +84,6 @@ export function paymentBanner(order: PrintDocument["order"], withAmount = true):
     case "partially_refunded":
       return [{ kind: "text", text: order.payment_status === "refunded" ? "REFUNDED" : "PART REFUNDED", align: "center", bold: true, large: true }];
     default: {
-      // Kitchen tickets never show prices.
       const amount = withAmount ? ` ${money(order.total_cents)}` : "";
       const due = order.fulfillment_type === "delivery" && order.payment_method === "cash" ? `COLLECT${amount} AT THE DOOR` : `COLLECT${amount || " PAYMENT"}`;
       return [
@@ -229,17 +228,45 @@ export function routeToKitchen(doc: PrintDocument, routingCategories: readonly s
   return doc.items.filter((item) => item.category !== null && routed.has(item.category.trim().toLowerCase()));
 }
 
-/** Kitchen ticket: big, no prices, only the items routed to this printer. */
+/** How many things are on a ticket: quantities added up (2× Coke counts 2). */
+export function itemCount(items: readonly PrintDocument["items"][number][]) {
+  return items.reduce((sum, item) => sum + Math.max(item.quantity, 0), 0);
+}
+
+/**
+ * Kitchen ticket: big, only the items routed to this printer, how many items
+ * are on it, and the order's totals at the bottom (owner, 2026-10-13: "totals
+ * for the orders should also be printed on the tickets for the kitchen"; "on
+ * the ticket it should write how many items are on the ticket").  Item lines
+ * stay without prices so the cook reads only what to make.
+ */
 export function buildKitchenTicket(doc: PrintDocument, routingCategories: readonly string[] = []): PrintLayout | null {
   const items = routeToKitchen(doc, routingCategories);
   if (!items.length) return null;
+  const order = doc.order;
+  const count = itemCount(items);
+  const wholeOrder = itemCount(doc.items);
+  const countLine = `${count} ITEM${count === 1 ? "" : "S"}${count !== wholeOrder ? ` (OF ${wholeOrder} ON ORDER)` : ""}`;
+  const totals: PrintLine[] = [
+    { kind: "rule" },
+    { kind: "text", text: countLine, align: "center", bold: true, large: true },
+    { kind: "rule" },
+    { kind: "pair", left: "Subtotal", right: money(order.subtotal_cents) },
+  ];
+  if (order.discount_cents) totals.push({ kind: "pair", left: "Discount", right: money(-order.discount_cents) });
+  if (order.delivery_fee_cents) totals.push({ kind: "pair", left: "Delivery", right: money(order.delivery_fee_cents) });
+  totals.push({ kind: "pair", left: "Tax", right: money(order.tax_cents) });
+  if (order.tip_cents) totals.push({ kind: "pair", left: "Tip", right: money(order.tip_cents) });
+  totals.push({ kind: "pair", left: "TOTAL", right: money(order.total_cents), bold: true, large: true });
   return {
-    title: `Kitchen ${doc.order.order_number}`,
+    title: `Kitchen ${order.order_number}`,
     lines: [
-      ...heading(doc, false),
+      ...heading(doc, true),
+      { kind: "text", text: countLine, align: "center", bold: true },
       { kind: "rule" },
       ...items.flatMap((item) => [...itemLines(item, false), { kind: "feed" as const, lines: 1 }]),
-      ...(doc.order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${doc.order.special_instructions}`, bold: true, highlight: true }] : []),
+      ...(order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${order.special_instructions}`, bold: true, highlight: true }] : []),
+      ...totals,
       { kind: "feed", lines: 3 },
     ],
   };

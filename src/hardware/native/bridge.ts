@@ -97,18 +97,24 @@ declare global {
  * box reported the previous call ended gets a new one.
  */
 export function createPacketInterpreter() {
-  const seen = new Map<string, { ended: boolean; generation: number }>();
+  const seen = new Map<string, { ended: boolean; generation: number; lastAt: number }>();
+  // The box repeats one ring within seconds.  Anything quieter than this is a
+  // new call even if its "end" record was lost, so a customer calling back
+  // within the hour still pops a fresh card with their name.
+  const NEW_CALL_AFTER_MS = 90_000;
   return function interpret(text: string, from: string, receivedAt: number): NativeCall | null {
     const record = parseWhozzCallingRecord(text);
     if (!record || record.direction !== "inbound") return null;
     const base = `${record.unit_number || from}|${record.line_number}|${record.caller_number}`;
-    const entry = seen.get(base) ?? { ended: false, generation: 0 };
+    const entry = seen.get(base) ?? { ended: false, generation: 0, lastAt: receivedAt };
     if (record.event === "end") {
-      seen.set(base, { ended: true, generation: entry.generation });
+      seen.set(base, { ended: true, generation: entry.generation, lastAt: receivedAt });
       return null;
     }
-    const generation = entry.ended ? entry.generation + 1 : entry.generation;
-    seen.set(base, { ended: false, generation });
+    const quiet = seen.has(base) && receivedAt - entry.lastAt > NEW_CALL_AFTER_MS;
+    const generation = entry.ended || quiet ? entry.generation + 1 : entry.generation;
+    seen.delete(base);
+    seen.set(base, { ended: false, generation, lastAt: receivedAt });
     if (seen.size > 500) seen.delete(seen.keys().next().value!);
     return {
       id: `cid-${base.replace(/[^0-9A-Za-z]/g, "")}-${generation}-${Math.floor(receivedAt / 3_600_000)}`,

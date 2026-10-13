@@ -161,6 +161,7 @@ export function countedPortions(group: { choices: ChoiceLike[] }, counts: Record
 }
 
 export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {
+  if (line.open_item) return line.open_item.price_cents;
   const item = findMenuItem(menu, line.menu_item_id);
   if (!item) return 0;
   const variant = item.variants.find(

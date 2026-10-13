@@ -1,5 +1,6 @@
 package com.waynespizza.pos;
 
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
@@ -87,10 +88,22 @@ final class NativeBridge {
             info.put("version", BuildConfig.VERSION_NAME);
             info.put("android", Build.VERSION.SDK_INT);
             info.put("model", Build.MODEL);
+            info.put("hardwareKeyboard", hardwareKeyboard());
         } catch (JSONException ignored) {
             // Only constant keys: cannot happen.
         }
         return info.toString();
+    }
+
+    /**
+     * A physical (USB / Bluetooth) keyboard is plugged in and usable.  The POS
+     * then never shows its on-screen keyboard (owner, 2026-10-13).
+     */
+    @JavascriptInterface
+    public boolean hardwareKeyboard() {
+        Configuration config = activity.getResources().getConfiguration();
+        return config.keyboard == Configuration.KEYBOARD_QWERTY
+            && config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO;
     }
 
     /** Sends bytes the web app already encoded (ESC/POS) to a printer on the store network. */

@@ -200,7 +200,7 @@ function PrinterFields({ defaultPaper, namePlaceholder, prefix, printer }: { def
       <Input className="min-w-0" inputClassName="w-full min-w-0" defaultValue={printer.columns ?? ""} label="Chars / line" max={64} min={24} name={`${prefix}_columns`} placeholder="Auto" type="number" />
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <SelectField defaultValue={printer.text_size === "normal" || printer.text_size === "xlarge" ? printer.text_size : "large"} id={`${prefix}_text_size`} label="Text size"
+      <SelectField defaultValue={printer.text_size === "normal" || printer.text_size === "large" || printer.text_size === "xlarge" ? printer.text_size : prefix === "kitchen" ? "xlarge" : "large"} id={`${prefix}_text_size`} label="Text size"
         options={[["normal", "Normal (small)"], ["large", "Large — taller letters"], ["xlarge", "Extra large — tall and wide"]]} />
       <p className="self-end text-xs text-wayne-muted">Use Test print to see it. Extra large fits half as many letters per line.</p>
     </div>

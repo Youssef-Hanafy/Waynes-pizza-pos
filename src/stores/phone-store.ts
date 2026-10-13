@@ -117,8 +117,12 @@ export const phoneActions = {
     void phoneActions.record(result.call.key, event);
   },
 
-  /** Record a ring this register heard, then show who it is. */
-  async record(key: string, event: IncomingCallEvent) {
+  /**
+   * Record a ring this register heard, then show who it is.  A failed lookup
+   * is tried again by itself a few times (2 s, 5 s, 12 s) so the customer's
+   * name still lands on the line while the phone is ringing.
+   */
+  async record(key: string, event: IncomingCallEvent, attempt = 0): Promise<void> {
     try {
       const response = await fetch("/api/phone/events", {
         method: "POST",
@@ -135,6 +139,13 @@ export const phoneActions = {
       if (!response.ok || !parsed.success || !parsed.data.call) throw new Error(errorText(body, "The call could not be looked up."));
       phoneStore.set((state) => applyServerCall(state, parsed.data.call as PhoneCall));
     } catch (error) {
+      const delays = [2_000, 5_000, 12_000];
+      if (attempt < delays.length) {
+        setTimeout(() => {
+          const call = phoneStore.get().calls[key];
+          if (call && !call.serverId && ["incoming", "selected"].includes(call.status)) void phoneActions.record(key, event, attempt + 1);
+        }, delays[attempt]);
+      }
       phoneStore.set((state) => patchCall(state, key, {
         lookup: "failed",
         unsynced: true,

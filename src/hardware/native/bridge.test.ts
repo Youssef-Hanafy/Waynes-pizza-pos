@@ -20,6 +20,13 @@ describe("Android caller ID packets (build sheet §17, §52)", () => {
     expect(again.id).not.toBe(first.id);
   });
 
+  it("treats the same number ringing again after a quiet minute and a half as a new call, even without an end record", () => {
+    const interpret = createPacketInterpreter();
+    const first = interpret(ring("01", "S", "7744645557"), "x", 0)!;
+    expect(interpret(ring("01", "S", "7744645557"), "x", 5_000)!.id).toBe(first.id);
+    expect(interpret(ring("01", "S", "7744645557"), "x", 200_000)!.id).not.toBe(first.id);
+  });
+
   it("ignores packets that are not caller ID records", () => {
     expect(createPacketInterpreter()("hello", "x", 0)).toBeNull();
   });

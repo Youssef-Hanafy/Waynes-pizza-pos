@@ -240,7 +240,7 @@ export function createPrinterProvider(kind: "receipt" | "kitchen", config: Print
 }
 
 /** Admin → Hardware stores printers as loose JSON; read it defensively. */
-export function printerConfigFrom(raw: Record<string, unknown> | undefined): PrinterConfig {
+export function printerConfigFrom(raw: Record<string, unknown> | undefined, kind: "receipt" | "kitchen" = "receipt"): PrinterConfig {
   const value = raw ?? {};
   const text = (key: string) => (typeof value[key] === "string" ? String(value[key]) : "");
   const port = typeof value.port === "number" && value.port > 0 && value.port <= 65535 ? value.port : null;
@@ -256,6 +256,7 @@ export function printerConfigFrom(raw: Record<string, unknown> | undefined): Pri
     twoColor: value.two_color === true,
     onlineOrderSlips: value.online_order_slips !== false,
     tipSlip: tipSlip === "card" || tipSlip === "never" ? tipSlip : "always",
-    textSize: textSizeFrom(value.text_size),
+    // Kitchen tickets are read from across the line: extra large unless the owner picked a size.
+    textSize: textSizeFrom(value.text_size, kind === "kitchen" ? "xlarge" : "large"),
   };
 }

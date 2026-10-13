@@ -30,7 +30,7 @@ export function usePrintStationRunner(hardware: HardwareSettings, runtimeReady: 
     return startPrintStation({
       client,
       receipt: { config: printerConfigFrom(receipt), provider: runtime.receiptPrinter },
-      kitchen: { config: printerConfigFrom(kitchen), provider: runtime.kitchenPrinter },
+      kitchen: { config: printerConfigFrom(kitchen, "kitchen"), provider: runtime.kitchenPrinter },
     });
   }, [station.enabled, runtimeReady, printerKey]);
 

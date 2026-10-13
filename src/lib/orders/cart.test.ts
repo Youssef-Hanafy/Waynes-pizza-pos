@@ -11,6 +11,7 @@ import {
   readCart,
 } from "./cart";
 import type { PublicMenu } from "@/lib/menu/schemas";
+import { OPEN_ITEM_ID } from "./schemas";
 
 const menu = [
   {
@@ -282,5 +283,13 @@ describe("included portions per size (a Large calzone comes with 3 sauces)", () 
   it("No Sauce never uses up a free one", () => {
     const lines = groupAllowanceLines(sauces, sauces.size_rules[0]!, small.id, [{ choice_id: none.id, quantity: 1 }, { choice_id: ranch.id, quantity: 1 }]);
     expect(lines.find((entry) => entry.choice_id === ranch.id)?.free).toBe(1);
+  });
+});
+
+describe("open items (owner, 2026-10-13)", () => {
+  it("prices an open item at what the cashier typed, whatever the menu says", () => {
+    const line = { line_id: "o", menu_item_id: OPEN_ITEM_ID, variant_id: null, quantity: 3, special_instructions: "", modifiers: [], open_item: { name: "Extra cup", price_cents: 150 } };
+    expect(cartLineUnitCents([] as unknown as PublicMenu, line)).toBe(150);
+    expect(cartSubtotalCents([] as unknown as PublicMenu, [line])).toBe(450);
   });
 });

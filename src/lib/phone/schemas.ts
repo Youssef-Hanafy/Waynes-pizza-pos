@@ -198,14 +198,22 @@ export const phoneBoardSchema = z.object({
 export type PhoneBoard = z.infer<typeof phoneBoardSchema>;
 
 /** What an in-store provider (simulator now, Android later) reports. */
+/** Text safe to store: control characters (NUL above all) become spaces, then trimmed. */
+export function printable(value: string) {
+  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim();
+}
+
 export const posCallReportSchema = z.object({
   event_key: z.string().trim().min(8).max(120),
   line_number: z.number().int().min(1).max(8),
   caller_number: z.string().trim().max(40),
-  caller_name: z.string().trim().max(80).optional().default(""),
-  device_id: z.string().trim().max(80).optional().default(""),
+  caller_name: z.string().optional().default("").transform((value) => printable(value).slice(0, 80)),
+  device_id: z.string().optional().default("").transform((value) => printable(value).slice(0, 80)),
   occurred_at: z.iso.datetime({ offset: true }).optional(),
-  raw_record: z.string().max(400).optional().default(""),
+  // The Ethernet Link header carries raw unit/serial bytes (NULs included).
+  // Postgres text cannot hold a NUL, so a raw packet sent as-is made every
+  // real ring fail to record and never match its customer (2026-10-13 fix).
+  raw_record: z.string().optional().default("").transform((value) => printable(value).slice(0, 400)),
   source: z.enum(["simulated", "android_native"]),
 });
 export type PosCallReport = z.input<typeof posCallReportSchema>;

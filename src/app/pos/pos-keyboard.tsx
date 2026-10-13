@@ -15,6 +15,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Mo
  * and each key writes into the focused box the same way typing does, so every
  * form on the POS works unchanged.  Per register it can be switched off in
  * More → This register (then the tablet's own keyboard is used again).
+ * Enter always puts it away, and with a physical keyboard plugged in it never
+ * opens at all (owner, 2026-10-13).
  */
 const STORAGE = "wayne-pos-keyboard";
 type Setting = "auto" | "on" | "off";
@@ -51,6 +53,43 @@ export function posKeyboardEnabled(setting: Setting = getPosKeyboardSetting()) {
   const touchOnly = window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(any-pointer: fine)").matches;
   const tablet = Math.min(window.screen.width, window.screen.height) >= 560;
   return touchOnly && tablet;
+}
+
+/**
+ * A physical keyboard is plugged in (owner, 2026-10-13: "if it detects a
+ * keyboard plugged in it will never prompt the screen keyboard").  The
+ * Android app (1.4+) reports it directly and notices plugging / unplugging;
+ * on anything else, a real key press on a hardware keyboard turns the
+ * on-screen one off for the rest of the visit.
+ */
+const PHYSICAL = "wayne-pos-physical-keyboard";
+
+function nativeHardwareKeyboard(): boolean | null {
+  try {
+    const android = (window as unknown as { WaynesAndroid?: { hardwareKeyboard?: () => boolean } }).WaynesAndroid;
+    return typeof android?.hardwareKeyboard === "function" ? Boolean(android.hardwareKeyboard()) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function physicalKeyboardPresent(): boolean {
+  if (typeof window === "undefined") return false;
+  const native = nativeHardwareKeyboard();
+  if (native !== null) return native;
+  try { return window.sessionStorage.getItem(PHYSICAL) === "yes"; } catch { return false; }
+}
+
+/** A key press that came from real keys, not from a touch keyboard or from this one. */
+export function isHardwareKeyPress(event: Pick<KeyboardEvent, "isTrusted" | "key" | "keyCode">) {
+  if (!event.isTrusted) return false;
+  // Touch keyboards (IMEs) report "Unidentified" / 229 while composing.
+  if (event.key === "Unidentified" || event.key === "Process" || event.keyCode === 229) return false;
+  return event.key.length === 1 || ["Enter", "Backspace", "Tab", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key);
+}
+
+function notePhysicalKeyboard() {
+  try { window.sessionStorage.setItem(PHYSICAL, "yes"); } catch { /* this page only */ }
 }
 
 function subscribe(listener: () => void) {
@@ -143,6 +182,28 @@ export function PosKeyboard() {
   const [layout, setLayout] = useState<Layout>("letters");
   const [shift, setShift] = useState(false);
   const panel = useRef<HTMLDivElement | null>(null);
+  const [physical, setPhysical] = useState(false);
+
+  // Physical keyboard: checked at start, on every box tapped, and on any real key press.
+  useEffect(() => {
+    if (!enabled) return;
+    const check = () => setPhysical(physicalKeyboardPresent());
+    const onKey = (event: KeyboardEvent) => {
+      if (!isHardwareKeyPress(event) || nativeHardwareKeyboard() === false) return;
+      notePhysicalKeyboard();
+      setPhysical(true);
+    };
+    const first = window.setTimeout(check, 0);
+    const poll = window.setInterval(check, 5_000);
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("focusin", check, true);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(poll);
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("focusin", check, true);
+    };
+  }, [enabled]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setEnabled(posKeyboardEnabled(setting)), 0);
@@ -231,18 +292,29 @@ export function PosKeyboard() {
     });
   }, [field]);
 
-  /** Next box on the page (like the keyboard's Next key); the last one closes the keyboard. */
-  const next = useCallback(() => {
+  /**
+   * Enter: does what Enter on a real keyboard does in that box (search, save,
+   * go to the next step), then ALWAYS puts the keyboard away (owner,
+   * 2026-10-13).  Tap the next box to keep typing.
+   */
+  const enter = useCallback(() => {
     if (!field) return;
-    if (field instanceof HTMLTextAreaElement) { type("\n"); return; }
-    const scope: ParentNode = field.form ?? document;
-    const fields = Array.from(scope.querySelectorAll("input, textarea")).filter((node): node is Field => isField(node) && (node as HTMLElement).offsetParent !== null);
-    const index = fields.indexOf(field);
-    const following = index >= 0 ? fields[index + 1] : undefined;
-    if (following) following.focus(); else field.blur();
-  }, [field, type]);
+    const target = field;
+    if (!(target instanceof HTMLTextAreaElement)) {
+      const init = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true } as KeyboardEventInit;
+      const allowed = target.dispatchEvent(new KeyboardEvent("keydown", init));
+      target.dispatchEvent(new KeyboardEvent("keyup", init));
+      const form = target.form;
+      // Like a real Enter: submits the box's form when it has a submit button.
+      if (allowed && form && form.querySelector("button[type=submit], button:not([type]), input[type=submit]")) {
+        try { form.requestSubmit(); } catch { /* the form refused: nothing to do */ }
+      }
+    }
+    target.blur();
+    setField(null);
+  }, [field]);
 
-  if (!enabled || !field) return null;
+  if (!enabled || !field || (physical && setting === "auto")) return null;
 
   // Keys never take the focus away from the box being typed in.
   const hold = (event: ReactPointerEvent | ReactMouseEvent) => event.preventDefault();
@@ -260,7 +332,7 @@ export function PosKeyboard() {
       {["4", "5", "6"].map((digit) => key(digit, () => type(digit)))}
       {key("ABC", () => setLayout("letters"), "bg-[#b9bcc2] text-base", "Letters")}
       {["7", "8", "9"].map((digit) => key(digit, () => type(digit)))}
-      {key("Next", next, "bg-[#b9bcc2] text-base")}
+      {key("Enter", enter, "bg-[#b9bcc2] text-base")}
       {key(".", () => type("."))}
       {key("0", () => type("0"))}
       {key("-", () => type("-"))}
@@ -275,7 +347,7 @@ export function PosKeyboard() {
         {key(isEmail ? "@" : "123", () => (isEmail ? type("@") : setLayout("numbers")), "bg-[#b9bcc2] text-base", isEmail ? "@" : "Numbers")}
         {key("space", () => type(" "), "text-base text-wayne-muted", "Space")}
         {key("⌫", backspace, "bg-[#b9bcc2]", "Delete")}
-        {key("Next", next, "bg-[#b9bcc2] text-base")}
+        {key("Enter ⏎", enter, "bg-[#b9bcc2] text-base", "Enter")}
         {key("Done", () => field.blur(), "bg-wayne-green text-base text-white", "Hide keyboard")}
       </div>
     </div>}

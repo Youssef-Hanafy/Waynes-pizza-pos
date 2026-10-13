@@ -39,7 +39,11 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const ticket = layoutToText(buildKitchenTicket(doc, ["Pizza"])!).join("\n");
     expect(ticket).toContain("Cheese Pizza");
     expect(ticket).not.toContain("Coke");
-    expect(ticket).not.toContain("$");
+    // Item lines carry no prices; the order totals and the item count are printed (owner, 2026-10-13).
+    expect(ticket).not.toMatch(/Cheese Pizza\s+\$/);
+    expect(ticket).toMatch(/TOTAL\s+\$33\.99/);
+    expect(ticket).toContain("1 ITEM (OF 2 ON ORDER)");
+    expect(layoutToText(buildKitchenTicket(doc)!).join("\n")).toContain("2 ITEMS");
     expect(buildKitchenTicket(doc, ["Desserts"])).toBeNull();
   });
 
@@ -108,7 +112,7 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("says PAID or NOT PAID in big letters at the top of every slip (owner, 2026-10-12)", () => {
     const unpaid = layoutToText(buildKitchenTicket(doc)!, 40);
     expect(unpaid.slice(0, 3).join("\n")).toContain("!! NOT PAID !!");
-    expect(unpaid.join("\n")).toContain("COLLECT AT THE DOOR");
+    expect(unpaid.join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
     expect(layoutToText(buildReceipt(doc), 48).join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
     const paid = { ...doc, order: { ...doc.order, fulfillment_type: "pickup", payment_status: "paid", payment_method: "card" } };
     const paidTicket = layoutToText(buildKitchenTicket(paid)!, 40).join("\n");

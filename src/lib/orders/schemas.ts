@@ -5,6 +5,18 @@ export const cartModifierSchema = z.object({
   quantity: z.number().int().min(1).max(20),
 });
 
+/**
+ * Open item (owner, 2026-10-13: "open food for extra costs, misc"): a line the
+ * cashier names and prices on the spot.  POS only — the website never sends
+ * one.  Its menu_item_id is OPEN_ITEM_ID, which is not a real menu item.
+ */
+export const OPEN_ITEM_ID = "00000000-0000-4000-8000-0000000000f0";
+export const openItemSchema = z.object({
+  name: z.string().trim().min(1, "Name the open item.").max(80),
+  price_cents: z.number().int().min(0).max(100_000),
+});
+export type OpenItem = z.infer<typeof openItemSchema>;
+
 export const cartLineSchema = z.object({
   line_id: z.string().min(1).max(100),
   menu_item_id: z.uuid(),
@@ -12,6 +24,7 @@ export const cartLineSchema = z.object({
   quantity: z.number().int().min(1).max(20),
   special_instructions: z.string().trim().max(500),
   modifiers: z.array(cartModifierSchema).max(100),
+  open_item: openItemSchema.optional(),
 });
 
 // What an order screen sends for one line.  `lists_included` says the screen
@@ -43,7 +56,8 @@ export const checkoutInputSchema = z
       postal_code: z.string().trim().max(20),
       delivery_instructions: z.string().trim().max(1000),
     }),
-    items: z.array(orderLineSchema).min(1).max(50),
+    // Open items are POS only: the website can never send its own price.
+    items: z.array(orderLineSchema.omit({ open_item: true })).min(1).max(50),
   })
   .superRefine((value, context) => {
     if (value.fulfillment_type === "delivery") {

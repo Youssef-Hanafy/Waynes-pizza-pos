@@ -148,6 +148,42 @@ export function connectStripeReader(options: { simulated?: boolean } = {}): Prom
   return connecting;
 }
 
+let keeping = false;
+
+/**
+ * Keep the M2 connected all day (owner, 2026-10-13: "the M2 card reader should
+ * never disconnect and be on 24/7").  Stripe's SDK already reconnects by
+ * itself after a short drop; this watchdog covers everything else — a reader
+ * that slept, a reconnect that gave up, Bluetooth toggled, the app's reader
+ * reset — by connecting again on its own: after 5 s, then every 15 s, 30 s,
+ * and at most every minute until it's back.  It never interrupts a card
+ * being taken or a firmware update.
+ */
+export function keepStripeReaderConnected(): boolean {
+  const bridge = native();
+  if (!bridge || !startStripeReader()) return false;
+  if (keeping) return true;
+  keeping = true;
+  let failures = 0;
+  let nextTryAt = Date.now() + 5_000;
+  const tick = () => {
+    const state = bridge.status().state;
+    if (state === "connected") { failures = 0; nextTryAt = Date.now() + 5_000; return; }
+    if (state !== "disconnected" || connecting || Date.now() < nextTryAt) return;
+    logDevice("reader.auto_reconnect", "", { attempt: failures + 1 });
+    void connectStripeReader().then((ok) => {
+      failures = ok ? 0 : failures + 1;
+      nextTryAt = Date.now() + (ok ? 5_000 : [15_000, 30_000, 60_000][Math.min(failures - 1, 2)]!);
+    });
+  };
+  window.setInterval(tick, 5_000);
+  // Coming back to the app (screen on, app reopened) checks straight away.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { nextTryAt = 0; tick(); } });
+  window.addEventListener("online", () => { nextTryAt = 0; tick(); });
+  tick();
+  return true;
+}
+
 export type CollectOutcome =
   | { ok: true; intentId: string }
   | { ok: false; code: "DECLINED" | "CANCELED" | "NOT_CONNECTED" | "UNKNOWN"; message: string };
