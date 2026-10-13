@@ -226,13 +226,19 @@ end;
 $$;
 revoke all on function public.wayne_call_tip_auto_capture() from public, anon, authenticated;
 
+-- Same guard as the other scheduled jobs: only where pg_cron is installed
+-- (the live database), not in the test database the migrations replay into.
 do $cron$
 begin
-  if exists (select 1 from cron.job where jobname = 'wayne-tip-auto-capture') then
-    perform cron.unschedule('wayne-tip-auto-capture');
+  if to_regprocedure('cron.schedule(text,text,text)') is not null then
+    if exists (select 1 from cron.job where jobname = 'wayne-tip-auto-capture') then
+      perform cron.unschedule('wayne-tip-auto-capture');
+    end if;
+    -- 08:30 UTC = 4:30 am New York in summer (3:30 am in winter).
+    perform cron.schedule('wayne-tip-auto-capture', '30 8 * * *', 'select public.wayne_call_tip_auto_capture();');
   end if;
-  -- 08:30 UTC = 4:30 am New York in summer (3:30 am in winter).
-  perform cron.schedule('wayne-tip-auto-capture', '30 8 * * *', 'select public.wayne_call_tip_auto_capture();');
+exception when undefined_table or undefined_function or invalid_schema_name then
+  raise notice 'pg_cron is not enabled; the 4:30 am tip safety net is not scheduled.';
 end;
 $cron$;
 
