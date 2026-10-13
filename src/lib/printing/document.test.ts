@@ -120,7 +120,12 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(paidTicket).not.toContain("NOT PAID");
     expect(layoutToText(buildReceipt(paid), 48).join("\n")).toContain("** PAID - CARD **");
     const held = { ...doc, order: { ...doc.order, payment_status: "authorized", payment_method: "card" } };
-    expect(layoutToText(buildKitchenTicket(held)!, 40).join("\n")).toContain("CARD ON FILE");
+    // A card held for the tip on the slip (owner, 2026-10-13): paid by card, driver gets the slip signed.
+    const heldTicket = layoutToText(buildKitchenTicket(held)!, 40).join("\n");
+    expect(heldTicket).toContain("** PAID - CARD **");
+    expect(heldTicket).toContain("get the slip signed");
+    const heldPickup = { ...held, order: { ...held.order, fulfillment_type: "pickup" } };
+    expect(layoutToText(buildTipSignatureSlip(heldPickup), 48).join("\n")).toContain("CARD APPROVED — ADD TIP BELOW");
   });
 
   it("prints bigger text: taller by default, tall and wide on extra large", () => {

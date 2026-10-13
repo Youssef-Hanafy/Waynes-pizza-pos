@@ -1,13 +1,10 @@
 import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { maxTipCents, posCashoutRequestSchema, posCashoutResultSchema, posDeliveryBoardSchema } from "@/lib/delivery/pos-board";
+import { posCashoutRequestSchema, posCashoutResultSchema, posDeliveryBoardSchema } from "@/lib/delivery/pos-board";
 import { spokenDatabaseMessage } from "@/lib/errors/database";
 import { logger } from "@/lib/logging/logger";
-import { resolvePaymentProvider } from "@/lib/payments/config";
-import { PaymentProviderError } from "@/lib/payments/provider";
+import { captureHeldCards, type TipCapture } from "@/lib/payments/tip-capture";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-
-type Capture = { order_id: string; payment_id: string; captured_cents: number; tip_cents: number; card_brand: string | null; card_last4: string | null };
 
 /**
  * Cash a driver out (owner, 2026-10-11).
@@ -43,62 +40,18 @@ export async function POST(request: Request) {
 
   const tipFor = new Map(parsed.data.tips.map((tip) => [tip.order_id, tip.tip_cents]));
   const held = driver.orders.filter((order) => order.paid_by === "card_held");
-  const captures: Capture[] = [];
-  const skipped: string[] = [];
-  const problems: string[] = [];
+  let captures: TipCapture[] = [];
+  let skipped: string[] = [];
+  let problems: string[] = [];
 
   if (held.length) {
-    const resolved = await resolvePaymentProvider("online", { workspaceId: access.workspace_id, locationId: access.location_id ?? null });
-    const service = createServiceSupabaseClient();
-    const { data: payments } = await service.from("payments")
-      .select("id, order_id, provider, provider_payment_id, card_brand, card_last4")
-      .in("order_id", held.map((order) => order.order_id)).in("provider", ["stripe", "test"]).eq("status", "authorized")
-      .eq("workspace_id", access.workspace_id);
-
-    for (const order of held) {
-      const payment = payments?.find((candidate) => candidate.order_id === order.order_id);
-      const wanted = Math.max(0, tipFor.get(order.order_id) ?? 0);
-      const tip = Math.min(wanted, maxTipCents(order));
-      const amount = order.total_cents + tip;
-      if (wanted > tip) problems.push(`Order ${order.order_number}: this card could only take a ${tip ? `tip of ${(tip / 100).toFixed(2)}` : "tip of $0"} (Stripe's limit for this card), so ${((wanted - tip) / 100).toFixed(2)} of the tip was not charged.`);
-      // A test order's card was simulated: capture it without Stripe.
-      if (payment?.provider === "test") {
-        captures.push({ order_id: order.order_id, payment_id: payment.id, captured_cents: amount, tip_cents: tip, card_brand: payment.card_brand ?? "test", card_last4: payment.card_last4 ?? "4242" });
-        continue;
-      }
-      if (!resolved.ok || !payment?.provider_payment_id) {
-        skipped.push(order.order_id);
-        problems.push(`Order ${order.order_number}: the held card could not be reached${resolved.ok ? "" : " (Stripe isn't set up)"}. It stays on the list.`);
-        continue;
-      }
-      try {
-        const result = await resolved.value.provider.capturePayment(payment.provider_payment_id, {
-          amountCents: amount, idempotencyKey: `driver-cashout-${payment.id}-${amount}`,
-        });
-        if (result.status !== "captured") throw new PaymentProviderError("The card was not charged.", "NOT_CAPTURED");
-        const captured = result.amountCents ?? amount;
-        captures.push({
-          order_id: order.order_id, payment_id: payment.id, captured_cents: captured, tip_cents: Math.max(0, captured - order.total_cents),
-          card_brand: result.cardBrand ?? payment.card_brand ?? null, card_last4: result.cardLast4 ?? payment.card_last4 ?? null,
-        });
-      } catch (cause) {
-        // Already charged by an earlier try that didn't finish? Then use what Stripe says.
-        try {
-          const status = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
-          if (status.status === "captured" && status.amountCents) {
-            captures.push({
-              order_id: order.order_id, payment_id: payment.id, captured_cents: status.amountCents,
-              tip_cents: Math.max(0, status.amountCents - order.total_cents), card_brand: status.cardBrand ?? payment.card_brand ?? null,
-              card_last4: status.cardLast4 ?? payment.card_last4 ?? null,
-            });
-            continue;
-          }
-        } catch { /* fall through to the problem below */ }
-        logger.error("pos.driver_cashout_capture_failed", cause, { order_id: order.order_id });
-        skipped.push(order.order_id);
-        problems.push(`Order ${order.order_number}: ${cause instanceof Error ? cause.message : "the held card could not be charged"}. It stays on the list — take cash for it or try again.`);
-      }
-    }
+    // One capture per held card, order + the tip on the slip (shared with POS → Tips).
+    const result = await captureHeldCards({
+      service: createServiceSupabaseClient(), workspaceId: access.workspace_id, locationId: access.location_id ?? null,
+      requests: held.map((order) => ({ order_id: order.order_id, tip_cents: Math.max(0, tipFor.get(order.order_id) ?? 0) })),
+      keyPrefix: "driver-cashout",
+    });
+    ({ captures, skipped, problems } = result);
   }
 
   if (skipped.length === driver.orders.length) {

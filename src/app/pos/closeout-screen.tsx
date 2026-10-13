@@ -23,7 +23,7 @@ function shiftDay(day: string, by: number) {
  * "Close out the day" closes the open drawer with the count and keeps the
  * close out on file; it can be printed on the receipt printer.
  */
-export function CloseoutScreen({ storeName }: { storeName: string }) {
+export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; onOpenTips?: () => void }) {
   const [day, setDay] = useState<string | null>(null);
   const [today, setToday] = useState("");
   const [report, setReport] = useState<DayCloseout | null>(null);
@@ -110,6 +110,10 @@ export function CloseoutScreen({ storeName }: { storeName: string }) {
       </div>
       {error ? <p className="rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">{error}</p> : null}
       {report.saved ? <p className="rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok">✓ Closed out {new Date(report.saved.closed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{report.saved.closed_by_name ? ` by ${report.saved.closed_by_name}` : ""}: counted {formatCents(report.saved.counted_cash_cents)}, expected {formatCents(report.saved.expected_cash_cents)} ({varianceText(report.saved.variance_cents)}). Closing again replaces it.</p> : null}
+      {tenders.card_held_for_tip_cents ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 p-3">
+        <p className="font-black">💳 {formatCents(tenders.card_held_for_tip_cents)} in cards still waiting for tips from the slips. Add the tips and charge them before closing out.</p>
+        {onOpenTips ? <Button onClick={onOpenTips} size="sm">Go to Tips</Button> : null}
+      </div> : null}
       {report.unpaid.count ? <div className="rounded-xl border-2 border-wayne-alert bg-wayne-alert-soft p-3">
         <p className="font-black text-wayne-alert">⚠ {report.unpaid.count} order{report.unpaid.count === 1 ? "" : "s"} still not paid · {formatCents(report.unpaid.total_cents)}</p>
         <p className="mt-1 text-sm font-bold">{report.unpaid.orders.slice(0, 8).map((order) => `#${order.order_number.replace(/^W0*/, "")} ${order.customer_name || ""} ${formatCents(order.total_cents)}`).join(" · ")}{report.unpaid.orders.length > 8 ? " …" : ""}</p>
@@ -146,7 +150,7 @@ export function CloseoutScreen({ storeName }: { storeName: string }) {
           <div className="mt-2 border-t border-wayne-border pt-2 text-sm">
             <Row label="Card in store" value={formatCents(tenders.card_in_store_cents)} />
             <Row label="Card online" value={formatCents(tenders.card_online_cents)} />
-            {tenders.card_held_for_tip_cents ? <Row label="Card held for delivery tip" value={formatCents(tenders.card_held_for_tip_cents)} /> : null}
+            {tenders.card_held_for_tip_cents ? <Row label="Cards waiting for tips" value={formatCents(tenders.card_held_for_tip_cents)} /> : null}
             <Row label="Card tips" value={formatCents(tenders.card_tips_cents)} />
             {tenders.other_cents ? <Row label="Other" value={formatCents(tenders.other_cents)} /> : null}
             {report.refunds.count ? <Row label={`Refunds (${report.refunds.count})`} value={formatCents(-report.refunds.cents)} /> : null}

@@ -76,10 +76,16 @@ export function paymentBanner(order: PrintDocument["order"], withAmount = true):
     case "paid":
       return [{ kind: "text", text: `** PAID${method ? ` - ${method}` : ""} **`, align: "center", bold: true, large: true }];
     case "authorized":
-      return [
-        { kind: "text", text: "** CARD ON FILE **", align: "center", bold: true, large: true },
-        { kind: "text", text: "Don't collect - tip added at cash-out", align: "center", bold: true },
-      ];
+      // Card approved and held for the tip on the signed slip (owner, 2026-10-13).
+      return order.fulfillment_type === "delivery"
+        ? [
+          { kind: "text", text: "** PAID - CARD **", align: "center", bold: true, large: true },
+          { kind: "text", text: "Don't collect - get the slip signed", align: "center", bold: true },
+        ]
+        : [
+          { kind: "text", text: "** PAID - CARD **", align: "center", bold: true, large: true },
+          { kind: "text", text: "Tip can be added on the slip", align: "center" },
+        ];
     case "refunded":
     case "partially_refunded":
       return [{ kind: "text", text: order.payment_status === "refunded" ? "REFUNDED" : "PART REFUNDED", align: "center", bold: true, large: true }];
@@ -193,7 +199,7 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
   if (order.discount_cents) lines.push({ kind: "pair", left: "Discount", right: money(-order.discount_cents) });
   if (order.delivery_fee_cents) lines.push({ kind: "pair", left: "Delivery fee", right: money(order.delivery_fee_cents) });
   lines.push({ kind: "pair", left: "Tax", right: money(order.tax_cents) });
-  if (order.tip_cents) lines.push({ kind: "pair", left: "Tip added online", right: money(order.tip_cents) });
+  if (order.tip_cents) lines.push({ kind: "pair", left: order.source === "online" ? "Tip added online" : "Tip already added", right: money(order.tip_cents) });
   lines.push(
     { kind: "pair", left: "AMOUNT", right: money(order.total_cents), bold: true, large: true },
     { kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type), align: "center", bold: true },
@@ -213,6 +219,7 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
 
 function paymentLine(method: string, status: string, fulfillment: string) {
   if (status === "paid") return method === "cash" ? "PAID — CASH" : "PAID";
+  if (status === "authorized") return "CARD APPROVED — ADD TIP BELOW";
   if (method === "test_manual") return "TEST / MANUAL — NOT PAID";
   if (method === "cash") return fulfillment === "delivery" ? "CASH — COLLECT ON DELIVERY" : "CASH — DUE AT PICKUP";
   return status.toUpperCase();

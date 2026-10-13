@@ -18,7 +18,9 @@ export async function POST(request: Request) {
   if (!payment) return json({ error: "Card reader payment not found." }, 404);
   try {
     let intent = await readTerminalIntent(guard.account, payment.provider_payment_id);
-    if (intent.state === "open" || intent.state === "authorized") intent = await cancelTerminalIntent(guard.account, intent.id);
+    // An approved card is held for its tip now (owner, 2026-10-13) — that is money
+    // taken, never cancelled from here.  Only a card still waiting on the reader is.
+    if (intent.state === "open") intent = await cancelTerminalIntent(guard.account, intent.id);
     await settleTerminalPayment(service, payment.id, intent);
     return json({ state: intent.state });
   } catch (cause) {

@@ -56,7 +56,7 @@ export function paymentSummary(order: Pick<DayOrder, "payment_status" | "payment
   const how = method === "cash" ? "Cash" : method === "card" ? card : method === "test_manual" ? "Test" : method;
   switch (order.payment_status) {
     case "paid": return `Paid · ${how}`;
-    case "authorized": return `Card on file · ${card}`;
+    case "authorized": return `Paid · ${card} · tip from slip pending`;
     case "refunded": return "Refunded";
     case "partially_refunded": return `Part refunded · ${how}`;
     case "failed": return "Payment failed";

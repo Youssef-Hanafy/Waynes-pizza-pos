@@ -22,12 +22,15 @@ export async function POST(request: Request) {
     const result = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
     if (result.status !== "pending") {
       const { error } = await supabase.rpc("wayne_settle_payment", {
-        payload: { payment_id: payment.id, provider_payment_id: result.providerPaymentId, status: result.status, provider_status: result.providerStatus, amount_cents: result.amountCents, card_brand: result.cardBrand, card_last4: result.cardLast4, receipt_url: result.receiptUrl, failure_reason: result.failureReason, metadata: { source: "stripe_confirmation" } },
+        payload: { payment_id: payment.id, provider_payment_id: result.providerPaymentId, status: result.status, provider_status: result.providerStatus, amount_cents: result.amountCents, card_brand: result.cardBrand, card_last4: result.cardLast4, receipt_url: result.receiptUrl, failure_reason: result.failureReason,
+          metadata: { source: "stripe_confirmation", ...(result.status === "authorized" ? { tip_adjust: true, max_capture_cents: result.maxCapturableCents ?? result.amountCents } : {}) } },
       });
       if (error) throw new Error(error.message);
     }
     const order = payment.order as unknown as { id: string; public_access_token: string; order_number: string; total_cents: number };
-    return Response.json({ ...order, payment_status: result.status === "captured" ? "captured" : result.status === "pending" ? "pending" : "failed" }, { headers: { "Cache-Control": "no-store" } });
+    // Approved and held for any extra tip on the slip (owner, 2026-10-13): paid, as far as the customer is concerned.
+    const paid = result.status === "captured" || result.status === "authorized";
+    return Response.json({ ...order, payment_status: paid ? "captured" : result.status === "pending" ? "pending" : "failed" }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
     logger.error("stripe_intent.confirm_failed", cause, { payment_id: payment.id });
     return Response.json({ error: "We could not verify the payment. Do not pay again until you check your order." }, { status: 502, headers: { "Cache-Control": "no-store" } });

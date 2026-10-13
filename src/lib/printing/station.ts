@@ -1,4 +1,4 @@
-import { buildKitchenTicket, type PrintDocument, type PrintLayout } from "./document";
+import { buildKitchenTicket, buildTipSignatureSlip, type PrintDocument, type PrintLayout } from "./document";
 import { PrinterUnavailableError, type PrinterAdapter, type PrinterJob, type PrinterReceipt } from "./adapter";
 import type { PrintQueueRepository } from "./worker";
 
@@ -12,6 +12,7 @@ import type { PrintQueueRepository } from "./worker";
  *   destination "receipt", job delivery_receipt → TM-T20III, customer receipt (register/phone delivery)
  *   destination "receipt", job receipt_request  → TM-T20III, customer receipt someone asked for
  *   destination "receipt", job drawer_kick      → cash drawer on the TM-T20III's DK port (every payment taken at the store)
+ *   destination "receipt", job tip_slip         → TM-T20III, tip & signature slip for a card held for its tip
  *
  * Three outcomes, never blurred together:
  *   printed           → job marked printed
@@ -96,6 +97,8 @@ export function createKitchenStationAdapter(options: {
 export function createOnlineOrderStationAdapter(options: {
   printer: StationPrinter;
   tipSlip: "always" | "card" | "never";
+  /** The order, for a tip & signature slip (card held for its tip). */
+  loadDocument?: (orderId: string) => Promise<PrintDocument>;
   /** Pulse the cash drawer wired to this printer. */
   openDrawer?: () => Promise<StationResult>;
   now?: () => number;
@@ -116,6 +119,17 @@ export function createOnlineOrderStationAdapter(options: {
       }
       if (job.job_type === "delivery_receipt" || job.job_type === "receipt_request") {
         return settle(await options.printer.printReceipt(job.order_id));
+      }
+      if (job.job_type === "tip_slip") {
+        // Every card held for its tip gets a slip to sign and write the tip on (owner, 2026-10-13).
+        if (!options.loadDocument) throw new PrinterUnavailableError("This register can't load orders for tip slips.");
+        let doc: PrintDocument;
+        try {
+          doc = await options.loadDocument(job.order_id);
+        } catch (error) {
+          throw new PrinterOfflineError(error instanceof Error ? error.message : "The order could not be loaded for printing.");
+        }
+        return settle(await options.printer.printLayout(buildTipSignatureSlip(doc)));
       }
       throw new PrinterUnavailableError(`The receipt printer does not print "${job.job_type}" jobs.`);
     },

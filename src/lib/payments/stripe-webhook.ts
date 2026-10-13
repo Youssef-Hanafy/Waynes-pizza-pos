@@ -20,6 +20,10 @@ export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType
   // the same intent takes the next card; it is not a failed payment (the POS
   // cancels it if the customer pays another way).
   if (status === "failed" && intent.metadata?.wayne_entry === "terminal") return;
+  // A card held for its tip (owner, 2026-10-13) is captured by the POS — Tips,
+  // driver cash-out or the 4:30 am safety net — which records order + tip in
+  // the same step.  Settling it here first would hide the tip, so leave it.
+  if (status === "captured" && intent.metadata?.wayne_tip_adjust === "true") return;
   const card = intent.charges?.data?.[0]?.payment_method_details?.card;
   const { error } = await supabase.rpc("wayne_settle_payment", {
     payload: {

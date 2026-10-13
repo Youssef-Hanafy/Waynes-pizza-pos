@@ -29,6 +29,8 @@ export async function POST(request: Request) {
     .eq("id", parsed.data.order_id).eq("workspace_id", account.workspaceId).maybeSingle();
   if (!order) return json({ error: "Order not found." }, 404);
   if (order.payment_status === "paid") return json({ error: "This order is already paid.", state: "captured" }, 409);
+  // Card already approved and held for its tip: nothing more to charge now.
+  if (order.payment_status === "authorized") return json({ state: "authorized" });
 
   try {
     // 1. Reuse an M2 payment that is still open on this order.
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
       const settled = ledgerStatusFor(intent);
       if (settled) {
         await settleTerminalPayment(service, open.id, intent);
-        if (settled === "captured") return json({ payment_id: open.id, state: "captured" });
+        if (settled === "captured" || settled === "authorized") return json({ payment_id: open.id, state: settled });
       } else if (intent.amountCents === order.total_cents && intent.state === "open") {
         return json({ payment_id: open.id, client_secret: intent.clientSecret, amount_cents: order.total_cents, state: "open", reused: true });
       } else if (intent.state === "processing") {

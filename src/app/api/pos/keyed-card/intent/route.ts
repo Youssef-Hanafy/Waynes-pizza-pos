@@ -9,10 +9,11 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 /**
  * Opens a Stripe-hosted card field for an order already on the POS (the card is keyed in by staff, usually over the phone).
  *
- * Pickup: charged once, right away, with any tip asked for on the phone.
- * Delivery (owner, 2026-10-11): the restaurant "tip adjust" flow — the card is
- * authorised for the order now; when the driver brings back the signed slip the
- * tip is typed into Deliveries and the card is captured ONCE for order + tip.
+ * Every keyed card uses the restaurant "tip adjust" flow (owner, 2026-10-11 for
+ * deliveries, 2026-10-13 for everything): the card is authorised for the order
+ * (plus any tip given on the phone); the tip written on the signed slip is
+ * typed in at night — POS → Tips, or Deliveries for a driver — and the card is
+ * captured ONCE for order + tip.
  */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
@@ -44,14 +45,16 @@ export async function POST(request: Request) {
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
-      const tipAdjust = order.fulfillment_type === "delivery";
+      // Every keyed card is held for the tip on the signed slip (owner, 2026-10-13):
+      // authorised now, captured once at night (or at the driver's cash-out) for order + tip.
+      const delivery = order.fulfillment_type === "delivery";
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (${tipAdjust ? "delivery — tip added at cash-out" : "keyed card"})`, paymentId: begun.payment_id, receiptEmail: null,
-        tipAdjust,
+        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card — ${delivery ? "tip added at cash-out" : "tip added from the slip"})`, paymentId: begun.payment_id, receiptEmail: null,
+        tipAdjust: true,
       });
       const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
-      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), ...(tipAdjust ? { tip_adjust: true, held_for: "delivery_tip" } : {}) };
+      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), tip_adjust: true, held_for: delivery ? "delivery_tip" : "receipt_tip" };
       const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
     }

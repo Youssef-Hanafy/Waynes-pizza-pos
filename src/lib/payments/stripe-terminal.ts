@@ -21,7 +21,8 @@ import { mapTerminalIntent, type StripeTerminalIntent, type TerminalIntentResult
  *
  *   connection token   lets the app's SDK talk to Stripe for this account
  *   terminal location  the Stripe "Location" the reader registers to (made once, automatically)
- *   payment intent     one per order payment, card_present, captured automatically
+ *   payment intent     one per order payment, card_present, authorised now and
+ *                      captured at night with the tip from the slip (POS → Tips)
  *   confirm / cancel   re-read Stripe and settle the ledger; the browser is never trusted
  *
  * It uses the store's existing Stripe account (the one online checkout uses,
@@ -166,7 +167,10 @@ export async function createTerminalIntent(account: StripeTerminalAccount, input
       amount: input.amountCents,
       currency: "usd",
       "payment_method_types[]": "card_present",
-      capture_method: "automatic",
+      // Held for the tip on the signed slip (owner, 2026-10-13): authorised now,
+      // captured once at night for order + tip (Stripe overcapture).
+      capture_method: "manual",
+      "metadata[wayne_tip_adjust]": "true",
       description: input.description.slice(0, 500),
       "metadata[wayne_payment_id]": input.paymentId,
       "metadata[wayne_order_number]": input.orderNumber,

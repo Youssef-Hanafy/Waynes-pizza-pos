@@ -22,7 +22,11 @@ type StripePaymentIntent = {
   amount_capturable?: number;
   latest_charge?: string | {
     receipt_url?: string;
-    payment_method_details?: { card?: StripeCard & { overcapture?: { maximum_amount_capturable?: number; status?: string } } };
+    payment_method_details?: {
+      card?: StripeCard & { overcapture?: { maximum_amount_capturable?: number; status?: string } };
+      /** A card tapped / inserted on the M2. */
+      card_present?: StripeCard & { overcapture_supported?: boolean };
+    };
   } | null;
 };
 type StripeRefund = { id?: string; status?: string; failure_reason?: string | null };
@@ -41,14 +45,8 @@ function stripeStatus(status: string | undefined): ProviderPayment["status"] {
 function mapIntent(intent: StripePaymentIntent): ProviderPayment {
   const charge = intent.latest_charge && typeof intent.latest_charge === "object" ? intent.latest_charge : null;
   const card = typeof intent.payment_method === "object" && intent.payment_method?.card ? intent.payment_method.card
-    : charge?.payment_method_details?.card ?? intent.charges?.data?.[0]?.payment_method_details?.card;
-  // Overcapture (tip added after the driver returns): Stripe says per card how far it can go.
-  const overcapture = charge?.payment_method_details?.card?.overcapture;
-  const maxCapturableCents = intent.status === "requires_capture"
-    ? (overcapture?.status === "available" && typeof overcapture.maximum_amount_capturable === "number"
-      ? overcapture.maximum_amount_capturable
-      : typeof intent.amount_capturable === "number" ? intent.amount_capturable : intent.amount ?? null)
-    : null;
+    : charge?.payment_method_details?.card ?? charge?.payment_method_details?.card_present ?? intent.charges?.data?.[0]?.payment_method_details?.card;
+  const maxCapturableCents = intent.status === "requires_capture" ? overcaptureLimitCents(intent) : null;
   return {
     providerPaymentId: intent.id ?? null,
     status: stripeStatus(intent.status),
@@ -60,6 +58,23 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     failureReason: intent.last_payment_error ? "The card was declined. Try another card." : null,
     maxCapturableCents,
   };
+}
+
+/**
+ * How far a held card can be captured — order + the most tip it can take
+ * (Stripe overcapture, owner 2026-10-13).  Online / keyed cards: Stripe gives
+ * the exact maximum.  Cards tapped on the M2: when overcapture is supported the
+ * limit is the authorised amount plus 50% or $50, whichever is greater.
+ * Otherwise only the authorised amount (no tip can be added).
+ */
+export function overcaptureLimitCents(intent: Pick<StripePaymentIntent, "amount" | "amount_capturable" | "latest_charge">): number | null {
+  const charge = intent.latest_charge && typeof intent.latest_charge === "object" ? intent.latest_charge : null;
+  const authorized = typeof intent.amount_capturable === "number" && intent.amount_capturable > 0 ? intent.amount_capturable : intent.amount ?? null;
+  const online = charge?.payment_method_details?.card?.overcapture;
+  if (online?.status === "available" && typeof online.maximum_amount_capturable === "number") return online.maximum_amount_capturable;
+  const present = charge?.payment_method_details?.card_present;
+  if (present?.overcapture_supported && typeof authorized === "number") return authorized + Math.max(Math.round(authorized / 2), 5000);
+  return authorized;
 }
 
 function form(data: Record<string, string | number | boolean | null | undefined>) {

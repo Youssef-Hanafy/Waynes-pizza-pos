@@ -83,7 +83,8 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       const response = await post("/api/pos/stripe-terminal/confirm", { payment_id: id });
       if (!response.ok) throw new Error(await readError(response, "Stripe could not be checked. Do not charge again — check Payments in a moment."));
       const body = await response.json() as { state?: string; card_brand?: string | null; card_last4?: string | null; message?: string | null };
-      if (body.state === "captured") { finished.current = true; onPaid({ brand: body.card_brand ?? null, last4: body.card_last4 ?? null }); return true; }
+      // Authorised = approved and held for the tip on the slip (owner, 2026-10-13): the order is paid by card.
+      if (body.state === "captured" || body.state === "authorized") { finished.current = true; onPaid({ brand: body.card_brand ?? null, last4: body.card_last4 ?? null }); return true; }
       if (body.state === "open") { setPhase("declined"); onError(body.message || "The card was declined. Try another card."); return false; }
       if (body.state === "canceled") { paymentId.current = null; setPhase("idle"); onError("The payment was cancelled."); return false; }
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -101,7 +102,7 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       setPhase("preparing"); setNote("Sending the total to the reader…");
       const response = await post("/api/pos/stripe-terminal/intent", { order_id: orderId, idempotency_key: `pos-m2-${orderId}-${uuid()}` });
       const body = await response.json().catch(() => ({})) as { payment_id?: string; client_secret?: string; state?: string; error?: string };
-      if (body.state === "captured") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
+      if (body.state === "captured" || body.state === "authorized") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
       if (!response.ok || !body.payment_id || !body.client_secret) {
         logDevice("reader.intent_failed", body.error || `HTTP ${response.status}`, { status: response.status, order_id: orderId });
         throw new Error(body.error || "The card payment could not be prepared.");
@@ -136,7 +137,7 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
     try {
       const response = await post("/api/pos/stripe-terminal/cancel", { payment_id: id });
       const body = await response.json().catch(() => ({})) as { state?: string; error?: string };
-      if (body.state === "captured") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
+      if (body.state === "captured" || body.state === "authorized") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
       if (!response.ok) throw new Error(body.error || "The card payment could not be cancelled.");
       paymentId.current = null; setPhase("idle"); onError("");
     } catch (cause) {

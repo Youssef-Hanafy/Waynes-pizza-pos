@@ -16,8 +16,9 @@ export async function findTerminalPayment(service: Service, paymentId: string, w
 }
 
 /**
- * Record what Stripe says.  Captured marks the order paid (and the database
- * opens the cash drawer, as for every counter payment); canceled voids it.
+ * Record what Stripe says.  Authorised = approved and held for the tip on the
+ * slip (the order counts as paid by card); captured marks it paid; canceled
+ * voids it.
  * An intent still waiting for a card changes nothing.
  */
 export async function settleTerminalPayment(service: Service, paymentId: string, intent: TerminalIntentResult) {
@@ -27,7 +28,8 @@ export async function settleTerminalPayment(service: Service, paymentId: string,
     payload: {
       payment_id: paymentId, status, provider_payment_id: intent.id, provider_status: intent.providerStatus,
       amount_cents: intent.amountCents, card_brand: intent.cardBrand, card_last4: intent.cardLast4, receipt_url: intent.receiptUrl,
-      failure_reason: status === "voided" ? "Cancelled at the counter." : null, metadata: { source: "stripe_terminal" },
+      failure_reason: status === "voided" ? "Cancelled at the counter." : null,
+      metadata: { source: "stripe_terminal", ...(status === "authorized" ? { tip_adjust: true, max_capture_cents: intent.maxCaptureCents ?? intent.amountCents } : {}) },
     },
   });
   if (error) throw new Error("Stripe approved the card, but the order could not be marked paid. Check Payments before charging again.");

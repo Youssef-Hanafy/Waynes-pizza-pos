@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { declineWords, mapTerminalIntent, terminalIntentState } from "./stripe-terminal-mapping";
+import { declineWords, mapTerminalIntent, terminalCaptureLimit, terminalIntentState } from "./stripe-terminal-mapping";
 
 describe("Stripe M2 PaymentIntent mapping", () => {
   it("keeps a declined intent open for the next card", () => {
@@ -26,5 +26,17 @@ describe("Stripe M2 PaymentIntent mapping", () => {
     expect(terminalIntentState("processing")).toBe("processing");
     expect(terminalIntentState(undefined)).toBe("open");
     expect(declineWords("something_new")).toMatch(/declined/);
+  });
+
+  it("gives a held card room for the tip on the slip: 50% or $50 more, whichever is greater (owner, 2026-10-13)", () => {
+    const held = mapTerminalIntent({
+      id: "pi_4", status: "requires_capture", amount: 4000, amount_capturable: 4000, client_secret: "s",
+      latest_charge: { payment_method_details: { card_present: { brand: "visa", last4: "1111", overcapture_supported: true } } },
+    });
+    expect(held).toMatchObject({ state: "authorized", maxCaptureCents: 9000 });
+    expect(terminalCaptureLimit({ amount: 20_000 }, { overcapture_supported: true })).toBe(30_000);
+    // A card that can't be overcaptured can only be charged what was approved.
+    expect(terminalCaptureLimit({ amount: 4000 }, { overcapture_supported: false })).toBe(4000);
+    expect(mapTerminalIntent({ id: "pi_5", status: "succeeded", amount: 4000 }).maxCaptureCents).toBeNull();
   });
 });

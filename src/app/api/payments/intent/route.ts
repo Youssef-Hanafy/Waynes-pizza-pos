@@ -51,6 +51,9 @@ export async function POST(request: Request) {
         note: `Wayne's Pizza order ${order.order_number}`,
         paymentId: begun.payment_id,
         receiptEmail: parsed.data.email || null,
+        // Held for an extra tip on the signed slip (owner, 2026-10-13): authorised now,
+        // captured at night (POS → Tips / driver cash-out) for order + any extra tip.
+        tipAdjust: true,
       });
       const { error } = await supabase.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);

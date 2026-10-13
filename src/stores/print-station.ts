@@ -110,7 +110,7 @@ export function startPrintStation(options: {
     const station = createStationRepository(base, release);
     const adapter = setup.name === "kitchen"
       ? createKitchenStationAdapter({ printer: setup.provider, routingCategories: setup.printer.routingCategories, loadDocument: fetchPrintDocument })
-      : createOnlineOrderStationAdapter({ printer: setup.provider, tipSlip: setup.printer.tipSlip, openDrawer: openDrawerThrough(setup.printer) });
+      : createOnlineOrderStationAdapter({ printer: setup.provider, tipSlip: setup.printer.tipSlip, openDrawer: openDrawerThrough(setup.printer), loadDocument: fetchPrintDocument });
     lanes.push({ ...setup, adapter: station.watch(adapter), station, pausedUntil: 0, busy: false });
     setLane(setup.name, { state: "ready", detail: `${setup.printer.name || setup.name} at ${setup.printer.ip}` });
   }
