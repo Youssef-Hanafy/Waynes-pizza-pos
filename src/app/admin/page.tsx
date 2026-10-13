@@ -50,7 +50,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     setup.failed_print_job_count ? { text: `${setup.failed_print_job_count} kitchen ticket${setup.failed_print_job_count === 1 ? "" : "s"} failed to print`, href: "/admin/printing" } : null,
     setup.hanafy_failed_count ? { text: `${setup.hanafy_failed_count} Hanafy event${setup.hanafy_failed_count === 1 ? "" : "s"} failed delivery and will retry`, href: "/admin/integrations" } : null,
     setup.pending_staff_count ? { text: `${setup.pending_staff_count} sign-in${setup.pending_staff_count === 1 ? " is" : "s are"} waiting for access`, href: "/admin/staff" } : null,
-    setup.test_ordering_enabled ? { text: "Payments are in TEST / MANUAL mode — no cards are charged", href: "/admin/settings" } : null,
   ].filter((item): item is { text: string; href: string } => item !== null);
 
   return <main className="mx-auto max-w-6xl px-5 py-10">
@@ -91,7 +90,7 @@ function DashboardBody({ dashboard, preset, tipsEnabled }: { dashboard: Dashboar
     <div className="mt-5 grid gap-4 md:grid-cols-3">
       <Mix rows={[["Pickup", find(dashboard.fulfillment_rows, "pickup")], ["Delivery", find(dashboard.fulfillment_rows, "delivery")]]} title="Pickup vs delivery" />
       <Mix rows={[["Online", find(dashboard.source_rows, "online")], ["POS / phone / walk-in", posTotals]]} title="Where orders came from" />
-      <Mix rows={[["Card", find(dashboard.payment_rows, "card")], ["Cash", find(dashboard.payment_rows, "cash")], ["Test / manual", find(dashboard.payment_rows, "test_manual")]]} title="Payment method" />
+      <Mix rows={[["Card", find(dashboard.payment_rows, "card")], ["Cash", find(dashboard.payment_rows, "cash")], ["Not paid yet", find(dashboard.payment_rows, "test_manual")]]} title="Payment method" />
     </div>
 
     <div className="mt-5 grid gap-4 lg:grid-cols-2">

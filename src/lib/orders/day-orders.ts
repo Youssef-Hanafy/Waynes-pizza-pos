@@ -53,7 +53,7 @@ export const orderStatusLabels: Record<string, string> = {
 export function paymentSummary(order: Pick<DayOrder, "payment_status" | "payment_method" | "paid_method" | "card_brand" | "card_last4">) {
   const method = order.paid_method ?? order.payment_method;
   const card = order.card_last4 ? `${order.card_brand ? `${order.card_brand[0]!.toUpperCase()}${order.card_brand.slice(1)} ` : "Card "}····${order.card_last4}` : "Card";
-  const how = method === "cash" ? "Cash" : method === "card" ? card : method === "test_manual" ? "Test" : method;
+  const how = method === "cash" ? "Cash" : method === "card" ? card : method === "test_manual" ? "Not paid yet" : method;
   switch (order.payment_status) {
     case "paid": return `Paid · ${how}`;
     case "authorized": return `Paid · ${card} · tip from slip pending`;

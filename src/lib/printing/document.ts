@@ -220,7 +220,8 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
 function paymentLine(method: string, status: string, fulfillment: string) {
   if (status === "paid") return method === "cash" ? "PAID — CASH" : "PAID";
   if (status === "authorized") return "CARD APPROVED — ADD TIP BELOW";
-  if (method === "test_manual") return "TEST / MANUAL — NOT PAID";
+  // "test_manual" is the old internal name for "pay at the counter / in Payments" — a real order not paid yet.
+  if (method === "test_manual") return "NOT PAID YET";
   if (method === "cash") return fulfillment === "delivery" ? "CASH — COLLECT ON DELIVERY" : "CASH — DUE AT PICKUP";
   return status.toUpperCase();
 }
