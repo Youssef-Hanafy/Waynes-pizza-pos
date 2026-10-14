@@ -74,6 +74,8 @@ export const storeSettingsSchema = z.object({
   suggested_tip_percentages: z.array(z.number().int().min(0).max(100)),
   /** Dollar tip buttons on the customer screen, in cents (owner, 2026-10-12). */
   suggested_tip_amounts_cents: z.array(z.number().int().min(0).max(100_000)).max(6).default([100, 200, 300, 400, 500]),
+  /** Who the day's card tips (everything but deliveries) are paid out to at close out (owner, 2026-10-13). */
+  tip_payout_name: z.string().max(60).catch("the owner").default("the owner"),
   pickup_prep_minutes: z.number().int().min(0).max(1440),
   delivery_estimate_minutes: z.number().int().min(0).max(1440),
   delivery_area_text: z.string(),
@@ -149,6 +151,7 @@ export const defaultSettings: StoreSettings = {
   tips_enabled: false,
   suggested_tip_percentages: [15, 20, 25],
   suggested_tip_amounts_cents: [100, 200, 300, 400, 500],
+  tip_payout_name: "the owner",
   pickup_prep_minutes: 25,
   delivery_estimate_minutes: 45,
   delivery_area_text: "",

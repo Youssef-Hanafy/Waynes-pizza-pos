@@ -19,6 +19,7 @@ const tipsSchema = z.object({
   tips_enabled: z.boolean(),
   suggested_tip_percentages: z.array(z.number().int("Tip percentages must be whole numbers.").min(1).max(100)).max(4, "Up to 4 percentage buttons."),
   suggested_tip_amounts_cents: z.array(z.number().int().min(1, "Dollar tips must be more than $0.").max(100_000, "Dollar tips must be under $1,000.")).max(6, "Up to 6 dollar buttons."),
+  tip_payout_name: z.string().trim().min(1, "Say who the card tips are paid out to.").max(60),
 });
 
 /** Tip buttons for the customer screen and website checkout (owner, 2026-10-12). */
@@ -28,6 +29,7 @@ export async function saveTips(formData: FormData) {
     tips_enabled: formData.get("tips_enabled") === "on",
     suggested_tip_percentages: numbers(formData.get("percentages")),
     suggested_tip_amounts_cents: numbers(formData.get("dollars")).map((dollars) => Math.round(dollars * 100)),
+    tip_payout_name: String(formData.get("tip_payout_name") ?? ""),
   });
   if (!parsed.success) redirect(`/admin/tips?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the tip amounts.")}`);
   const supabase = await createServerSupabaseClient();

@@ -159,7 +159,9 @@ export async function ensureTerminalLocation(account: StripeTerminalAccount) {
 }
 
 /** One card-present PaymentIntent per order payment; retries reuse it (never a second authorisation). */
-export async function createTerminalIntent(account: StripeTerminalAccount, input: { amountCents: number; idempotencyKey: string; orderNumber: string; paymentId: string; description: string }): Promise<TerminalIntentResult> {
+export async function createTerminalIntent(account: StripeTerminalAccount, input: { amountCents: number; idempotencyKey: string; orderNumber: string; paymentId: string; description: string;
+  /** Delivery only: approve now, charge order + driver's tip at the cash-out.  Everything else is charged on the spot. */
+  holdForTip?: boolean }): Promise<TerminalIntentResult> {
   const intent = await stripe<StripeTerminalIntent>(account, "/v1/payment_intents", {
     method: "POST",
     idempotencyKey: input.idempotencyKey,
@@ -167,10 +169,13 @@ export async function createTerminalIntent(account: StripeTerminalAccount, input
       amount: input.amountCents,
       currency: "usd",
       "payment_method_types[]": "card_present",
-      // Held for the tip on the signed slip (owner, 2026-10-13): authorised now,
-      // captured once at night for order + tip (Stripe overcapture).
-      capture_method: "manual",
-      "metadata[wayne_tip_adjust]": "true",
+      // In the store the customer tips on the customer screen BEFORE the card,
+      // so the card is charged for order + tip right away and the order is
+      // closed — nothing to finish in Tips (owner, 2026-10-13).  Only a
+      // delivery card is held: the driver brings back the signed slip and its
+      // tip is added at the cash-out (Stripe overcapture).
+      capture_method: input.holdForTip ? "manual" : "automatic",
+      "metadata[wayne_tip_adjust]": input.holdForTip ? "true" : undefined,
       description: input.description.slice(0, 500),
       "metadata[wayne_payment_id]": input.paymentId,
       "metadata[wayne_order_number]": input.orderNumber,

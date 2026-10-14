@@ -40,6 +40,10 @@ export const dayCloseoutSchema = z.object({
     open_shifts: z.array(shiftTotalsSchema).catch([]),
     closed_today: z.array(z.object({ id: z.uuid(), register_label: z.string(), closed_at: z.string().nullable(), opening_cash_cents: n, expected_cash_cents: n, counted_cash_cents: n, variance_cents: n })).catch([]),
   }),
+  /** Tips are not store income (owner, 2026-10-13). Missing on a database from before this. */
+  tip_payout: z.object({
+    owner_card_tips_cents: n, owner_card_tip_count: n, owner_cash_tips_cents: n, driver_tips_cents: n, income_cents: n,
+  }).nullable().optional().catch(null),
   saved: z.object({
     business_date: z.string(), counted_cash_cents: n, expected_cash_cents: n, variance_cents: n, note: z.string(),
     closed_at: z.string(), closed_by_name: z.string().nullable().optional(), denominations: z.record(z.string(), n).catch({}),
@@ -86,8 +90,25 @@ export const sourceLabels: Record<string, string> = { pos: "Counter", phone: "Ph
 const money = (cents: number) => `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toFixed(2)}`;
 
 /** The close out as a slip for the receipt printer. */
-export function closeoutLayout(report: DayCloseout, storeName: string, counted: number | null, isToday = true): PrintLayout {
+/**
+ * The day's tips, kept out of the store's money (owner, 2026-10-13): card
+ * tips on every order that isn't a delivery are paid out to the owner; tips on
+ * deliveries belong to the drivers (paid at their cash-out).
+ */
+export function tipPayout(report: DayCloseout) {
+  const payout = report.tip_payout;
+  return {
+    ownerCardTips: payout?.owner_card_tips_cents ?? report.tenders.card_tips_cents,
+    ownerCardTipCount: payout?.owner_card_tip_count ?? 0,
+    ownerCashTips: payout?.owner_cash_tips_cents ?? 0,
+    driverTips: payout?.driver_tips_cents ?? 0,
+    income: payout?.income_cents ?? report.sales.total_cents - report.sales.tip_cents,
+  };
+}
+
+export function closeoutLayout(report: DayCloseout, storeName: string, counted: number | null, isToday = true, payoutName = "the owner"): PrintLayout {
   const expected = expectedCash(report, isToday);
+  const tips = tipPayout(report);
   const pair = (left: string, cents: number, bold = false): PrintLine => ({ kind: "pair", left, right: money(cents), bold });
   const lines: PrintLine[] = [
     { kind: "text", text: storeName, align: "center", bold: true, large: true },
@@ -102,7 +123,13 @@ export function closeoutLayout(report: DayCloseout, storeName: string, counted: 
     pair("Delivery fees", report.sales.delivery_fee_cents),
     pair("Tax", report.sales.tax_cents),
     pair("Tips", report.sales.tip_cents),
-    pair("TOTAL", report.sales.total_cents, true),
+    pair("TOTAL COLLECTED", report.sales.total_cents, true),
+    pair("STORE INCOME (NO TIPS)", tips.income, true),
+    { kind: "rule" },
+    { kind: "text", text: "TIPS - NOT STORE INCOME", bold: true },
+    pair(`Card tips to pay ${payoutName}`.slice(0, 30), tips.ownerCardTips, true),
+    ...(tips.ownerCashTips ? [pair("Cash tips (in store)", tips.ownerCashTips)] : []),
+    ...(tips.driverTips ? [pair("Delivery tips (drivers)", tips.driverTips)] : []),
     { kind: "rule" },
     { kind: "text", text: "PAYMENTS", bold: true },
     pair("Cash", report.tenders.cash_cents),

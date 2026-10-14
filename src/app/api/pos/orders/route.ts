@@ -1,7 +1,7 @@
 import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { posOrderCreatedSchema, posOrderInputSchema } from "@/lib/pos/schemas";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
@@ -16,6 +16,12 @@ export async function POST(request: Request) {
   if (error) return Response.json({ error: safePosError(error.message) }, { status: error.code === "42501" ? 403 : 400 });
   const result = posOrderCreatedSchema.safeParse(data);
   if (!result.success) return Response.json({ error: "The ticket could not be confirmed." }, { status: 500 });
+  // The day's ticket number (#1, #2 …) for the screen; the order is already saved either way.
+  if (result.data.daily_number === null && access?.workspace_id) {
+    const { data: numbered } = await createServiceSupabaseClient().from("orders").select("daily_number")
+      .eq("id", result.data.id).eq("workspace_id", access.workspace_id).maybeSingle();
+    if (typeof numbered?.daily_number === "number") result.data.daily_number = numbered.daily_number;
+  }
   return Response.json(result.data, { status: result.data.duplicate ? 200 : 201, headers: { "Cache-Control": "no-store" } });
 }
 

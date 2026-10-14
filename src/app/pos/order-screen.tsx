@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
-import { draftLabel, type PosDraft } from "@/lib/orders/drafts";
+import { draftLabel, draftToAddItemsPayload, type PosDraft } from "@/lib/orders/drafts";
+import { posItemsAddedSchema } from "@/lib/pos/schemas";
 import type { CartLine } from "@/lib/orders/schemas";
 import type { OpenOrder } from "@/lib/orders/status";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
@@ -18,6 +19,7 @@ import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/s
 import { phoneActions } from "@/stores/phone-store";
 import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt } from "./payments-screen";
 import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-print";
@@ -58,7 +60,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   /** The order just sent, shown with the payment prompt until it is paid or left to pay later. */
-  const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean } | null>(null);
+  const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on" } | null>(null);
   const [printNote, setPrintNote] = useState("");
   const paying = created !== null;
   useEffect(() => {
@@ -88,10 +90,13 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const visibleMenu = useMemo(() => menu.map((category) => ({ ...category, items: category.items.filter((item) => item.name.toLowerCase().includes(itemSearch.trim().toLowerCase())) })).filter((category) => category.items.length), [itemSearch, menu]);
   const cart = draft.cart;
   const noProfile = draft.customerMode === "walk_in";
+  /** Adding items to an order already sent (owner, 2026-10-13). */
+  const addTo = draft.addTo;
   const subtotal = cartSubtotalCents(menu, cart);
   const manualInput = Number(draft.manualValue) || 0;
-  const previewDiscount = draft.manualType === "fixed" ? Math.min(subtotal, Math.round(manualInput * 100)) : draft.manualType === "percent" ? Math.min(subtotal, Math.round(subtotal * manualInput / 100)) : 0;
-  const deliveryFee = draft.fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
+  const previewDiscount = addTo ? 0 : draft.manualType === "fixed" ? Math.min(subtotal, Math.round(manualInput * 100)) : draft.manualType === "percent" ? Math.min(subtotal, Math.round(subtotal * manualInput / 100)) : 0;
+  // Added items never pay the delivery fee again.
+  const deliveryFee = !addTo && draft.fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
   // The $2 delivery fee is not taxed (owner, 2026-10-11) — same as the database.
   const tax = Math.round((subtotal - previewDiscount) * settings.tax_rate_basis_points / 10_000);
   const previewTotal = subtotal - previewDiscount + deliveryFee + tax;
@@ -114,7 +119,42 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
 
   const fromCall = Boolean(draft.phoneCallKey);
 
+  /** Add the ticket's items to the order it was opened for (Today's Orders → Add items). */
+  async function submitAddition() {
+    if (!addTo || submitting) return;
+    if (!cart.length) { setError("Add at least one item."); return; }
+    setSubmitting(true); setError("");
+    try {
+      const response = await fetch(`/api/pos/orders/${addTo.orderId}/items`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draftToAddItemsPayload(draft)), signal: AbortSignal.timeout(20_000),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      const parsed = posItemsAddedSchema.safeParse(body);
+      if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "The items could not be added.");
+      const result = parsed.data;
+      setPrintNote("");
+      setCreated({
+        duplicate: result.duplicate, delivery: addTo.fulfillment === "delivery", added: result.mode,
+        order: {
+          id: result.order_id, order_number: result.order_number, daily_number: result.daily_number ?? addTo.dailyNumber,
+          parent_order_id: result.mode === "add_on" ? (result.parent_order_id ?? addTo.orderId) : null,
+          total_cents: result.total_cents, customer_name: addTo.customerName, fulfillment_type: addTo.fulfillment, source: draft.source,
+          status: "placed", payment_method: "", payment_status: "unpaid", placed_at: new Date().toISOString(), promised_at: null, ready_at: null,
+          is_test: draft.isTest,
+        },
+      });
+      void draftSync.discard(draft);
+      orderActions.clearActive();
+    } catch (cause) {
+      // Same key on the next try: the items can never be added twice.
+      setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "No answer — tap Add again (it won't add them twice).");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function submitOrder() {
+    if (addTo) { await submitAddition(); return; }
     if (!cart.length) { setError("Add at least one item to the ticket."); return; }
     if (submitting) return;
     setSubmitting(true); setError("");
@@ -133,6 +173,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         duplicate: result.order.duplicate, delivery,
         order: {
           id: result.order.id, order_number: result.order.order_number, total_cents: result.order.total_cents,
+          daily_number: result.order.daily_number ?? null, parent_order_id: null,
           customer_name: customerName, fulfillment_type: delivery ? "delivery" : "pickup", source,
           status: "placed", payment_method: "", payment_status: "unpaid", placed_at: now, promised_at: null, ready_at: null,
           is_test: draft.isTest,
@@ -170,7 +211,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-3 sm:p-6">
       <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
-          <p className="font-black text-wayne-ok">✓ {created.duplicate ? "Already sent" : "Sent to the kitchen"} · {created.order.order_number}</p>
+          <p className="font-black text-wayne-ok">✓ {created.added === "merged" ? `Added to order #${ticketNumber(created.order)} — new total ${formatCents(created.order.total_cents)}` : created.added === "add_on" ? `Add-on to #${ticketNumber(created.order)} sent to the kitchen — paid on its own` : created.duplicate ? "Already sent" : "Sent to the kitchen"} · #{ticketNumber(created.order)}</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once they pay or you tap {created.delivery ? "Cash at the door" : "Pay later"} — marked PAID / NOT PAID</span>
             <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
@@ -185,10 +226,19 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     </div>;
   }
 
-  const summary = ticketSummary(draft, settings);
+  const summary = addTo
+    ? { icon: "➕", title: `Adding to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: addTo.paid ? "Already paid — these items go out as an add-on and are paid on their own" : "Not paid yet — these items go on the same order" }
+    : ticketSummary(draft, settings);
   if (draft.isTest) summary.title = `🧪 TEST · ${summary.title}`;
   const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-2">
-    {draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
+    {addTo ? <div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 px-2 py-1">
+      <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-wayne-gold text-xl">{summary.icon}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-base font-black">{summary.title}</span>
+        <span className="block truncate text-sm font-bold text-wayne-muted">{summary.detail}</span>
+      </span>
+      <button className="ml-auto min-h-11 shrink-0 rounded-lg border border-wayne-border bg-white px-3 text-sm font-bold" onClick={() => { void draftSync.discard(draft); orderActions.clearActive(); setError(""); }} type="button">Cancel</button>
+    </div> : draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
       <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-xl ${draft.source === "phone" ? "bg-wayne-green text-white" : "bg-wayne-cream"}`}>{summary.icon}</span>
       <span className="min-w-0">
         <span className="block truncate text-base font-black">{summary.title}</span>
@@ -231,11 +281,11 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="flex shrink-0 items-center justify-between"><h2 className="text-xl font-black">Ticket{cart.length ? ` · ${cart.reduce((sum, line) => sum + line.quantity, 0)}` : ""}</h2><button className="min-h-11 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
         <div className="mt-2 flex-1 space-y-2 pr-1 lg:min-h-0 lg:overflow-y-auto">{cart.length ? cart.map((line) => { const item = findMenuItem(menu, line.menu_item_id); const variant = item?.variants.find((candidate) => candidate.id === line.variant_id); const modifiers = describeLineModifiers(item, line); return <div className="rounded-xl bg-wayne-cream p-3" key={line.line_id}><div className="flex justify-between gap-2"><div><strong>{line.quantity}× {line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"}</strong>{line.open_item ? <p className="text-sm text-wayne-muted">Open item</p> : null}{variant ? <p className="text-sm text-wayne-muted">{variant.name}</p> : null}</div><strong>{formatCents(cartLineUnitCents(menu, line) * line.quantity)}</strong></div>{modifiers.length ? <p className="mt-1 flex flex-wrap gap-1 text-sm">{modifiers.map((note) => <span className={`rounded px-1.5 font-bold ${note.kind === "removed" ? "bg-wayne-red-soft text-wayne-red" : "bg-wayne-ok-soft text-wayne-ok"}`} key={note.label}>{note.label}</span>)}</p> : null}{line.special_instructions ? <p className="mt-1 text-sm">Note: {line.special_instructions}</p> : null}<div className="mt-2 flex gap-2"><button aria-label="Decrease item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity - 1))} type="button">−</button><button aria-label="Increase item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity + 1))} type="button">+</button><button className="min-h-11 px-1 text-sm font-bold underline" onClick={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} type="button">Edit</button><button className="ml-auto min-h-11 px-1 text-sm font-bold text-wayne-red" onClick={() => setCart(cart.filter((candidate) => candidate.line_id !== line.line_id))} type="button">Remove</button></div></div>; }) : <p className="rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
         <div className="shrink-0 border-t border-wayne-border pt-3">
-          <details className="rounded-xl border border-wayne-border p-2"><summary className="min-h-9 cursor-pointer text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>
-          <div className="mt-3 space-y-1"><Total label="Subtotal" value={subtotal} />{previewDiscount ? <Total label="Manual discount" value={-previewDiscount} /> : null}{deliveryFee ? <Total label="Delivery fee" value={deliveryFee} /> : null}<Total label="Estimated tax" value={tax} /><Total emphasis label={draft.promoCode ? "Estimated total*" : "Total"} value={previewTotal} /></div>
+          {addTo ? <label className="grid gap-1 text-sm font-bold">Note for the kitchen (optional)<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label> : <details className="rounded-xl border border-wayne-border p-2"><summary className="min-h-9 cursor-pointer text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>}
+          <div className="mt-3 space-y-1"><Total label="Subtotal" value={subtotal} />{previewDiscount ? <Total label="Manual discount" value={-previewDiscount} /> : null}{deliveryFee ? <Total label="Delivery fee" value={deliveryFee} /> : null}<Total label="Estimated tax" value={tax} /><Total emphasis label={addTo ? "Added" : draft.promoCode ? "Estimated total*" : "Total"} value={previewTotal} /></div>
           {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing Submit again is safe.</p> : null}
           {error && !draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-alert-soft p-2 text-sm font-bold text-wayne-alert">{error}</p> : null}
-          <Button className="mt-3 min-h-14 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? "Submitting…" : draft.submitPending ? "Try sending now" : `Submit ${draft.isTest ? "TEST order" : "order"} · ${formatCents(previewTotal)}`}</Button>
+          <Button className="mt-3 min-h-14 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? (addTo ? "Adding…" : "Submitting…") : addTo ? `Add to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")} · ${formatCents(previewTotal)}` : draft.submitPending ? "Try sending now" : `Submit ${draft.isTest ? "TEST order" : "order"} · ${formatCents(previewTotal)}`}</Button>
         </div>
       </aside>
     </main>

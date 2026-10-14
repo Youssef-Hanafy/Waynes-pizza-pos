@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatCents } from "@/lib/menu/schemas";
 import { draftLabel } from "@/lib/orders/drafts";
+import { ticketLabel } from "@/lib/orders/ticket-number";
 import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import { orderActions, useDrafts } from "@/stores/order-store";
 
@@ -66,7 +67,10 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
     return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
   }, [load]);
 
-  const sorted = [...orders].sort((a, b) => Date.parse(b.placed_at) - Date.parse(a.placed_at));
+  // Paid orders are closed (owner, 2026-10-13): they leave this panel and stay in Today's Orders.
+  // A paid delivery stays until it is on the road, so it can be sent out.
+  const stillOpen = orders.filter((order) => (order.payment_status !== "paid" && order.payment_status !== "authorized") || (order.fulfillment_type === "delivery" && order.status !== "out_for_delivery"));
+  const sorted = [...stillOpen].sort((a, b) => Date.parse(b.placed_at) - Date.parse(a.placed_at));
   const count = sorted.length + held.length;
 
   if (folded) {
@@ -99,7 +103,7 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
               <span className="shrink-0 text-xs font-bold text-wayne-muted">{minutesAgo(order.placed_at, now)}</span>
             </span>
             <span className="mt-0.5 flex items-center justify-between gap-2 text-xs font-bold">
-              <span className="truncate text-wayne-muted">#{order.order_number.replace(/^W0*/, "")} · {order.source === "online" ? "Online" : order.source === "phone" ? "Phone" : "Counter"} · {statusLabels[order.status] ?? order.status}{order.is_test ? " · TEST" : ""}</span>
+              <span className="truncate text-wayne-muted">{ticketLabel(order)} · {order.source === "online" ? "Online" : order.source === "phone" ? "Phone" : "Counter"} · {statusLabels[order.status] ?? order.status}{order.is_test ? " · TEST" : ""}</span>
               <span className={`shrink-0 rounded px-1.5 py-0.5 ${paid ? "bg-wayne-ok-soft text-wayne-ok" : cardOnFile ? "bg-wayne-cream" : "bg-wayne-alert-soft text-wayne-alert"}`}>{formatCents(order.total_cents)} {paid ? "PAID" : cardOnFile ? "CARD ✓" : "DUE"}</span>
             </span>
           </button>;

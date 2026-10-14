@@ -67,6 +67,19 @@ export const posDraftSchema = z.object({
    * the menu is showing.  Tickets saved before the card existed count as started.
    */
   started: z.boolean().optional().default(true),
+  /**
+   * Adding items to an order already sent (Today's Orders → Add items, owner
+   * 2026-10-13).  The ticket holds only the new items; Submit adds them.
+   */
+  addTo: z.object({
+    orderId: z.uuid(),
+    orderNumber: z.string(),
+    dailyNumber: z.number().int().nullable(),
+    customerName: z.string(),
+    fulfillment: z.enum(["pickup", "delivery"]),
+    /** Already paid: the items go out as an add-on paid on its own. */
+    paid: z.boolean(),
+  }).nullable().optional().default(null),
 });
 export type PosDraft = z.infer<typeof posDraftSchema>;
 
@@ -109,13 +122,14 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     syncedAt: null,
     submitPending: false,
     started: false,
+    addTo: null,
     ...patch,
   };
 }
 
 /** Anything a cashier would be upset to lose. */
 export function draftHasContent(draft: PosDraft): boolean {
-  return draft.cart.length > 0 || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.lastName || draft.phone || draft.orderNote);
+  return draft.cart.length > 0 || draft.addTo !== null || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.lastName || draft.phone || draft.orderNote);
 }
 
 export function initialDrafts(): DraftsState {
@@ -133,6 +147,7 @@ export function heldDrafts(state: DraftsState): PosDraft[] {
 
 /** A short name for a draft on the hold tray. */
 export function draftLabel(draft: PosDraft): string {
+  if (draft.addTo) return `Add to #${draft.addTo.dailyNumber ?? draft.addTo.orderNumber.replace(/^W0*/, "")}${draft.addTo.customerName ? ` · ${draft.addTo.customerName}` : ""}`;
   const who = draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}`.trim() : `${draft.firstName} ${draft.lastName}`.trim() || draft.callerName;
   const origin = draft.source === "phone" ? (draft.phoneLine ? `Line ${draft.phoneLine}` : "Phone") : "Walk-in";
   return who ? `${origin} · ${who}` : origin;
@@ -237,6 +252,15 @@ export function draftToOrderPayload(draft: PosDraft) {
   };
 }
 
+/** The new lines for /api/pos/orders/[id]/items (Add items to a sent order). */
+export function draftToAddItemsPayload(draft: PosDraft) {
+  return {
+    idempotency_key: draft.idempotencyKey,
+    special_instructions: draft.orderNote.slice(0, 500),
+    items: draftToOrderPayload(draft).items,
+  };
+}
+
 /** Everything a phone order carries in from the call (§9, §32). */
 export function draftFromCall(input: {
   callKey: string; callId: string | null; line: number; phoneNumber: string; callerName: string;
@@ -295,7 +319,7 @@ export function draftBody(draft: PosDraft) {
  * never over one someone is in the middle of (§34.1).
  */
 export function isDraftIdle(draft: PosDraft): boolean {
-  return draft.cart.length === 0 && draft.customer === null && draft.phoneCallKey === null
+  return draft.cart.length === 0 && draft.customer === null && draft.phoneCallKey === null && draft.addTo === null
     && !draft.firstName.trim() && !draft.lastName.trim() && !draft.phone.trim() && !draft.orderNote.trim()
     && !draft.submitPending;
 }

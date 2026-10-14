@@ -53,5 +53,9 @@ export const openOrderSchema = z.object({
   ready_at: z.string().nullable(),
   /** A practice ticket: card payments on it are simulated. */
   is_test: z.boolean().optional().default(false),
+  /** The day's ticket number (#1, #2 …); null on orders from before daily numbers. */
+  daily_number: z.number().int().nullable().optional().default(null),
+  /** Items added after the order was paid: the order they belong to. */
+  parent_order_id: z.uuid().nullable().optional().default(null),
 });
 export type OpenOrder = z.infer<typeof openOrderSchema>;

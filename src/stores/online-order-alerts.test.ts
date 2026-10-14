@@ -4,7 +4,7 @@ import { newOnlineOrders } from "./online-order-alerts";
 
 const order = (id: string, source: string, status = "placed"): OpenOrder => ({
   id, order_number: id, customer_name: "", fulfillment_type: "pickup", source, status, payment_method: "card", payment_status: "paid",
-  total_cents: 1000, placed_at: "2026-09-30T20:00:00Z", promised_at: null, ready_at: null, is_test: false,
+  total_cents: 1000, placed_at: "2026-09-30T20:00:00Z", promised_at: null, ready_at: null, is_test: false, daily_number: null, parent_order_id: null,
 });
 
 describe("online order chime", () => {

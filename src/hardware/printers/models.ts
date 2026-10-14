@@ -7,7 +7,9 @@
  *     receipts, online order slips and the tip & signature slip; the cash
  *     drawer is wired to its DK port.  80 mm paper, Font A = 48 columns.
  *   Epson TM-U220B (M188B) + UB-E04 Ethernet card  impact "roundish" printer
- *     for kitchen tickets.  76 mm paper, 40 columns (7x9 font), slower, and
+ *     for kitchen tickets.  76 mm paper: 40 columns with the 7x9 font, which
+ *     the POS selects (its default 9x9 font fits only 33, so 40-column
+ *     tickets were cut off at the edges — owner, 2026-10-13), slower, and
  *     its cutter sits several lines below the print head.  With a black/red
  *     ribbon (ERC-38 B/R) it can print the lines a cook must not miss in red.
  *
@@ -29,21 +31,23 @@ export type PrinterModelProfile = {
   supportsRed: boolean;
   /** Has a drawer kick (DK) port. */
   drawerKick: boolean;
+  /** Print in the printer's second (smaller) font so `columns` really fit. */
+  fontB: boolean;
   defaultPort: number;
 };
 
 export const printerModels: Record<string, PrinterModelProfile> = {
   "epson-tm-t20iii": {
     key: "epson-tm-t20iii", label: "Epson TM-T20III (thermal, 80 mm)", kind: "thermal",
-    paperWidthMm: 80, columns: 48, cut: "feed_and_cut", feedBeforeCut: 0, supportsRed: false, drawerKick: true, defaultPort: 9100,
+    paperWidthMm: 80, columns: 48, cut: "feed_and_cut", feedBeforeCut: 0, supportsRed: false, drawerKick: true, fontB: false, defaultPort: 9100,
   },
   "epson-tm-u220b": {
     key: "epson-tm-u220b", label: "Epson TM-U220B (impact, 76 mm)", kind: "impact",
-    paperWidthMm: 76, columns: 40, cut: "feed_then_cut", feedBeforeCut: 4, supportsRed: true, drawerKick: true, defaultPort: 9100,
+    paperWidthMm: 76, columns: 40, cut: "feed_then_cut", feedBeforeCut: 4, supportsRed: true, drawerKick: true, fontB: true, defaultPort: 9100,
   },
   generic: {
     key: "generic", label: "Other ESC/POS printer", kind: "thermal",
-    paperWidthMm: 80, columns: 42, cut: "feed_and_cut", feedBeforeCut: 0, supportsRed: false, drawerKick: true, defaultPort: 9100,
+    paperWidthMm: 80, columns: 42, cut: "feed_and_cut", feedBeforeCut: 0, supportsRed: false, drawerKick: true, fontB: false, defaultPort: 9100,
   },
 };
 

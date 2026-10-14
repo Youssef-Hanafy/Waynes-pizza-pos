@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import type { OpenOrder } from "@/lib/orders/status";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { askCustomer, showOnCustomerScreen } from "@/stores/customer-display-link";
 
 async function readError(response: Response, fallback: string) {
@@ -29,7 +30,7 @@ export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (
   const done = useRef(false);
 
   useEffect(() => {
-    const request = askCustomer({ phase: "tip", order_number: order.order_number, total_cents: order.total_cents, tip_base_cents: order.total_cents });
+    const request = askCustomer({ phase: "tip", order_number: ticketNumber(order), total_cents: order.total_cents, tip_base_cents: order.total_cents });
     cancelRef.current = request.cancel;
     let alive = true;
     void request.answer.then(async (answer) => {
@@ -44,7 +45,7 @@ export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (
         });
         if (!response.ok) throw new Error(await readError(response, "The tip could not be added."));
         const body = await response.json() as { total_cents: number };
-        showOnCustomerScreen({ phase: "pay", order_number: order.order_number, tip_cents: tip, total_cents: body.total_cents, message: "Please pay on the card reader." });
+        showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(order), tip_cents: tip, total_cents: body.total_cents, message: "Please pay on the card reader." });
         done.current = true;
         onDone({ ...order, total_cents: body.total_cents });
       } catch (cause) {
@@ -59,7 +60,7 @@ export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (
     <p aria-live="polite" className="mt-2 text-2xl font-black">{note}</p>
     {error ? <p className="mt-3 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{error}</p> : null}
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
-      <Button onClick={() => { done.current = true; cancelRef.current(); showOnCustomerScreen({ phase: "pay", order_number: order.order_number, total_cents: order.total_cents, message: "Please pay on the card reader." }); onDone(order); }} size="lg" variant="secondary">Skip tip</Button>
+      <Button onClick={() => { done.current = true; cancelRef.current(); showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(order), total_cents: order.total_cents, message: "Please pay on the card reader." }); onDone(order); }} size="lg" variant="secondary">Skip tip</Button>
       {error ? <Button onClick={() => { done.current = true; onDone(order); }} size="lg">Charge without the tip</Button> : null}
     </div>
   </div>;
@@ -72,7 +73,7 @@ export function CustomerSignStep({ order, tipCents, onFinished }: { order: OpenO
   const finished = useRef(false);
 
   useEffect(() => {
-    const request = askCustomer({ phase: "sign", order_number: order.order_number, total_cents: order.total_cents, tip_cents: tipCents });
+    const request = askCustomer({ phase: "sign", order_number: ticketNumber(order), total_cents: order.total_cents, tip_cents: tipCents });
     cancelRef.current = request.cancel;
     let alive = true;
     void request.answer.then(async (answer) => {

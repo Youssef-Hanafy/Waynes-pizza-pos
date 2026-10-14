@@ -7,7 +7,7 @@ import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, 
 const doc: PrintDocument = {
   store: { name: "Wayne's Pizza", address_line1: "93 West Boylston St", address_line2: "", city: "Worcester", state: "MA", postal_code: "01606", phone: "5085551000", timezone: "America/New_York" },
   order: {
-    id: "66000000-0000-4000-8000-000000000001", order_number: "W000123", source: "phone", fulfillment_type: "delivery", status: "placed",
+    id: "66000000-0000-4000-8000-000000000001", order_number: "W000123", daily_number: null, add_on_to: null, source: "phone", fulfillment_type: "delivery", status: "placed",
     payment_status: "unpaid", payment_method: "cash", placed_at: "2026-09-20T22:42:00Z", promised_at: "2026-09-20T23:25:00Z", phone_line: 1,
     customer_name: "John Smith", customer_phone: "+15085551234",
     delivery_address: { address1: "123 Main Street", address2: "Apt 2", city: "Worcester", state: "MA", postal_code: "01606", delivery_instructions: "Side door" },
@@ -24,7 +24,10 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("prints the line, customer, address, items and totals on the receipt", () => {
     const text = layoutToText(buildReceipt(doc)).join("\n");
     expect(text).toContain("DELIVERY · PHONE · LINE 1");
-    expect(text).toContain("Order W000123");
+    // The day's number, not the W number, is the big one (owner, 2026-10-13); W000123 is only a reference.
+    expect(text).toContain("ORDER #123");
+    expect(text).toContain("Ref W000123");
+    expect(layoutToText(buildReceipt({ ...doc, order: { ...doc.order, daily_number: 7 } })).join("\n")).toContain("ORDER #7");
     expect(text).toContain("(508) 555-1234");
     expect(text).toContain("123 Main Street, Apt 2");
     expect(text).toMatch(/1× Large Cheese Pizza\s+\$18\.99/);
@@ -145,5 +148,32 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const lines = String.fromCharCode(...encodeEscPos(long, { columns: 42, textSize: "xlarge", cut: "none" })).split("\n").filter((line) => line.includes("x"));
     expect(lines.length).toBe(2);
     expect(renderLayoutHtml(layout, 80, "xlarge")).toContain("font: 20px");
+  });
+
+  it("prints only the items added after the ticket went out, marked ADDED, and add-ons as ADD-ON (owner, 2026-10-13)", () => {
+    const numbered = { ...doc, order: { ...doc.order, daily_number: 12 } };
+    const added = layoutToText(buildKitchenTicket(numbered, [], { onlyItemIds: ["66000000-0000-4000-8000-000000000012"] })!, 40).join("\n");
+    expect(added).toContain("ADDED TO #12");
+    expect(added).toContain("Coke");
+    expect(added).not.toContain("Cheese Pizza");
+    expect(added).toContain("1 ITEM ADDED (2 ON ORDER)");
+    expect(buildKitchenTicket(numbered, [], { onlyItemIds: [] })).toBeNull();
+    const addOn = layoutToText(buildKitchenTicket({ ...numbered, order: { ...numbered.order, add_on_to: "W000100" } })!, 40).join("\n");
+    expect(addOn).toContain("ADD-ON TO #12");
+  });
+
+  it("keeps kitchen item lines full width (tall, not wide) and picks the TM-U220B's 40-column font", () => {
+    const lines = layoutToText(buildKitchenTicket(doc)!, 40);
+    expect(lines.every((line) => line.length <= 40)).toBe(true);
+    // An item line is tall only: GS ! 0x01 (double height), never 0x11 (double width too).
+    const bytes = Array.from(encodeEscPos({ title: "t", lines: [{ kind: "text", text: "1x Large Cheese Pizza", tall: true, bold: true }] }, { columns: 40, textSize: "normal", fontB: true, cut: "none" }));
+    expect(bytes.slice(2, 5)).toEqual([0x1b, 0x4d, 1]);
+    const gs = bytes.findIndex((value, index) => value === 0x1d && bytes[index + 1] === 0x21);
+    expect(bytes[gs + 2]).toBe(0x01);
+    const esc = bytes.findIndex((value, index) => index > 4 && value === 0x1b && bytes[index + 1] === 0x21);
+    // ESC ! keeps font B (bit 0) with bold + double height.
+    expect(bytes[esc + 2]).toBe(0x01 | 0x08 | 0x10);
+    expect(printerModel("epson-tm-u220b").fontB).toBe(true);
+    expect(printerModel("epson-tm-t20iii").fontB).toBe(false);
   });
 });

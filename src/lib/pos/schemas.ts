@@ -88,9 +88,38 @@ export const posOrderInputSchema = z.object({
 export const posOrderCreatedSchema = z.object({
   id: z.uuid(),
   order_number: z.string(),
+  /** The day's ticket number (#1, #2 …). */
+  daily_number: z.number().int().nullable().optional().default(null),
   total_cents: z.number().int(),
   duplicate: z.boolean(),
 });
+
+/**
+ * Items added to an order already sent (Today's Orders → Add items, owner
+ * 2026-10-13).  Same ticket lines as a new order.
+ */
+export const posAddItemsInputSchema = z.object({
+  idempotency_key: z.string().min(16).max(160),
+  special_instructions: z.string().max(500).default(""),
+  items: z.array(orderLineSchema).min(1).max(50),
+});
+export type PosAddItemsInput = z.infer<typeof posAddItemsInputSchema>;
+
+/**
+ * merged  — not paid yet: the items are on the same order (new total).
+ * add_on  — already paid: the items are on an add-on (same #) paid on its own.
+ */
+export const posItemsAddedSchema = z.object({
+  order_id: z.uuid(),
+  mode: z.enum(["merged", "add_on"]),
+  order_number: z.string(),
+  daily_number: z.number().int().nullable().optional().default(null),
+  total_cents: z.number().int(),
+  added_cents: z.number().int().optional().default(0),
+  parent_order_id: z.uuid().nullable().optional().default(null),
+  duplicate: z.boolean().optional().default(false),
+});
+export type PosItemsAdded = z.infer<typeof posItemsAddedSchema>;
 
 /** Create or update a customer from the POS (§8 "Create customer + start order"). */
 export const posSaveCustomerSchema = z.object({

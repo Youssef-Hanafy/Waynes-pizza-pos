@@ -211,6 +211,10 @@ function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg
   const strokes = useRef<Array<Array<[number, number]>>>([]);
   const drawing = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  // Hands-free (owner, 2026-10-13): once they stop signing for a moment the
+  // signature is sent by itself — nobody has to press anything.
+  const [sendIn, setSendIn] = useState<number | null>(null);
+  const sent = useRef(false);
 
   useEffect(() => {
     const element = canvas.current;
@@ -229,6 +233,7 @@ function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg
   function down(event: ReactPointerEvent<HTMLCanvasElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
     drawing.current = true;
+    setSendIn(null);
     const [x, y] = point(event);
     strokes.current.push([[x, y]]);
     const context = canvas.current?.getContext("2d");
@@ -242,28 +247,45 @@ function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg
     context?.lineTo(x, y); context?.stroke();
     if (!hasInk) setHasInk(true);
   }
-  function up() { drawing.current = false; }
+  function up() {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (strokes.current.some((stroke) => stroke.length > 1)) setSendIn(3);
+  }
   function clear() {
     strokes.current = [];
     const element = canvas.current;
     element?.getContext("2d")?.clearRect(0, 0, element.width, element.height);
     setHasInk(false);
+    setSendIn(null);
   }
   function done() {
     const element = canvas.current;
-    if (!element || !hasInk) return;
+    if (!element || !strokes.current.length || sent.current) return;
+    sent.current = true;
+    setSendIn(null);
     onAnswer(signatureSvg(strokes.current, element.clientWidth, element.clientHeight));
   }
+  // Counts down while the pen is up; touching the pad again starts over.
+  useEffect(() => {
+    if (sendIn === null) return;
+    const timer = window.setTimeout(() => {
+      if (drawing.current) { setSendIn(3); return; }
+      if (sendIn <= 1) done(); else setSendIn(sendIn - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendIn]);
 
   return <div className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <p className="text-4xl font-black">Please sign</p>
+      <p className="text-4xl font-black">Please sign{sendIn !== null ? <span className="ml-3 text-xl font-bold text-wayne-muted">Saving in {sendIn}…</span> : null}</p>
       <p className="text-3xl font-black tabular-nums">Total {formatCents(state.total_cents)}</p>
     </div>
     <canvas className="mt-4 min-h-64 w-full flex-1 touch-none rounded-3xl border-4 border-dashed border-wayne-border-strong bg-white" onPointerCancel={up} onPointerDown={down} onPointerLeave={up} onPointerMove={move} onPointerUp={up} ref={canvas} />
     <div className="mt-4 grid grid-cols-2 gap-4">
       <button className="min-h-20 rounded-3xl border-2 border-wayne-border bg-white text-2xl font-black" onClick={clear} type="button">Clear</button>
-      <button className="min-h-20 rounded-3xl bg-wayne-green text-2xl font-black text-white disabled:opacity-40" disabled={!hasInk} onClick={done} type="button">Done</button>
+      <button className="min-h-20 rounded-3xl bg-wayne-green text-2xl font-black text-white disabled:opacity-40" disabled={!hasInk} onClick={done} type="button">{sendIn !== null ? `Done (${sendIn})` : "Done"}</button>
     </div>
   </div>;
 }

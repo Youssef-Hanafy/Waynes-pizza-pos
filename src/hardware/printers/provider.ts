@@ -168,7 +168,7 @@ export class NativeEscPosPrinterProvider extends LayoutPrinter {
     if (!this.config.ip || !this.config.port) return { ok: false, reason: `${this.label} has no IP address or port.`, notSent: true };
     const model = printerModel(this.config.modelKey);
     const data = toBase64(encodeEscPos(layout, {
-      columns: this.columns(), cut: model.cut, feedBeforeCut: model.feedBeforeCut, red: model.supportsRed && this.config.twoColor, textSize: this.config.textSize,
+      columns: this.columns(), cut: model.cut, feedBeforeCut: model.feedBeforeCut, red: model.supportsRed && this.config.twoColor, textSize: this.config.textSize, fontB: model.fontB,
     }));
     // Impact printers are slow; the socket only has to accept the bytes, but give it room.
     try {

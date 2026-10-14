@@ -37,6 +37,12 @@ export type EscPosOptions = {
   red?: boolean;
   /** Bigger text (default "large": every line double height). */
   textSize?: TextSize;
+  /**
+   * The printer's smaller font (ESC M 1 / ESC ! bit 0).  The TM-U220B's default
+   * 9×9 font fits only 33 characters on 76 mm paper, so 40-column slips were
+   * cut off at the edges (owner, 2026-10-13); its 7×9 font fits 40.
+   */
+  fontB?: boolean;
 };
 
 export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): Uint8Array {
@@ -44,31 +50,32 @@ export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): 
   // Extra large prints everything double width, so half as many characters fit on a line.
   const columns = size === "xlarge" ? Math.floor((options.columns ?? 42) / 2) : options.columns ?? 42;
   // GS ! n: high nibble = width ×(n+1), low nibble = height ×(n+1).
-  //   normal: 1×1, "large" lines 2×2.   large: 1×2, "large" lines 2×2.   xlarge: 2×2 everywhere (already the widest).
-  const sizeByte = (large: boolean) => (size === "xlarge" ? 0x11 : large ? 0x11 : size === "large" ? 0x01 : 0x00);
+  //   normal: 1×1, "tall" lines 1×2, "large" lines 2×2.   large: 1×2, "large" lines 2×2.   xlarge: 2×2 everywhere (already the widest).
+  const sizeByte = (large: boolean, tall = false) => (size === "xlarge" ? 0x11 : large ? 0x11 : size === "large" || tall ? 0x01 : 0x00);
   // The same size again as ESC ! (print mode): the kitchen's TM-U220B ignores
   // GS ! and only grows the text with ESC ! — bit 3 bold, bit 4 double height,
   // bit 5 double width (owner's photo, 2026-10-13: the ticket was still small).
-  const modeByte = (bold: boolean, large: boolean) => {
-    const value = sizeByte(large);
-    return (bold ? 0x08 : 0) | (value & 0x01 ? 0x10 : 0) | (value & 0x10 ? 0x20 : 0);
+  const modeByte = (bold: boolean, large: boolean, tall = false) => {
+    const value = sizeByte(large, tall);
+    return (options.fontB ? 0x01 : 0) | (bold ? 0x08 : 0) | (value & 0x01 ? 0x10 : 0) | (value & 0x10 ? 0x20 : 0);
   };
   const bytes: number[] = [ESC, 0x40];
+  if (options.fontB) bytes.push(ESC, 0x4d, 1);
   const align = (value: "left" | "center" | "right" = "left") => bytes.push(ESC, 0x61, value === "center" ? 1 : value === "right" ? 2 : 0);
-  const style = (bold = false, large = false, highlight = false) => {
-    bytes.push(ESC, 0x21, modeByte(bold, large), ESC, 0x45, bold ? 1 : 0, GS, 0x21, sizeByte(large));
+  const style = (bold = false, large = false, highlight = false, tall = false) => {
+    bytes.push(ESC, 0x21, modeByte(bold, large, tall), ESC, 0x45, bold ? 1 : 0, GS, 0x21, sizeByte(large, tall));
     if (options.red) bytes.push(ESC, 0x72, highlight ? 1 : 0);
   };
   for (const line of layout.lines) {
     if (line.kind === "feed") { bytes.push(ESC, 0x64, Math.min(line.lines, 10)); continue; }
     if (line.kind === "rule") { align(); style(); bytes.push(...latin1("-".repeat(columns)), 0x0a); continue; }
     if (line.kind === "pair") {
-      align(); style(line.bold, line.large);
+      align(); style(line.bold, line.large, false, line.tall);
       const text = layoutToText({ title: "", lines: [size === "xlarge" ? { ...line, large: false } : line] }, columns)[0] ?? "";
       bytes.push(...latin1(text), 0x0a);
       continue;
     }
-    align(line.align); style(line.bold, line.large, line.highlight);
+    align(line.align); style(line.bold, line.large, line.highlight, line.tall);
     for (const chunk of wrap(line.text, line.large && size !== "xlarge" ? Math.floor(columns / 2) : columns)) bytes.push(...latin1(chunk), 0x0a);
   }
   style();

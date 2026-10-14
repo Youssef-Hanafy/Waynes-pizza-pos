@@ -181,8 +181,11 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
         <Button className="text-lg sm:col-span-2" disabled={busy || (heldElsewhere && !claimedMessage)} onClick={() => void start(chosen)} size="lg">{call.status === "order_started" && call.claimedById === profileId ? "Resume phone order" : "Start phone order"}</Button>
         <Button onClick={() => onOpenCustomer(chosen)} size="lg" variant="secondary">Order history &amp; details</Button>
       </> : outcome !== "choose" && outcome !== "looking_up" ? <>
-        <Button className="text-lg sm:col-span-2" disabled={busy} onClick={() => setCreating(true)} size="lg">Create customer + start order</Button>
-        <Button disabled={busy} onClick={() => void start(null, true)} size="lg" variant="secondary">Start order without profile</Button>
+        {/* No friction at rush time (owner, 2026-10-13): one tap starts the order with the number already in.
+            A name typed on the next screen saves them as a customer for next time; leaving it blank is fine. */}
+        <Button className="text-lg sm:col-span-2" disabled={busy} onClick={() => void start(null)} size="lg">Start phone order</Button>
+        <Button disabled={busy} onClick={() => setCreating(true)} size="lg" variant="secondary">Save customer first (optional)</Button>
+        <Button disabled={busy} onClick={() => void start(null, true)} size="lg" variant="secondary">No profile — just the order</Button>
       </> : null}
       {!closed ? <Button disabled={busy} onClick={() => void dismiss(heldElsewhere && Boolean(claimedMessage))} size="lg" variant="ghost">Dismiss</Button> : null}
     </div> : null}

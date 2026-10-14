@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 
 /**
  * Receipts and kitchen tickets as layouts (build sheet §23, Phase 7).
@@ -15,7 +16,11 @@ export const printDocumentSchema = z.object({
     city: z.string(), state: z.string(), postal_code: z.string(), phone: z.string().nullable().optional(), timezone: z.string(),
   }),
   order: z.object({
-    id: z.uuid(), order_number: z.string(), source: z.string(), fulfillment_type: z.string(), status: z.string(),
+    id: z.uuid(), order_number: z.string(), source: z.string(),
+    /** The day's ticket number (#1, #2 …) — what the slips print big. */
+    daily_number: z.number().int().nullable().optional().default(null),
+    /** Items added after the order was paid: the W number of the order they belong to. */
+    add_on_to: z.string().nullable().optional().default(null), fulfillment_type: z.string(), status: z.string(),
     payment_status: z.string(), payment_method: z.string(), placed_at: z.string().nullable(), promised_at: z.string().nullable(),
     phone_line: z.number().int().nullable(), customer_name: z.string(), customer_phone: z.string(),
     delivery_address: z.object({
@@ -36,8 +41,14 @@ export const printDocumentSchema = z.object({
 export type PrintDocument = z.infer<typeof printDocumentSchema>;
 
 export type PrintLine =
-  | { kind: "text"; text: string; align?: "left" | "center" | "right"; bold?: boolean; large?: boolean; highlight?: boolean }
-  | { kind: "pair"; left: string; right: string; bold?: boolean; large?: boolean }
+  /**
+   * large = twice as tall AND wide (half the characters fit on a line) — the
+   * PAID banner and the TOTAL; tall = twice as tall only, full width — the
+   * order number and the kitchen's item lines (owner, 2026-10-13: "text is too
+   * big and getting cut off … dial it down a little").
+   */
+  | { kind: "text"; text: string; align?: "left" | "center" | "right"; bold?: boolean; large?: boolean; tall?: boolean; highlight?: boolean }
+  | { kind: "pair"; left: string; right: string; bold?: boolean; large?: boolean; tall?: boolean }
   | { kind: "rule" }
   | { kind: "feed"; lines: number };
 
@@ -107,7 +118,8 @@ function heading(doc: PrintDocument, withPrices = true): PrintLine[] {
     ...paymentBanner(order, withPrices),
     { kind: "rule" },
     { kind: "text", text: `${order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP"} · ${origin}`, align: "center", bold: true },
-    { kind: "text", text: `Order ${order.order_number}`, align: "center", bold: true, large: true },
+    // The day's number, #1, #2, #3 … (owner, 2026-10-13: "order numbers are too big on the slips, every day start at 1, 2, 3").
+    { kind: "text", text: `${order.add_on_to ? "ADD-ON TO " : "ORDER "}#${ticketNumber(order)}`, align: "center", bold: true, tall: true },
     { kind: "text", text: `Placed ${when(order.placed_at, doc.store.timezone)}${order.promised_at ? ` · Ready ${when(order.promised_at, doc.store.timezone)}` : ""}`, align: "center" },
   ];
   if (order.customer_name) lines.push({ kind: "text", text: order.customer_name, bold: true });
@@ -123,7 +135,7 @@ function heading(doc: PrintDocument, withPrices = true): PrintLine[] {
 
 function itemLines(item: PrintDocument["items"][number], withPrice: boolean): PrintLine[] {
   const name = `${item.quantity}× ${item.variant ? `${item.variant} ` : ""}${item.name}`;
-  const lines: PrintLine[] = [withPrice ? { kind: "pair", left: name, right: money(item.line_total_cents), bold: true } : { kind: "text", text: name, bold: true, large: true }];
+  const lines: PrintLine[] = [withPrice ? { kind: "pair", left: name, right: money(item.line_total_cents), bold: true } : { kind: "text", text: name, bold: true, tall: true }];
   for (const modifier of item.modifiers) {
     // "NO <option>" lines are the ones a cook must not miss.
     const removed = modifier.name.toUpperCase().startsWith("NO ");
@@ -157,6 +169,7 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
   lines.push({ kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type), align: "center", bold: true });
   if (order.special_instructions) lines.push({ kind: "text", text: `Notes: ${order.special_instructions}` });
   if (order.taken_by) lines.push({ kind: "text", text: `Taken by ${order.taken_by}`, align: "center" });
+  lines.push({ kind: "text", text: `Ref ${order.order_number}${order.add_on_to ? ` (add-on to ${order.add_on_to})` : ""}`, align: "center" });
   lines.push({ kind: "text", text: "Thank you!", align: "center", bold: true }, { kind: "feed", lines: 3 });
   return { title: `Receipt ${order.order_number}`, lines };
 }
@@ -248,16 +261,26 @@ export function itemCount(items: readonly PrintDocument["items"][number][]) {
  * the ticket it should write how many items are on the ticket").  Item lines
  * stay without prices so the cook reads only what to make.
  */
-export function buildKitchenTicket(doc: PrintDocument, routingCategories: readonly string[] = []): PrintLayout | null {
-  const items = routeToKitchen(doc, routingCategories);
+export function buildKitchenTicket(doc: PrintDocument, routingCategories: readonly string[] = [], options: { onlyItemIds?: readonly string[] } = {}): PrintLayout | null {
+  // Items added to an order whose ticket already printed (owner, 2026-10-13): only those go.
+  const only = options.onlyItemIds ? new Set(options.onlyItemIds) : null;
+  const items = routeToKitchen(doc, routingCategories).filter((item) => !only || only.has(item.id));
   if (!items.length) return null;
   const order = doc.order;
   const count = itemCount(items);
   const wholeOrder = itemCount(doc.items);
-  const countLine = `${count} ITEM${count === 1 ? "" : "S"}${count !== wholeOrder ? ` (OF ${wholeOrder} ON ORDER)` : ""}`;
+  const countLine = only
+    ? `${count} ITEM${count === 1 ? "" : "S"} ADDED (${wholeOrder} ON ORDER)`
+    : `${count} ITEM${count === 1 ? "" : "S"}${count !== wholeOrder ? ` (OF ${wholeOrder} ON ORDER)` : ""}`;
+  const banner: PrintLine[] = only
+    ? [{ kind: "text", text: `ADDED TO #${ticketNumber(order)}`, align: "center", bold: true, large: true, highlight: true }, { kind: "text", text: "Same order - add these items", align: "center", bold: true }, { kind: "rule" }]
+    : order.add_on_to
+      ? [{ kind: "text", text: `ADD-ON TO #${ticketNumber(order)}`, align: "center", bold: true, large: true, highlight: true }, { kind: "rule" }]
+      : [];
   const totals: PrintLine[] = [
     { kind: "rule" },
-    { kind: "text", text: countLine, align: "center", bold: true, large: true },
+    // Big letters fit half a line: an added-items ticket says just how many were added.
+    { kind: "text", text: only ? `${count} ITEM${count === 1 ? "" : "S"} ADDED` : countLine, align: "center", bold: true, large: true },
     { kind: "rule" },
     { kind: "pair", left: "Subtotal", right: money(order.subtotal_cents) },
   ];
@@ -269,6 +292,7 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
   return {
     title: `Kitchen ${order.order_number}`,
     lines: [
+      ...banner,
       ...heading(doc, true),
       { kind: "text", text: countLine, align: "center", bold: true },
       { kind: "rule" },

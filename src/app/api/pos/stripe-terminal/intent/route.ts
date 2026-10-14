@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const service = createServiceSupabaseClient();
 
   const { data: order } = await service.from("orders")
-    .select("id, order_number, total_cents, payment_status, status")
+    .select("id, order_number, total_cents, payment_status, status, fulfillment_type")
     .eq("id", parsed.data.order_id).eq("workspace_id", account.workspaceId).maybeSingle();
   if (!order) return json({ error: "Order not found." }, 404);
   if (order.payment_status === "paid") return json({ error: "This order is already paid.", state: "captured" }, 409);
@@ -72,6 +72,8 @@ export async function POST(request: Request) {
     const intent = await createTerminalIntent(account, {
       amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, orderNumber: begun.order_number,
       paymentId: begun.payment_id, description: `Order ${begun.order_number} (card reader)`,
+      // Only a delivery waits for the driver's signed slip; in the store the tip is already on the total.
+      holdForTip: order.fulfillment_type === "delivery",
     });
     const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
     const { error: saveError } = await service.from("payments").update({

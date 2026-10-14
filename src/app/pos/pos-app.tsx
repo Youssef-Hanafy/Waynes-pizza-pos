@@ -229,12 +229,16 @@ export function PosApp(props: Props) {
     </div> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
-    {section === "today" ? <DayOrdersScreen onPay={takePayment} timeZone={settings.timezone} /> : null}
+    {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
+      // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items.
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.payment_status === "paid" || order.payment_status === "authorized" });
+      setPayFocus(null); setSection("order");
+    }} onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "tips" && canCloseOut ? <TipsScreen onOpenDeliveries={canManageOrders && deliveryEnabled && settings.delivery_enabled ? () => setSection("delivery") : undefined} /> : null}
-    {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} /> : null}
+    {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
 }

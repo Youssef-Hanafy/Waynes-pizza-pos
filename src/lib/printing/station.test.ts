@@ -13,7 +13,7 @@ const job = (patch: Partial<PrinterJob> = {}): PrinterJob => ({
 const doc = {
   store: { name: "Wayne's Pizza", address_line1: "93 West Boylston St", city: "Worcester", state: "MA", postal_code: "01606", timezone: "America/New_York" },
   order: {
-    id: "66000000-0000-4000-8000-000000000001", order_number: "W1", source: "online", fulfillment_type: "pickup", status: "placed",
+    id: "66000000-0000-4000-8000-000000000001", order_number: "W1", daily_number: null, add_on_to: null, source: "online", fulfillment_type: "pickup", status: "placed",
     payment_status: "paid", payment_method: "card", placed_at: null, promised_at: null, phone_line: null, customer_name: "A", customer_phone: "",
     delivery_address: null, special_instructions: "", subtotal_cents: 100, discount_cents: 0, delivery_fee_cents: 0, tax_cents: 0, tip_cents: 0, total_cents: 100, taken_by: null,
   },

@@ -12,6 +12,7 @@ import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { uuid } from "@/lib/uuid";
+import { ticketLabel, ticketNumber } from "@/lib/orders/ticket-number";
 import { showOnCustomerScreen, useCustomerScreen } from "@/stores/customer-display-link";
 import { CustomerSignStep, CustomerTipStep, thankCustomer } from "./customer-steps";
 
@@ -101,7 +102,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
   const row = (order: OpenOrder) => <li key={order.id}>
     <button aria-current={order.id === selectedId ? "true" : undefined} className={`flex min-h-16 w-full items-center justify-between gap-3 rounded-xl border-2 p-3 text-left transition ${order.id === selectedId ? "border-wayne-green bg-wayne-ok-soft" : "border-wayne-border bg-white hover:border-wayne-border-strong"}`} onClick={() => { setSelectedId(order.id); setDone(null); }} type="button">
-      <span className="min-w-0"><strong className="block text-lg">{order.order_number} · {order.customer_name || "Walk-in"}</strong><span className="block text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · {time(order.placed_at)} · {statusLabels[order.status] ?? order.status}</span></span>
+      <span className="min-w-0"><strong className="block text-lg">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</strong><span className="block text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · {time(order.placed_at)} · {statusLabels[order.status] ?? order.status}</span></span>
       <span className="text-right"><strong className="block text-xl">{formatCents(order.total_cents)}</strong><span className={`text-xs font-black uppercase ${order.payment_status === "paid" ? "text-wayne-ok" : "text-wayne-red"}`}>{order.payment_status === "paid" ? `Paid · ${order.payment_method}` : "Unpaid"}</span></span>
     </button>
   </li>;
@@ -128,8 +129,19 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
 function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
   const [note, setNote] = useState("");
+  // A card in the store needs nothing more from the cashier (owner, 2026-10-13):
+  // the screen moves on to the next order by itself.  Cash waits — the change has to be handed over.
+  const autoNext = done.method === "card" && !done.held;
+  const [nextIn, setNextIn] = useState(autoNext ? 5 : 0);
+  const onNextRef = useRef(onNext);
+  useEffect(() => { onNextRef.current = onNext; }, [onNext]);
+  useEffect(() => {
+    if (!autoNext || nextIn <= 0) return;
+    const timer = window.setTimeout(() => { if (nextIn <= 1) onNextRef.current(); else setNextIn(nextIn - 1); }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [autoNext, nextIn]);
   return <div className="mx-auto max-w-xl text-center">
-    <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">Paid · {done.order.order_number}</p>
+    <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-ok">Paid · {ticketLabel(done.order)}</p>
     {done.method === "cash" ? <>
       <p className="mt-6 text-lg font-bold">Change due</p>
       <p className="text-7xl font-black text-wayne-ok">{formatCents(done.changeCents)}</p>
@@ -139,12 +151,15 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
       <p className="mt-2 text-wayne-muted">{done.order.fulfillment_type === "delivery"
         ? "A tip & signature slip prints for the driver. When they bring it back signed, type the tip in Deliveries and cash them out — the card is charged once, order + tip."
         : "A tip & signature slip prints. Keep the signed slip: at the end of the night type its tip in Tips — the card is charged once, order + tip."}</p>
-    </> : <p className="mt-6 text-5xl font-black">{formatCents(done.order.total_cents)} on card</p>}
+    </> : <>
+      <p className="mt-6 text-5xl font-black">{formatCents(done.order.total_cents)} on card</p>
+      <p className="mt-2 font-bold text-wayne-ok">Charged — order closed. It&apos;s in Today&apos;s Orders.</p>
+    </>}
     {done.order.is_test ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">🧪 Test order — no real card was charged.</p> : null}
     {done.method === "cash" ? <p className="mt-6 rounded-xl bg-wayne-cream p-3 font-bold">The cash drawer is opening.</p> : null}
     <div className="mt-6 grid gap-2 sm:grid-cols-2">
       <Button onClick={() => { setNote("Printing…"); void requestReceipt(done.order.id).then((result) => setNote(result.message)); }} size="lg" variant="secondary">Print receipt</Button>
-      <Button onClick={onNext} size="lg">Next order</Button>
+      <Button onClick={onNext} size="lg">{autoNext && nextIn > 0 ? `Next order (${nextIn})` : "Next order"}</Button>
     </div>
     {note ? <p aria-live="polite" className="mt-2 text-sm font-bold">{note}</p> : null}
   </div>;
@@ -160,7 +175,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const [tipAsked, setTipAsked] = useState(false);
   const [signing, setSigning] = useState<Done | null>(null);
   useEffect(() => {
-    if (openedOrder.payment_status !== "paid") showOnCustomerScreen({ phase: "pay", order_number: openedOrder.order_number, total_cents: openedOrder.total_cents });
+    if (openedOrder.payment_status !== "paid") showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(openedOrder), total_cents: openedOrder.total_cents });
   }, [openedOrder]);
   const tipDone = useCallback((next: OpenOrder) => { setOrder(next); setTipAsked(true); }, []);
   const onPaid = useCallback((done: Done) => {
@@ -188,7 +203,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
 
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">{order.order_number} · {order.customer_name || "Walk-in"}</p><p className="mt-1 text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source === "pos" ? "in store" : order.source}</p></div>
+      <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</p><p className="mt-1 text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source === "pos" ? "in store" : order.source}</p></div>
       <div className="text-right"><p className="text-sm font-bold">Amount due</p><p className="text-5xl font-black">{formatCents(due)}</p></div>
     </div>
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
@@ -398,7 +413,8 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
 </div>;
 
   return <div className="mt-5 grid gap-4">
-    {stripeReader ? <StripeReaderTender autoStart={autoStart} busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null, held: true })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
+    {/* Only a delivery card is held for the driver's slip; in the store it is charged for order + tip and the order closes (owner, 2026-10-13). */}
+    {stripeReader ? <StripeReaderTender autoStart={autoStart} busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null, held: order.fulfillment_type === "delivery" })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
@@ -416,10 +432,11 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   const [message, setMessage] = useState("");
   const onReady = useCallback((confirm: StripeCardConfirm | null) => { confirmRef.current = confirm; }, []);
   const onStatus = useCallback((next: string) => setMessage(next), []);
-  // Every keyed card is approved for the order (plus any tip given on the phone)
-  // and held; the tip written on the signed slip is added later — in Deliveries
-  // at the driver's cash-out, or in Tips at night — and the card is charged once
-  // then (owner, 2026-10-11 deliveries, 2026-10-13 everything).
+  // A delivery card is approved for the order and held; the tip on the slip the
+  // driver brings back is added in Deliveries at the cash-out and the card is
+  // charged once then (owner, 2026-10-11).  A phone pickup is charged now for
+  // the order plus any tip given on the phone, and the order is closed
+  // (owner, 2026-10-13: only deliveries need tips added by hand).
   const delivery = order.fulfillment_type === "delivery";
   const [baseCents, setBaseCents] = useState(order.total_cents);
   const [tipCents, setTipCents] = useState(0);
@@ -474,7 +491,7 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
     {delivery ? <p className="mt-3 rounded-xl bg-wayne-cream p-3 text-sm font-bold">Delivery: the card is approved for {formatCents(baseCents)} now. The driver&apos;s tip from the signed slip is added in Deliveries, and the card is charged once — order + tip.</p>
       : <>
         <TipPicker baseCents={baseCents} disabled={busy || order.payment_status === "paid"} onChange={setTipCents} tipCents={tipCents} />
-        <p className="mt-2 text-xs font-bold text-wayne-muted">The card is approved now and held. If they write a tip on the slip at pickup, add it in Tips tonight.</p>
+        <p className="mt-2 text-xs font-bold text-wayne-muted">The card is charged now, tip included, and the order is closed.</p>
       </>}
     <div className="mt-3"><StripeCardField config={config} onReady={onReady} onStatus={onStatus} /></div>
     {message ? <p aria-live="polite" className="mt-2 text-sm font-bold">{message}</p> : null}
@@ -535,8 +552,8 @@ function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStar
       }
       const response = await fetch("/api/pos/test-payment", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        // Like a real card: approved and held for the tip on the slip (owner, 2026-10-13).
-        body: JSON.stringify({ order_id: order.id, entry, authorize_only: true, idempotency_key: `pos-test-card-${order.id}-${uuid()}` }),
+        // Like a real card: a delivery is approved and held for the driver's slip; anything else is charged now (owner, 2026-10-13).
+        body: JSON.stringify({ order_id: order.id, entry, authorize_only: order.fulfillment_type === "delivery", idempotency_key: `pos-test-card-${order.id}-${uuid()}` }),
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) throw new Error(await readError(response, "The test payment could not be recorded."));
@@ -569,7 +586,7 @@ function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStar
       <Button onClick={() => setTapIn(null)} variant="secondary">Stop</Button>
     </div> : null}
     <p className="mt-1 text-sm text-wayne-muted">{entry === "card_reader"
-      ? "Pretend the customer tapped their card. It's approved and held for the tip on the slip, like a real card. Card sales don't open the cash drawer."
+      ? `Pretend the customer tapped their card. ${order.fulfillment_type === "delivery" ? "A delivery card is approved and held for the driver's slip" : "It's charged with the tip from the customer screen and the order closes"}, like a real card. Card sales don't open the cash drawer.`
       : delivery ? "Delivery: the test card is approved for the order now; add the tip in Deliveries at the driver's cash-out, like a real one."
       : "Pretend the card number was typed in."}</p>
     {askTip ? <TipPicker baseCents={baseCents} disabled={busy} onChange={setTipCents} tipCents={tipCents} /> : null}

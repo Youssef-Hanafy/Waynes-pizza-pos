@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { brandLabels, closeoutLayout, countedFromDenominations, dayCloseoutSchema, DENOMINATIONS, expectedCash, sourceLabels, type DayCloseout } from "@/lib/closeout/schemas";
+import { brandLabels, closeoutLayout, countedFromDenominations, dayCloseoutSchema, DENOMINATIONS, expectedCash, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
 import { formatCents } from "@/lib/menu/schemas";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 
@@ -23,7 +23,7 @@ function shiftDay(day: string, by: number) {
  * "Close out the day" closes the open drawer with the count and keeps the
  * close out on file; it can be printed on the receipt printer.
  */
-export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; onOpenTips?: () => void }) {
+export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the owner" }: { storeName: string; onOpenTips?: () => void; /** Admin → Tips: who the card tips are paid out to. */ tipPayoutName?: string }) {
   const [day, setDay] = useState<string | null>(null);
   const [today, setToday] = useState("");
   const [report, setReport] = useState<DayCloseout | null>(null);
@@ -88,7 +88,7 @@ export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; o
     const runtime = getHardwareRuntime();
     if (!runtime) { setNotice("Printing is still starting up. Try again in a moment."); return; }
     setNotice("Printing…");
-    const result = await runtime.receiptPrinter.printLayout(closeoutLayout(report, storeName, counted ?? report.saved?.counted_cash_cents ?? null, report.day === today));
+    const result = await runtime.receiptPrinter.printLayout(closeoutLayout(report, storeName, counted ?? report.saved?.counted_cash_cents ?? null, report.day === today, tipPayoutName));
     setNotice(result.ok ? "Close out sent to the receipt printer." : result.reason);
   }
 
@@ -97,6 +97,7 @@ export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; o
   }
 
   const { sales, tenders, online } = report;
+  const tips = tipPayout(report);
   const brands = Object.entries(report.card_brands).sort((a, b) => b[1].cents - a[1].cents);
 
   return <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
@@ -110,8 +111,20 @@ export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; o
       </div>
       {error ? <p className="rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">{error}</p> : null}
       {report.saved ? <p className="rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok">✓ Closed out {new Date(report.saved.closed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{report.saved.closed_by_name ? ` by ${report.saved.closed_by_name}` : ""}: counted {formatCents(report.saved.counted_cash_cents)}, expected {formatCents(report.saved.expected_cash_cents)} ({varianceText(report.saved.variance_cents)}). Closing again replaces it.</p> : null}
+      {/* Tips are not store income (owner, 2026-10-13): what to pay out, in one line. */}
+      <div className="grid gap-3 rounded-3xl border-2 border-wayne-green bg-white p-4 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center">
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.16em] text-wayne-muted">Tips — not store income</p>
+          <p className="mt-1 text-2xl font-black sm:text-3xl">Pay {tipPayoutName} <span className="text-wayne-green">{formatCents(tips.ownerCardTips)}</span> in card tips</p>
+          <p className="mt-1 text-sm font-bold text-wayne-muted">{tips.ownerCardTipCount ? `${tips.ownerCardTipCount} card tip${tips.ownerCardTipCount === 1 ? "" : "s"} on pickup, walk-in and online pickup orders` : "No card tips yet today"}{tips.ownerCashTips ? ` · plus ${formatCents(tips.ownerCashTips)} tipped in cash` : ""}{tips.driverTips ? ` · delivery tips ${formatCents(tips.driverTips)} go to the drivers at their cash-out` : ""}</p>
+        </div>
+        <div className="rounded-2xl bg-wayne-cream p-3 text-right">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-wayne-muted">Store income (no tips)</p>
+          <p className="text-2xl font-black tabular-nums">{formatCents(tips.income)}</p>
+        </div>
+      </div>
       {tenders.card_held_for_tip_cents ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 p-3">
-        <p className="font-black">💳 {formatCents(tenders.card_held_for_tip_cents)} in cards still waiting for tips from the slips. Add the tips and charge them before closing out.</p>
+        <p className="font-black">💳 {formatCents(tenders.card_held_for_tip_cents)} in delivery cards still waiting for the driver&apos;s tip. Cash out the drivers (or charge them in Tips) before closing out.</p>
         {onOpenTips ? <Button onClick={onOpenTips} size="sm">Go to Tips</Button> : null}
       </div> : null}
       {report.unpaid.count ? <div className="rounded-xl border-2 border-wayne-alert bg-wayne-alert-soft p-3">
@@ -128,8 +141,9 @@ export function CloseoutScreen({ storeName, onOpenTips }: { storeName: string; o
           {sales.discount_cents ? <Row label="Discounts" value={formatCents(-sales.discount_cents)} /> : null}
           <Row label="Delivery fees" value={formatCents(sales.delivery_fee_cents)} />
           <Row label="Tax" value={formatCents(sales.tax_cents)} />
-          <Row label="Tips" value={formatCents(sales.tip_cents)} />
-          <Row big label="Total" value={formatCents(sales.total_cents)} />
+          <Row label="Tips (paid out, not income)" value={formatCents(sales.tip_cents)} />
+          <Row big label="Total collected" value={formatCents(sales.total_cents)} />
+          <Row big label="Store income" value={formatCents(tips.income)} />
           <div className="mt-2 border-t border-wayne-border pt-2 text-sm">
             <Row label={`Pickup (${sales.pickup_count})`} value={formatCents(sales.pickup_total_cents)} />
             <Row label={`Delivery (${sales.delivery_count})`} value={formatCents(sales.delivery_total_cents)} />

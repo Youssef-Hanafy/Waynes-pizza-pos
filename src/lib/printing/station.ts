@@ -8,6 +8,7 @@ import type { PrintQueueRepository } from "./worker";
  * them on the store's printers:
  *
  *   destination "kitchen", job kitchen_ticket  → TM-U220B, kitchen ticket
+ *   destination "kitchen", job kitchen_addition → TM-U220B, only the items added to an order after its ticket printed
  *   destination "receipt", job online_order    → TM-T20III, order slip (+ tip & signature slip)
  *   destination "receipt", job delivery_receipt → TM-T20III, customer receipt (register/phone delivery)
  *   destination "receipt", job receipt_request  → TM-T20III, customer receipt someone asked for
@@ -86,7 +87,11 @@ export function createKitchenStationAdapter(options: {
       } catch (error) {
         throw new PrinterOfflineError(error instanceof Error ? error.message : "The order could not be loaded for printing.");
       }
-      const ticket = buildKitchenTicket(doc, options.routingCategories);
+      // Items added after the first ticket (owner, 2026-10-13): print only those, marked ADDED.
+      const added = job.job_type === "kitchen_addition" && Array.isArray(job.payload.item_ids)
+        ? job.payload.item_ids.filter((id): id is string => typeof id === "string")
+        : undefined;
+      const ticket = buildKitchenTicket(doc, options.routingCategories, added ? { onlyItemIds: added } : {});
       // Nothing on this order goes to the kitchen printer (e.g. drinks only): done.
       if (!ticket) return { receiptId: "nothing-for-this-printer" };
       return settle(await options.printer.printLayout(ticket));

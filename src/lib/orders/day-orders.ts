@@ -4,6 +4,10 @@ import { z } from "zod";
 export const dayOrderSchema = z.object({
   id: z.uuid(),
   order_number: z.string(),
+  daily_number: z.number().int().nullable().optional().default(null),
+  /** Items added after the order was paid: the order they belong to. */
+  parent_order_id: z.uuid().nullable().optional().default(null),
+  parent_order_number: z.string().nullable().optional().default(null),
   customer_name: z.string().nullable().transform((value) => value ?? ""),
   customer_phone: z.string().nullable().transform((value) => value ?? ""),
   fulfillment_type: z.string(),
@@ -70,6 +74,7 @@ export function matchesSearch(order: DayOrder, query: string) {
   if (!text) return true;
   const digits = text.replace(/\D/g, "");
   return order.order_number.toLowerCase().includes(text)
+    || (order.daily_number !== null && digits !== "" && String(order.daily_number) === digits.replace(/^0+/, ""))
     || order.order_number.replace(/\D/g, "").replace(/^0+/, "").startsWith(digits.replace(/^0+/, "") || "~")
     || order.customer_name.toLowerCase().includes(text)
     || (digits.length >= 3 && order.customer_phone.replace(/\D/g, "").includes(digits));

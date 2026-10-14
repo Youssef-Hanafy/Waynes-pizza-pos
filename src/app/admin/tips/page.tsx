@@ -33,6 +33,7 @@ export default async function TipsPage({ searchParams }: { searchParams: Promise
         <Card className="grid gap-5 p-6">
           <Input defaultValue={amounts.map(dollars).join(", ")} hint="Whole dollars, separated by commas — up to 6. Leave blank for no dollar buttons." label="Dollar tip buttons ($)" name="dollars" placeholder="1, 2, 3, 4, 5" />
           <Input defaultValue={percents.join(", ")} hint="Separated by commas — up to 4." label="Percentage tip buttons (%)" name="percentages" placeholder="15, 18, 20, 25" />
+          <Input defaultValue={settings.tip_payout_name === "the owner" ? "" : settings.tip_payout_name} hint="Tips aren't store income. At Close Out, the card tips on every order except deliveries are shown as one amount to pay this person (delivery tips go to the drivers)." label="Card tips are paid out to" name="tip_payout_name" placeholder="Ehab" required />
           <label className="flex min-h-11 items-center gap-3 font-bold">
             <input className="h-5 w-5 accent-wayne-red" defaultChecked={settings.tips_enabled} name="tips_enabled" type="checkbox" />
             Ask for a tip at online checkout
