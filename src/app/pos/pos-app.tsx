@@ -191,7 +191,7 @@ export function PosApp(props: Props) {
   ];
 
   // --pos-kb-h: the on-screen keyboard's height, so the page sits above it.
-  return <div className="flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden" style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
+  return <div className={`flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden ${section === "order" ? "md:h-screen md:overflow-hidden" : ""}`} style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
     <PosKeyboard />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>

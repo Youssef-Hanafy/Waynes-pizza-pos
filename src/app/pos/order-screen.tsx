@@ -301,11 +301,11 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const shownItems = shownCategories.flatMap((category) => category.items);
 
   return <div className="flex min-h-0 flex-1 flex-col">
-    <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_26rem] xl:grid-cols-[1fr_30rem] 2xl:grid-cols-[1fr_34rem]">
+    <main className="grid flex-1 grid-cols-1 md:min-h-0 md:grid-cols-[1fr_21rem] lg:grid-cols-[1fr_26rem] xl:grid-cols-[1fr_30rem] 2xl:grid-cols-[1fr_34rem]">
       {/* Order bar over the menu only, so the ticket gets the whole height on the right (owner, 2026-10-16). */}
-      <div className="flex min-w-0 flex-col lg:min-h-0">
+      <div className="flex min-w-0 flex-col md:min-h-0">
       {topBar}
-      <section aria-label="Menu" className="flex min-w-0 flex-1 flex-col gap-2.5 p-3 lg:min-h-0">
+      <section aria-label="Menu" className="flex min-w-0 flex-1 flex-col gap-2.5 p-3 md:min-h-0">
         {/* Categories as an even grid across the whole width (search takes the last two cells), so the items below get all the height that's left. */}
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(7.25rem, 1fr))" }}>
           {visibleMenu.map((category) => {
@@ -321,10 +321,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
       </section>
       </div>
-      <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white lg:min-h-0 lg:border-l lg:border-t-0">
+      <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white md:min-h-0 md:border-l md:border-t-0">
         <div className="flex shrink-0 items-center justify-between px-3 pt-1.5"><h2 className="text-lg font-black">Ticket{itemCount ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</h2><button className="min-h-10 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
         {/* One compact row per item so a whole order fits without scrolling; tap a row for −/+/Edit/Remove (owner, 2026-10-16). */}
-        <div className="flex-1 px-1.5 lg:min-h-0 lg:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="divide-y divide-wayne-border">{cart.map((line) => {
+        <div className="flex-1 px-1.5 md:min-h-0 md:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="divide-y divide-wayne-border">{cart.map((line) => {
           const item = findMenuItem(menu, line.menu_item_id);
           const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
           const open = openLine === line.line_id;
