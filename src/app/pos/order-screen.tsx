@@ -299,7 +299,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const shownItems = shownCategories.flatMap((category) => category.items);
 
   return <div className="flex min-h-0 flex-1 flex-col">
-    <main className="grid flex-1 grid-cols-1 md:min-h-0 md:grid-cols-[1fr_21rem] lg:grid-cols-[1fr_26rem] xl:grid-cols-[1fr_30rem] 2xl:grid-cols-[1fr_34rem]">
+    <main className="grid flex-1 grid-cols-1 md:min-h-0 md:grid-cols-[1fr_20rem] lg:grid-cols-[1fr_22rem] 2xl:grid-cols-[1fr_26rem]">
       {/* Order bar over the menu only, so the ticket gets the whole height on the right (owner, 2026-10-16). */}
       <div className="flex min-w-0 flex-col md:min-h-0">
       {topBar}
@@ -322,7 +322,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white md:min-h-0 md:border-l md:border-t-0">
         <div className="flex shrink-0 items-center justify-between px-3 pt-1.5"><h2 className="text-lg font-black">Ticket{itemCount ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</h2><button className="min-h-10 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
         {/* One compact row per item so a whole order fits without scrolling; tap a row for −/+/Edit/Remove (owner, 2026-10-16). */}
-        <div className="flex-1 px-1.5 md:min-h-0 md:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="space-y-2 py-1">{cart.map((line) => {
+        <div className="flex-1 px-1.5 md:min-h-0 md:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="divide-y divide-wayne-border">{cart.map((line) => {
           const item = findMenuItem(menu, line.menu_item_id);
           const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
           return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant?.name ?? ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} quantity={line.quantity} title={line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"} />;
@@ -366,18 +366,19 @@ function ticketSummary(draft: PosDraft, settings: StoreSettings) {
   return { icon: "🛍️", title: `Pickup · ${who || "Customer"}`, detail: [phone, how].filter(Boolean).join(" · ") };
 }
 
-/** One item on the ticket, as the original card: name, size, price, options, and −/+/Edit/Remove. */
+/** One item = one short row: − qty + · name (tap to edit) · price · ✕, so a whole order fits (owner, 2026-10-16). */
 function TicketLine({ title, detail, modifiers, note, cents, quantity, onQuantity, onEdit, onRemove }: { title: string; detail: string; modifiers: { kind: string; label: string }[]; note: string; cents: number; quantity: number; onQuantity: (quantity: number) => void; onEdit: () => void; onRemove: () => void }) {
-  return <li className="rounded-xl bg-wayne-cream p-3">
-    <div className="flex justify-between gap-2"><div><strong>{quantity}× {title}</strong>{detail ? <p className="text-sm text-wayne-muted">{detail}</p> : null}</div><strong>{formatCents(cents)}</strong></div>
-    {modifiers.length ? <p className="mt-1 flex flex-wrap gap-1 text-sm">{modifiers.map((entry) => <span className={`rounded px-1.5 font-bold ${entry.kind === "removed" ? "bg-wayne-red-soft text-wayne-red" : "bg-wayne-ok-soft text-wayne-ok"}`} key={entry.label}>{entry.label}</span>)}</p> : null}
-    {note ? <p className="mt-1 text-sm">Note: {note}</p> : null}
-    <div className="mt-2 flex gap-2">
-      <button aria-label="Decrease item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => onQuantity(quantity - 1)} type="button">−</button>
-      <button aria-label="Increase item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => onQuantity(quantity + 1)} type="button">+</button>
-      <button className="min-h-11 px-1 text-sm font-bold underline" onClick={onEdit} type="button">Edit</button>
-      <button className="ml-auto min-h-11 px-1 text-sm font-bold text-wayne-red" onClick={onRemove} type="button">Remove</button>
-    </div>
+  return <li className="flex items-center gap-1 py-1">
+    <button aria-label="Decrease item" className="grid h-10 w-9 shrink-0 place-items-center rounded-lg border border-wayne-border bg-white text-lg font-black" onClick={() => onQuantity(quantity - 1)} type="button">−</button>
+    <span className="w-6 shrink-0 text-center font-black">{quantity}</span>
+    <button aria-label="Increase item" className="grid h-10 w-9 shrink-0 place-items-center rounded-lg border border-wayne-border bg-white text-lg font-black" onClick={() => onQuantity(quantity + 1)} type="button">+</button>
+    <button aria-label={`Edit ${title}`} className="min-h-10 min-w-0 flex-1 rounded-lg px-1.5 text-left leading-tight hover:bg-wayne-cream" onClick={onEdit} type="button">
+      <span className="font-bold">{title}</span>{detail ? <span className="text-sm text-wayne-muted"> · {detail}</span> : null}
+      {modifiers.length ? <span className="mt-0.5 flex flex-wrap gap-0.5 text-xs">{modifiers.map((entry) => <span className={`rounded px-1 font-bold ${entry.kind === "removed" ? "bg-wayne-red-soft text-wayne-red" : "bg-wayne-ok-soft text-wayne-ok"}`} key={entry.label}>{entry.label}</span>)}</span> : null}
+      {note ? <span className="block text-xs italic">Note: {note}</span> : null}
+    </button>
+    <span className="shrink-0 text-sm font-black">{formatCents(cents)}</span>
+    <button aria-label={`Remove ${title}`} className="grid h-10 w-8 shrink-0 place-items-center rounded-lg text-lg font-black text-wayne-red hover:bg-wayne-red-soft" onClick={onRemove} type="button">✕</button>
   </li>;
 }
 function updateQuantity(cart: CartLine[], lineId: string, quantity: number) { return quantity < 1 ? cart.filter((line) => line.line_id !== lineId) : cart.map((line) => line.line_id === lineId ? { ...line, quantity: Math.min(20, quantity) } : line); }
