@@ -264,7 +264,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     ? { icon: "➕", title: `Adding to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: addTo.paid ? "Already paid — these items go out as an add-on and are paid on their own" : "Not paid yet — these items go on the same order" }
     : ticketSummary(draft, settings);
   if (draft.isTest) summary.title = `🧪 TEST · ${summary.title}`;
-  const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-2">
+  const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-1.5">
     {addTo ? <div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 px-2 py-1">
       <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-wayne-gold text-xl">{summary.icon}</span>
       <span className="min-w-0">
@@ -272,13 +272,13 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <span className="block truncate text-sm font-bold text-wayne-muted">{summary.detail}</span>
       </span>
       <button className="ml-auto min-h-11 shrink-0 rounded-lg border border-wayne-border bg-white px-3 text-sm font-bold" onClick={cancelAddition} type="button">{returnTo && returnTo.order.id === addTo.orderId ? "‹ Back to payment" : "Cancel"}</button>
-    </div> : draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
+    </div> : draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 max-w-full items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
       <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-xl ${draft.source === "phone" ? "bg-wayne-green text-white" : "bg-wayne-cream"}`}>{summary.icon}</span>
       <span className="min-w-0">
         <span className="block truncate text-base font-black">{summary.title}</span>
         <span className="block truncate text-sm text-wayne-muted">{summary.detail}</span>
       </span>
-      <span className="ml-auto shrink-0 rounded-lg border border-wayne-border px-3 py-1.5 text-sm font-bold">Edit</span>
+      <span className="ml-2 shrink-0 rounded-lg border border-wayne-border px-3 py-1.5 text-sm font-bold">Edit</span>
     </button> : <p className="flex-1 text-sm font-black uppercase tracking-[0.12em] text-wayne-muted">{draft.cart.length ? "Editing order details" : "Starting a new order"}</p>}
     {remote.length ? <details className="relative"><summary className="flex min-h-11 cursor-pointer items-center rounded-full border border-dashed border-wayne-border-strong px-3 text-sm font-bold">Other registers ({remote.length})</summary><div className="absolute right-0 z-40 mt-1 grid w-80 gap-2 rounded-2xl border border-wayne-border bg-white p-3 shadow-xl">{remote.map((ticket) => <div className="rounded-xl border border-wayne-border p-2" key={ticket.id}><p className="text-sm font-bold">{ticket.label || "Ticket"}{ticket.item_count ? ` · ${ticket.item_count} item${ticket.item_count === 1 ? "" : "s"}` : ""}</p><p className="text-xs text-wayne-muted">{ticket.status === "held" ? "On hold" : "Open"} on {ticket.terminal || "another register"}{ticket.owner_name ? ` · ${ticket.owner_name}` : ""}</p><Button className="mt-2 w-full" onClick={() => void takeOver(ticket.id)} size="sm" variant="secondary">Take over here</Button></div>)}</div></details> : null}
     {held.length ? <div className="flex flex-wrap gap-1.5">{held.map((candidate) => <button className="min-h-11 rounded-full border border-wayne-border bg-wayne-cream px-3 text-sm font-bold" key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setError(""); }} type="button">{candidate.submitPending ? "⟳ " : "⏸ "}{draftLabel(candidate)}{candidate.cart.length ? ` · ${candidate.cart.length}` : ""}{candidate.submitPending ? " · sending" : ""}</button>)}</div> : null}
@@ -301,9 +301,11 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const shownItems = shownCategories.flatMap((category) => category.items);
 
   return <div className="flex min-h-0 flex-1 flex-col">
-    {topBar}
-    <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_24rem] xl:grid-cols-[1fr_27rem] 2xl:grid-cols-[1fr_32rem]">
-      <section aria-label="Menu" className="flex min-w-0 flex-col gap-2.5 p-3 lg:min-h-0">
+    <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_26rem] xl:grid-cols-[1fr_30rem] 2xl:grid-cols-[1fr_34rem]">
+      {/* Order bar over the menu only, so the ticket gets the whole height on the right (owner, 2026-10-16). */}
+      <div className="flex min-w-0 flex-col lg:min-h-0">
+      {topBar}
+      <section aria-label="Menu" className="flex min-w-0 flex-1 flex-col gap-2.5 p-3 lg:min-h-0">
         {/* Categories as an even grid across the whole width (search takes the last two cells), so the items below get all the height that's left. */}
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(7.25rem, 1fr))" }}>
           {visibleMenu.map((category) => {
@@ -318,6 +320,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           return shownItems.map((item) => <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-24 p-3" : roomy ? "p-3" : "px-3 py-2"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} type="button"><strong className={`line-clamp-2 block leading-tight ${roomy ? "text-lg" : "text-base"}`}>{item.name}</strong><span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-sm"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>);
         }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
       </section>
+      </div>
       <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white lg:min-h-0 lg:border-l lg:border-t-0">
         <div className="flex shrink-0 items-center justify-between px-3 pt-1.5"><h2 className="text-lg font-black">Ticket{itemCount ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</h2><button className="min-h-10 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
         {/* One compact row per item so a whole order fits without scrolling; tap a row for −/+/Edit/Remove (owner, 2026-10-16). */}

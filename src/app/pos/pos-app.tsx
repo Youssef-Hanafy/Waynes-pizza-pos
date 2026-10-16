@@ -174,7 +174,7 @@ export function PosApp(props: Props) {
   const warning = !hardwareState.online
     ? `No internet — tickets are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : ""}`
     : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
-    : callerStatus && ["error", "unavailable"].includes(callerStatus.state) ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
+    : callerStatus && callerStatus.state === "error" ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
     : syncStatus && syncStatus.state === "disconnected" && runtimeReady ? "Live phone updates reconnecting"
     : printStationWarning(printStation);
 
