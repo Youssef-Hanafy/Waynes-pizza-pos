@@ -46,7 +46,7 @@ async function readError(response: Response, fallback: string) {
  * handed over queues a drawer kick and the print station pulses the drawer on
  * the receipt printer.  Sending an order or a card payment never opens it.
  */
-export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean }) {
+export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false, onAddItems }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean; /** Add items to an unpaid order, then pay it all at once. */ onAddItems?: (order: OpenOrder) => void }) {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [listError, setListError] = useState("");
@@ -121,7 +121,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
     <section aria-label="Take payment" className="rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
       {done ? <PaidSummary done={done} onNext={() => setDone(null)} />
-        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
+        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onAddItems={onAddItems && selected.payment_status !== "paid" && selected.payment_status !== "authorized" ? () => onAddItems(selected) : undefined} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
         : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Choose an order on the left to take payment.</p></div>}
     </section>
   </div>;
@@ -165,7 +165,7 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
   </div>;
 }
 
-function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPayment, onDrawerChanged, keyedCardConfig, stripeReader, onPayLater }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; /** Shown when the payment prompt opens right after an order is sent. */ onPayLater?: () => void }) {
+function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPayment, onDrawerChanged, keyedCardConfig, stripeReader, onPayLater, onAddItems }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; /** Shown when the payment prompt opens right after an order is sent. */ onPayLater?: () => void; /** Back to the menu to add items to this same unpaid order, then one payment for everything (owner, 2026-10-16). */ onAddItems?: () => void }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -209,6 +209,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
       : cardHeld ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
       {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
+      {onAddItems ? <button className="mt-4 flex min-h-14 w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 text-lg font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
       <div className={`mt-5 grid grid-cols-2 gap-3 ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
         {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · tip on slip" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
@@ -233,7 +234,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
  * 2026-09-30): Cash, Card reader, Key in card, or Pay later.  Pay later
  * leaves the order unpaid; it is in Payments whenever the customer pays.
  */
-export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater, onFinished }: { order: OpenOrder; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; onPayLater: () => void; onFinished: () => void }) {
+export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater, onFinished, onAddItems }: { order: OpenOrder; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; onPayLater: () => void; onFinished: () => void; onAddItems?: () => void }) {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [shiftId, setShiftId] = useState("");
   const [done, setDone] = useState<Done | null>(null);
@@ -258,7 +259,7 @@ export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater
   }, [loadDrawer]);
 
   if (done) return <PaidSummary done={done} onNext={onFinished} />;
-  return <PaymentPage keyedCardConfig={keyedCardConfig} onDrawerChanged={loadDrawer} onPaid={setDone} onPayLater={onPayLater} order={order} shiftId={shiftId} stripeReader={stripeReader} terminals={terminals} />;
+  return <PaymentPage keyedCardConfig={keyedCardConfig} onAddItems={onAddItems} onDrawerChanged={loadDrawer} onPaid={setDone} onPayLater={onPayLater} order={order} shiftId={shiftId} stripeReader={stripeReader} terminals={terminals} />;
 }
 
 type TenderProps = { order: OpenOrder; busy: boolean; setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (done: Done) => void };

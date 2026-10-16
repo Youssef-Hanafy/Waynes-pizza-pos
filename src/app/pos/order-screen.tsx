@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
@@ -62,6 +62,11 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   /** The order just sent, shown with the payment prompt until it is paid or left to pay later. */
   const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on" } | null>(null);
   const [printNote, setPrintNote] = useState("");
+  /** The payment screen the cashier left with "Add more items": Cancel and Add both come back to it (owner, 2026-10-16). */
+  const [returnTo, setReturnTo] = useState<{ order: OpenOrder; delivery: boolean } | null>(null);
+  /** The ticket line showing its −/+/Edit/Remove buttons; the others stay one compact row. */
+  const [openLine, setOpenLine] = useState<string | null>(null);
+  const ticketListRef = useRef<HTMLDivElement>(null);
   const paying = created !== null;
   useEffect(() => {
     paymentPromptStore.set(paying);
@@ -115,6 +120,15 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     showOnCustomerScreen({ phase: "order", lines, subtotal_cents: subtotal, discount_cents: previewDiscount, delivery_fee_cents: deliveryFee, tax_cents: tax, total_cents: previewTotal });
   }, [cart, created, menu, subtotal, previewDiscount, deliveryFee, tax, previewTotal]);
 
+  // The newest item is always in view while ringing up (owner, 2026-10-16).
+  const lineCount = cart.length;
+  const lastLineCount = useRef(lineCount);
+  useEffect(() => {
+    const list = ticketListRef.current;
+    if (list && lineCount > lastLineCount.current) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    lastLineCount.current = lineCount;
+  }, [lineCount]);
+
   function setCart(next: CartLine[]) { update({ cart: next }); }
 
   const fromCall = Boolean(draft.phoneCallKey);
@@ -138,13 +152,14 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         order: {
           id: result.order_id, order_number: result.order_number, daily_number: result.daily_number ?? addTo.dailyNumber,
           parent_order_id: result.mode === "add_on" ? (result.parent_order_id ?? addTo.orderId) : null,
-          total_cents: result.total_cents, customer_name: addTo.customerName, fulfillment_type: addTo.fulfillment, source: draft.source,
+          total_cents: result.total_cents, customer_name: returnTo?.order.customer_name ?? addTo.customerName, fulfillment_type: addTo.fulfillment, source: returnTo?.order.source ?? draft.source,
           status: "placed", payment_method: "", payment_status: "unpaid", placed_at: new Date().toISOString(), promised_at: null, ready_at: null,
           is_test: draft.isTest,
         },
       });
       void draftSync.discard(draft);
       orderActions.clearActive();
+      setReturnTo(null);
     } catch (cause) {
       // Same key on the next try: the items can never be added twice.
       setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "No answer — tap Add again (it won't add them twice).");
@@ -198,6 +213,25 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     orderActions.clearActive(); setError("");
   }
 
+  /**
+   * Payment screen → "Add more items" (owner, 2026-10-16): back to the menu on the
+   * same order, then straight back to payment for the new total.  The kitchen
+   * ticket stays held, so it prints once with everything on it.
+   */
+  function addMoreItems() {
+    if (!created) return;
+    const order = created.order;
+    setReturnTo({ order, delivery: created.delivery });
+    orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: false });
+    setCreated(null); setPrintNote(""); setError("");
+  }
+
+  function cancelAddition() {
+    void draftSync.discard(draft); orderActions.clearActive(); setError("");
+    if (returnTo && addTo && returnTo.order.id === addTo.orderId) setCreated({ order: returnTo.order, delivery: returnTo.delivery, duplicate: false });
+    setReturnTo(null);
+  }
+
   // The kitchen ticket waits for this payment step so it prints PAID / NOT PAID
   // correctly (owner, 2026-10-12); leaving it lets the ticket print.
   function closePayment() {
@@ -220,7 +254,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         </div>
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
         <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
-        <PaymentPrompt key={created.order.id} keyedCardConfig={keyedCardConfig} onFinished={closePayment} onPayLater={closePayment} order={created.order} stripeReader={stripeReader} />
+        <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={closePayment} order={created.order} stripeReader={stripeReader} />
         {resumable.length ? <div className="mt-6 grid gap-2 border-t border-wayne-border pt-4"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p><div className="flex flex-wrap gap-2">{resumable.map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); closePayment(); }} size="sm" variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div></div> : null}
       </section>
     </div>;
@@ -237,7 +271,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <span className="block truncate text-base font-black">{summary.title}</span>
         <span className="block truncate text-sm font-bold text-wayne-muted">{summary.detail}</span>
       </span>
-      <button className="ml-auto min-h-11 shrink-0 rounded-lg border border-wayne-border bg-white px-3 text-sm font-bold" onClick={() => { void draftSync.discard(draft); orderActions.clearActive(); setError(""); }} type="button">Cancel</button>
+      <button className="ml-auto min-h-11 shrink-0 rounded-lg border border-wayne-border bg-white px-3 text-sm font-bold" onClick={cancelAddition} type="button">{returnTo && returnTo.order.id === addTo.orderId ? "‹ Back to payment" : "Cancel"}</button>
     </div> : draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
       <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-xl ${draft.source === "phone" ? "bg-wayne-green text-white" : "bg-wayne-cream"}`}>{summary.icon}</span>
       <span className="min-w-0">
@@ -256,12 +290,19 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     <StartOrderCard draft={draft} key={draft.id} onOpenPhone={fromCall ? onOpenPhone : undefined} settings={settings} />
   </div>;
 
+  const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
+  const addToLabel = addTo ? `#${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}` : "";
+  // One button from ticket to payment (owner, 2026-10-16): it sends the order and opens the payment screen.
+  const submitLabel = submitting ? (addTo ? "Adding…" : "Sending…")
+    : addTo ? (addTo.paid ? `Add-on to ${addToLabel} · take payment · ${formatCents(previewTotal)}` : `Add to ${addToLabel} · take payment`)
+    : draft.submitPending ? "Try sending now"
+    : `${draft.isTest ? "TEST · " : ""}Take payment · ${formatCents(previewTotal)}`;
   const shownCategories = itemSearch.trim() ? visibleMenu : visibleMenu.filter((category) => category.id === (categoryId ?? visibleMenu[0]?.id));
   const shownItems = shownCategories.flatMap((category) => category.items);
 
   return <div className="flex min-h-0 flex-1 flex-col">
     {topBar}
-    <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_22rem] 2xl:grid-cols-[1fr_26rem]">
+    <main className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[1fr_24rem] xl:grid-cols-[1fr_27rem] 2xl:grid-cols-[1fr_32rem]">
       <section aria-label="Menu" className="flex min-w-0 flex-col gap-2.5 p-3 lg:min-h-0">
         {/* Categories as an even grid across the whole width (search takes the last two cells), so the items below get all the height that's left. */}
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(7.25rem, 1fr))" }}>
@@ -277,15 +318,22 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           return shownItems.map((item) => <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-24 p-3" : roomy ? "p-3" : "px-3 py-2"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} type="button"><strong className={`line-clamp-2 block leading-tight ${roomy ? "text-lg" : "text-base"}`}>{item.name}</strong><span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-sm"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>);
         }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
       </section>
-      <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white p-3 lg:min-h-0 lg:border-l lg:border-t-0">
-        <div className="flex shrink-0 items-center justify-between"><h2 className="text-xl font-black">Ticket{cart.length ? ` · ${cart.reduce((sum, line) => sum + line.quantity, 0)}` : ""}</h2><button className="min-h-11 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
-        <div className="mt-2 flex-1 space-y-2 pr-1 lg:min-h-0 lg:overflow-y-auto">{cart.length ? cart.map((line) => { const item = findMenuItem(menu, line.menu_item_id); const variant = item?.variants.find((candidate) => candidate.id === line.variant_id); const modifiers = describeLineModifiers(item, line); return <div className="rounded-xl bg-wayne-cream p-3" key={line.line_id}><div className="flex justify-between gap-2"><div><strong>{line.quantity}× {line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"}</strong>{line.open_item ? <p className="text-sm text-wayne-muted">Open item</p> : null}{variant ? <p className="text-sm text-wayne-muted">{variant.name}</p> : null}</div><strong>{formatCents(cartLineUnitCents(menu, line) * line.quantity)}</strong></div>{modifiers.length ? <p className="mt-1 flex flex-wrap gap-1 text-sm">{modifiers.map((note) => <span className={`rounded px-1.5 font-bold ${note.kind === "removed" ? "bg-wayne-red-soft text-wayne-red" : "bg-wayne-ok-soft text-wayne-ok"}`} key={note.label}>{note.label}</span>)}</p> : null}{line.special_instructions ? <p className="mt-1 text-sm">Note: {line.special_instructions}</p> : null}<div className="mt-2 flex gap-2"><button aria-label="Decrease item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity - 1))} type="button">−</button><button aria-label="Increase item" className="h-11 w-11 rounded-lg border bg-white" onClick={() => setCart(updateQuantity(cart, line.line_id, line.quantity + 1))} type="button">+</button><button className="min-h-11 px-1 text-sm font-bold underline" onClick={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} type="button">Edit</button><button className="ml-auto min-h-11 px-1 text-sm font-bold text-wayne-red" onClick={() => setCart(cart.filter((candidate) => candidate.line_id !== line.line_id))} type="button">Remove</button></div></div>; }) : <p className="rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
-        <div className="shrink-0 border-t border-wayne-border pt-3">
-          {addTo ? <label className="grid gap-1 text-sm font-bold">Note for the kitchen (optional)<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label> : <details className="rounded-xl border border-wayne-border p-2"><summary className="min-h-9 cursor-pointer text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>}
-          <div className="mt-3 space-y-1"><Total label="Subtotal" value={subtotal} />{previewDiscount ? <Total label="Manual discount" value={-previewDiscount} /> : null}{deliveryFee ? <Total label="Delivery fee" value={deliveryFee} /> : null}<Total label="Estimated tax" value={tax} /><Total emphasis label={addTo ? "Added" : draft.promoCode ? "Estimated total*" : "Total"} value={previewTotal} /></div>
-          {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing Submit again is safe.</p> : null}
+      <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white lg:min-h-0 lg:border-l lg:border-t-0">
+        <div className="flex shrink-0 items-center justify-between px-3 pt-1.5"><h2 className="text-lg font-black">Ticket{itemCount ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</h2><button className="min-h-10 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
+        {/* One compact row per item so a whole order fits without scrolling; tap a row for −/+/Edit/Remove (owner, 2026-10-16). */}
+        <div className="flex-1 px-1.5 lg:min-h-0 lg:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="divide-y divide-wayne-border">{cart.map((line) => {
+          const item = findMenuItem(menu, line.menu_item_id);
+          const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
+          const open = openLine === line.line_id;
+          return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant && (item?.variants.length ?? 0) > 1 ? variant.name : ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { setOpenLine(null); if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setOpenLine(null); setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} onToggle={() => setOpenLine(open ? null : line.line_id)} open={open} quantity={line.quantity} title={line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"} />;
+        })}</ul> : <p className="m-1.5 rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
+        <div className="shrink-0 border-t border-wayne-border px-3 pb-3 pt-2">
+          {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>}
+          <div className="mt-2 flex flex-wrap justify-between gap-x-3 text-sm text-wayne-muted"><span>Subtotal {formatCents(subtotal)}</span>{previewDiscount ? <span>Discount −{formatCents(previewDiscount)}</span> : null}{deliveryFee ? <span>Delivery {formatCents(deliveryFee)}</span> : null}<span>Tax {formatCents(tax)}</span></div>
+          <div className="mt-0.5 flex items-baseline justify-between text-2xl font-black"><span>{addTo ? "Adding" : draft.promoCode ? "Est. total*" : "Total"}</span><span>{formatCents(previewTotal)}</span></div>
+          {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing the button again is safe.</p> : null}
           {error && !draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-alert-soft p-2 text-sm font-bold text-wayne-alert">{error}</p> : null}
-          <Button className="mt-3 min-h-14 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitting ? (addTo ? "Adding…" : "Submitting…") : addTo ? `Add to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")} · ${formatCents(previewTotal)}` : draft.submitPending ? "Try sending now" : `Submit ${draft.isTest ? "TEST order" : "order"} · ${formatCents(previewTotal)}`}</Button>
+          <Button className="mt-2 min-h-14 w-full text-lg" disabled={submitting || !cart.length} onClick={submitOrder}>{submitLabel}</Button>
         </div>
       </aside>
     </main>
@@ -318,5 +366,24 @@ function ticketSummary(draft: PosDraft, settings: StoreSettings) {
   return { icon: "🛍️", title: `Pickup · ${who || "Customer"}`, detail: [phone, how].filter(Boolean).join(" · ") };
 }
 
-function Total({ emphasis, label, value }: { emphasis?: boolean; label: string; value: number }) { return <div className={`flex justify-between ${emphasis ? "border-t pt-3 text-xl font-black" : ""}`}><span>{label}</span><span>{formatCents(value)}</span></div>; }
+/** One item on the ticket: a single tight row; tapping it shows the −/+/Edit/Remove buttons. */
+function TicketLine({ title, detail, modifiers, note, cents, quantity, open, onToggle, onQuantity, onEdit, onRemove }: { title: string; detail: string; modifiers: { kind: string; label: string }[]; note: string; cents: number; quantity: number; open: boolean; onToggle: () => void; onQuantity: (quantity: number) => void; onEdit: () => void; onRemove: () => void }) {
+  return <li className={open ? "my-1 rounded-xl bg-wayne-cream" : ""}>
+    <button aria-expanded={open} className="flex min-h-11 w-full items-start gap-2 px-1.5 py-1.5 text-left" onClick={onToggle} type="button">
+      <span className="min-w-8 shrink-0 rounded-md bg-wayne-green px-1 text-center text-sm font-black leading-6 text-white">{quantity}×</span>
+      <span className="min-w-0 flex-1 leading-6">
+        <span className="font-bold">{title}</span>{detail ? <span className="text-sm text-wayne-muted"> · {detail}</span> : null}
+        {modifiers.length ? <span className="flex flex-wrap gap-1 text-xs leading-5">{modifiers.map((entry) => <span className={`rounded px-1 font-bold ${entry.kind === "removed" ? "bg-wayne-red-soft text-wayne-red" : "bg-wayne-ok-soft text-wayne-ok"}`} key={entry.label}>{entry.label}</span>)}</span> : null}
+        {note ? <span className="block text-xs italic leading-5">Note: {note}</span> : null}
+      </span>
+      <span className="shrink-0 font-black leading-6">{formatCents(cents)}</span>
+    </button>
+    {open ? <div className="flex gap-2 px-1.5 pb-2">
+      <button aria-label="Decrease item" className="h-11 w-11 rounded-lg border bg-white text-xl font-black" onClick={() => onQuantity(quantity - 1)} type="button">−</button>
+      <button aria-label="Increase item" className="h-11 w-11 rounded-lg border bg-white text-xl font-black" onClick={() => onQuantity(quantity + 1)} type="button">+</button>
+      <button className="min-h-11 rounded-lg border bg-white px-3 text-sm font-bold" onClick={onEdit} type="button">Edit</button>
+      <button className="ml-auto min-h-11 rounded-lg px-2 text-sm font-bold text-wayne-red" onClick={onRemove} type="button">Remove</button>
+    </div> : null}
+  </li>;
+}
 function updateQuantity(cart: CartLine[], lineId: string, quantity: number) { return quantity < 1 ? cart.filter((line) => line.line_id !== lineId) : cart.map((line) => line.line_id === lineId ? { ...line, quantity: Math.min(20, quantity) } : line); }

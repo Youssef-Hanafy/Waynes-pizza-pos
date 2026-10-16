@@ -227,7 +227,11 @@ export function PosApp(props: Props) {
         <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} />
       </div>
     </div> : null}
-    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
+    {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} onAddItems={(order) => {
+      // Same as Today's Orders → Add items; adding to an unpaid order brings its payment straight back with the new total.
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: false });
+      setPayFocus(null); setSection("order");
+    }} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
       // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items.
