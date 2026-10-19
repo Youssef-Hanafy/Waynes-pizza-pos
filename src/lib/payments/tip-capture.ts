@@ -141,7 +141,7 @@ export async function captureHeldCards(options: {
           result.problems.push(`${label}: the card didn't go through for order + ${money(wanted)} tip, so only the order was charged. Collect the tip another way.`);
           // fall through: charge the order on the approval as it stands
         }
-      } else if (wanted > room && !(status.paymentMethodId && status.customerId)) {
+      } else if (wanted > 0 && room === 0 && !(status.paymentMethodId && status.customerId)) {
         result.problems.push(`${label}: this card was approved before tips could be added to it, so only the order was charged.`);
       }
       const tip = Math.min(wanted, room);
