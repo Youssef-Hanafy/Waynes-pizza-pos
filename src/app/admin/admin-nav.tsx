@@ -20,7 +20,10 @@ type Group = { name: string; links: [string, string][] };
  */
 export function AdminNav({ groups }: { groups: Group[] }) {
   const pathname = usePathname();
-  const isCurrent = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  // Only the closest match is highlighted: on Menu → Specials that is Specials, not Menu too (owner, 2026-10-19).
+  const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const best = groups.flatMap((group) => group.links.map(([href]) => href)).filter(matches).sort((a, b) => b.length - a.length)[0];
+  const isCurrent = (href: string) => href === best;
 
   return (
     <nav aria-label="Admin navigation" className="mx-auto max-w-7xl px-5 pb-3">

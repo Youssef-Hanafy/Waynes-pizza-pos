@@ -7,12 +7,12 @@ import { requirePermission } from "@/lib/auth/access";
 import { getPublicAssetUrl } from "@/lib/images/public-url";
 import { formatCents } from "@/lib/menu/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { POS_COLORS, posColorName } from "@/lib/menu/pos-colors";
+import { posColorName } from "@/lib/menu/pos-colors";
+import { ColorPicker } from "./color-picker";
 import {
   createCategoryAction,
   setCategoryArchivedAction,
   setItemStateAction,
-  setMenuColorAction,
   updateCategoryAction,
 } from "./actions";
 import { MenuSearch } from "./menu-search";
@@ -189,8 +189,9 @@ function CategoryCard({
         <div className="flex flex-wrap gap-2">
           {!category.archived_at ? (
             <ColorPicker
-              action={setMenuColorAction.bind(null, "category", category.id)}
-              current={category.pos_color}
+              id={category.id}
+              initial={category.pos_color}
+              kind="category"
               hint="Every item in this category gets this colour on the POS, unless the item has its own."
               label="POS colour"
             />
@@ -282,8 +283,9 @@ function ItemRow({ item, categoryColor }: { item: Item; categoryColor: string | 
       <div className="flex flex-wrap gap-2">
         {!item.archived_at ? (
           <ColorPicker
-            action={setMenuColorAction.bind(null, "item", item.id)}
-            current={item.pos_color}
+            id={item.id}
+            initial={item.pos_color}
+            kind="item"
             hint={categoryColor ? `Without its own colour it uses the category's (${posColorName(categoryColor)}).` : "Only this item."}
             label="Colour"
           />
@@ -380,59 +382,3 @@ function Notice({
   );
 }
 
-/**
- * POS colour picker (owner, 2026-10-19): tap a colour and it is saved; the POS
- * buttons pick it up the next time the menu refreshes (within a minute).
- */
-function ColorPicker({
-  action,
-  current,
-  label,
-  hint,
-}: {
-  action: (formData: FormData) => void | Promise<void>;
-  current: string | null;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <details className="relative">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-wayne-border bg-white px-3 py-2 text-sm font-bold">
-        <span
-          aria-hidden
-          className="size-5 rounded-full border border-wayne-border-strong"
-          style={{ background: current ?? "repeating-linear-gradient(45deg,#fff,#fff 3px,#ddd 3px,#ddd 6px)" }}
-        />
-        🎨 {label}
-      </summary>
-      <div className="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-wayne-border bg-white p-3 shadow-xl">
-        <p className="text-xs text-wayne-muted">{hint}</p>
-        <form action={action} className="mt-2 grid grid-cols-5 gap-2">
-          {POS_COLORS.map((color) => (
-            <button
-              aria-label={color.name}
-              aria-pressed={current === color.hex}
-              className="size-11 rounded-full border-4"
-              key={color.hex}
-              name="color"
-              style={{ background: color.hex, borderColor: current === color.hex ? "#1f1a17" : "#ffffff" }}
-              title={color.name}
-              type="submit"
-              value={color.hex}
-            />
-          ))}
-        </form>
-        <form action={action} className="mt-3 flex items-center gap-2">
-          <input aria-label="Any colour" className="h-11 w-14 cursor-pointer rounded-lg border border-wayne-border" defaultValue={current ?? "#e53935"} name="color" type="color" />
-          <Button size="sm" type="submit" variant="secondary">Use this colour</Button>
-        </form>
-        {current ? (
-          <form action={action} className="mt-2">
-            <input name="color" type="hidden" value="" />
-            <Button className="w-full" size="sm" type="submit" variant="secondary">No colour</Button>
-          </form>
-        ) : null}
-      </div>
-    </details>
-  );
-}

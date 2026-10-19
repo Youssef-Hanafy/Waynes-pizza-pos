@@ -467,27 +467,30 @@ export async function saveCategoryOptionsAction(
 
 /*
  * POS colours (owner, 2026-10-19): one colour per item, or per category for
- * every item in it that has none of its own.  "" clears it.
+ * every item in it that has none of its own.  "" clears it.  Called from the
+ * colour picker without leaving the page, so the list stays where it was.
  */
-export async function setMenuColorAction(
+export async function saveMenuColorAction(
   kind: "category" | "item",
   id: string,
-  formData: FormData,
-) {
+  value: string,
+): Promise<{ ok: true; color: string | null } | { ok: false; error: string }> {
   await requirePermission("menu.manage", "/admin/menu");
   const target = z.uuid().safeParse(id);
-  if (!target.success) menuRedirect("That menu record could not be found.");
-  const color = parsePosColor(formData.get("color"));
-  if (color === null) menuRedirect("Pick one of the colours.");
+  if (!target.success) return { ok: false, error: "That menu record could not be found." };
+  const color = parsePosColor(value);
+  if (color === null) return { ok: false, error: "Pick one of the colours." };
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(kind === "category" ? "menu_categories" : "menu_items")
     .update({ pos_color: color || null })
-    .eq("id", target.data!);
-  if (error) menuRedirect(error.message);
-  revalidateMenu();
+    .eq("id", target.data)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, error: error?.message ?? "The colour could not be saved." };
+  revalidatePath("/admin/menu");
   revalidatePath("/pos");
-  redirect(`/admin/menu?saved=1#${kind === "category" ? "category" : "item"}-${target.data}`);
+  return { ok: true, color: color || null };
 }
 
 function specialsRedirect(message: string, key: "error" | "saved" = "saved"): never {
