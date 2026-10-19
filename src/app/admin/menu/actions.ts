@@ -10,6 +10,7 @@ import {
   parseMoneyToCents,
   parseSignedMoneyToCents,
 } from "@/lib/menu/schemas";
+import { parsePosColor } from "@/lib/menu/pos-colors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const categorySchema = z.object({
@@ -462,4 +463,76 @@ export async function saveCategoryOptionsAction(
   redirect(
     `${back}?saved=${encodeURIComponent(`${result.updated ?? 0}-${result.added ?? 0}-${result.removed ?? 0}`)}`,
   );
+}
+
+/*
+ * POS colours (owner, 2026-10-19): one colour per item, or per category for
+ * every item in it that has none of its own.  "" clears it.
+ */
+export async function setMenuColorAction(
+  kind: "category" | "item",
+  id: string,
+  formData: FormData,
+) {
+  await requirePermission("menu.manage", "/admin/menu");
+  const target = z.uuid().safeParse(id);
+  if (!target.success) menuRedirect("That menu record could not be found.");
+  const color = parsePosColor(formData.get("color"));
+  if (color === null) menuRedirect("Pick one of the colours.");
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from(kind === "category" ? "menu_categories" : "menu_items")
+    .update({ pos_color: color || null })
+    .eq("id", target.data!);
+  if (error) menuRedirect(error.message);
+  revalidateMenu();
+  revalidatePath("/pos");
+  redirect(`/admin/menu?saved=1#${kind === "category" ? "category" : "item"}-${target.data}`);
+}
+
+function specialsRedirect(message: string, key: "error" | "saved" = "saved"): never {
+  redirect(`/admin/menu/specials?${key}=${encodeURIComponent(message)}`);
+}
+
+/*
+ * Specials (owner, 2026-10-19): any menu item can be a special.  The POS lists
+ * specials under one "Specials" button and, when "Show on the website" is on,
+ * the Offers page lists them for everyone.
+ */
+export async function saveSpecialAction(formData: FormData) {
+  await requirePermission("menu.manage", "/admin/menu/specials");
+  const id = z.uuid().safeParse(formData.get("id"));
+  if (!id.success) specialsRedirect("Choose a menu item.", "error");
+  const note = String(formData.get("special_note") ?? "").trim();
+  if (note.length > 200) specialsRedirect("Keep the headline under 200 characters.", "error");
+  const endsOn = String(formData.get("special_ends_on") ?? "").trim();
+  if (endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) specialsRedirect("Pick a valid end date, or leave it empty.", "error");
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("menu_items")
+    .update({ special: true, special_note: note, special_ends_on: endsOn || null, special_online: formData.get("special_online") === "on" })
+    .eq("id", id.data!)
+    .is("archived_at", null)
+    .select("name")
+    .maybeSingle();
+  if (error || !data) specialsRedirect(error?.message ?? "That menu item could not be found.", "error");
+  revalidateMenu();
+  revalidatePath("/offers");
+  revalidatePath("/pos");
+  revalidatePath("/admin/menu/specials");
+  specialsRedirect(`${data!.name} is a special.`);
+}
+
+export async function removeSpecialAction(formData: FormData) {
+  await requirePermission("menu.manage", "/admin/menu/specials");
+  const id = z.uuid().safeParse(formData.get("id"));
+  if (!id.success) specialsRedirect("That special could not be found.", "error");
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.from("menu_items").update({ special: false }).eq("id", id.data!).select("name").maybeSingle();
+  if (error || !data) specialsRedirect(error?.message ?? "That special could not be found.", "error");
+  revalidateMenu();
+  revalidatePath("/offers");
+  revalidatePath("/pos");
+  revalidatePath("/admin/menu/specials");
+  specialsRedirect(`${data!.name} is no longer a special (it stays on the menu).`);
 }

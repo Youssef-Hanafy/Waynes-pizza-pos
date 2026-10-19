@@ -63,6 +63,8 @@ export const posOrderInputSchema = z.object({
   manual_discount_type: z.enum(["", "fixed", "percent"]),
   manual_discount_value: z.number().int().min(0).max(1_000_000),
   manual_discount_reason: z.string().trim().max(500),
+  /** A discount saved in Admin → Discounts (any cashier may use it; the database sets the amount). */
+  pos_discount_id: optionalUuid.optional().default(""),
   tip_cents: z.number().int().min(0).max(1_000_000),
   special_instructions: z.string().trim().max(1500),
   items: z.array(orderLineSchema).min(1).max(50),
@@ -82,7 +84,7 @@ export const posOrderInputSchema = z.object({
     context.addIssue({ code: "custom", message: "Enter the street address for the delivery.", path: ["address"] });
   }
   if (value.promo_code && value.manual_discount_type) context.addIssue({ code: "custom", message: "Use a promotion or a manual discount, not both.", path: ["promo_code"] });
-  if (value.manual_discount_type && (!value.manual_discount_value || value.manual_discount_reason.length < 3)) context.addIssue({ code: "custom", message: "Manual discounts require a value and reason.", path: ["manual_discount_reason"] });
+  if (value.manual_discount_type && !value.pos_discount_id && (!value.manual_discount_value || value.manual_discount_reason.length < 3)) context.addIssue({ code: "custom", message: "Manual discounts require a value and reason.", path: ["manual_discount_reason"] });
 });
 
 export const posOrderCreatedSchema = z.object({
@@ -106,8 +108,9 @@ export const posAddItemsInputSchema = z.object({
 export type PosAddItemsInput = z.infer<typeof posAddItemsInputSchema>;
 
 /**
- * merged  — not paid yet: the items are on the same order (new total).
- * add_on  — already paid: the items are on an add-on (same #) paid on its own.
+ * The items are always on the same order (owner, 2026-10-19).  paid_cents is
+ * what was already paid; the rest is taken on the payment screen.  ("add_on"
+ * only comes back from add-ons made before then.)
  */
 export const posItemsAddedSchema = z.object({
   order_id: z.uuid(),
@@ -116,6 +119,7 @@ export const posItemsAddedSchema = z.object({
   daily_number: z.number().int().nullable().optional().default(null),
   total_cents: z.number().int(),
   added_cents: z.number().int().optional().default(0),
+  paid_cents: z.number().int().optional().default(0),
   parent_order_id: z.uuid().nullable().optional().default(null),
   duplicate: z.boolean().optional().default(false),
 });

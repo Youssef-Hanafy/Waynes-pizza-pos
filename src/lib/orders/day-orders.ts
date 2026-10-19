@@ -22,6 +22,8 @@ export const dayOrderSchema = z.object({
   tax_cents: z.number().int(),
   tip_cents: z.number().int(),
   total_cents: z.number().int(),
+  /** Already paid; items added after a payment leave the rest to pay (owner, 2026-10-19). */
+  paid_cents: z.number().int().optional().default(0),
   placed_at: z.string(),
   promised_at: z.string().nullable(),
   ready_at: z.string().nullable(),

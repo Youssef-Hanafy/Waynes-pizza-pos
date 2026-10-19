@@ -104,7 +104,7 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
             </span>
             <span className="mt-0.5 flex items-center justify-between gap-2 text-xs font-bold">
               <span className="truncate text-wayne-muted">{ticketLabel(order)} · {order.source === "online" ? "Online" : order.source === "phone" ? "Phone" : "Counter"} · {statusLabels[order.status] ?? order.status}{order.is_test ? " · TEST" : ""}</span>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 ${paid ? "bg-wayne-ok-soft text-wayne-ok" : cardOnFile ? "bg-wayne-cream" : "bg-wayne-alert-soft text-wayne-alert"}`}>{formatCents(order.total_cents)} {paid ? "PAID" : cardOnFile ? "CARD ✓" : "DUE"}</span>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 ${paid ? "bg-wayne-ok-soft text-wayne-ok" : cardOnFile ? "bg-wayne-cream" : "bg-wayne-alert-soft text-wayne-alert"}`}>{formatCents(paid || cardOnFile ? order.total_cents : Math.max(0, order.total_cents - order.paid_cents))} {paid ? "PAID" : cardOnFile ? "CARD ✓" : "DUE"}</span>
             </span>
           </button>;
         })}

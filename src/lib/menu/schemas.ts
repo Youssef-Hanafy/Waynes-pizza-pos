@@ -115,6 +115,11 @@ export const publicMenuItemSchema = z.object({
   included_count_label: z.string(),
   sold_out: z.boolean(),
   featured: z.boolean(),
+  /** POS button colour: the item's own, else its category's (owner, 2026-10-19). Only on the POS menu. */
+  pos_color: z.string().nullable().optional(),
+  /** A special today (Admin → Menu → Specials); the POS lists these under one Specials button. */
+  special: z.boolean().optional(),
+  special_note: z.string().optional(),
   available_days: z.array(z.number().int()),
   available_start: z.string().nullable(),
   available_end: z.string().nullable(),
@@ -127,6 +132,7 @@ export const publicMenuCategorySchema = z.object({
   description: z.string(),
   image_path: z.string().nullable(),
   image_alt: z.string(),
+  pos_color: z.string().nullable().optional(),
   items: z.array(publicMenuItemSchema)
 });
 export const publicMenuSchema = z.array(publicMenuCategorySchema);

@@ -54,6 +54,8 @@ export const posDraftSchema = z.object({
   manualType: z.enum(["", "fixed", "percent"]),
   manualValue: z.string(),
   manualReason: z.string(),
+  /** A discount saved in Admin → Discounts, picked from the Discount button (owner, 2026-10-19). */
+  presetDiscountId: z.string().optional().default(""),
   paymentMethod: z.enum(["test_manual", "cash"]),
   /** A practice ticket (kept out of sales, the drawer count and the CRM). */
   isTest: z.boolean().optional().default(false),
@@ -77,7 +79,7 @@ export const posDraftSchema = z.object({
     dailyNumber: z.number().int().nullable(),
     customerName: z.string(),
     fulfillment: z.enum(["pickup", "delivery"]),
-    /** Already paid: the items go out as an add-on paid on its own. */
+    /** Already paid: the items still go on the same order; what is still owed is paid after (owner, 2026-10-19). */
     paid: z.boolean(),
   }).nullable().optional().default(null),
 });
@@ -116,6 +118,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     manualType: "",
     manualValue: "",
     manualReason: "",
+    presetDiscountId: "",
     paymentMethod: "test_manual",
     isTest: false,
     syncedVersion: null,
@@ -242,6 +245,7 @@ export function draftToOrderPayload(draft: PosDraft) {
     manual_discount_type: draft.manualType,
     manual_discount_value: draft.manualType ? manual : 0,
     manual_discount_reason: draft.manualReason,
+    pos_discount_id: draft.manualType ? draft.presetDiscountId : "",
     tip_cents: 0,
     special_instructions: draft.orderNote,
     items: draft.cart.map((line: CartLine) => ({

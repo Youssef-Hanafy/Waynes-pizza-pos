@@ -31,12 +31,17 @@ export async function POST(request: Request) {
   if (order.payment_status === "paid") return json({ error: "This order is already paid.", state: "captured" }, 409);
   // Card already approved and held for its tip: nothing more to charge now.
   if (order.payment_status === "authorized") return json({ state: "authorized" });
+  // Items added after a payment stay on the same order (owner, 2026-10-19): the reader is sent what is still owed.
+  const { data: settled } = await service.from("payments").select("amount_cents")
+    .eq("order_id", order.id).in("status", ["authorized", "captured"]);
+  const dueCents = order.total_cents - (settled ?? []).reduce((sum, payment) => sum + (payment.amount_cents ?? 0), 0);
+  if (dueCents <= 0) return json({ error: "This order is already paid.", state: "captured" }, 409);
 
   try {
     // 1. Reuse an M2 payment that is still open on this order.
     const { data: open } = await service.from("payments")
       .select("id, provider, provider_payment_id, metadata, amount_cents")
-      .eq("order_id", order.id).in("status", ["pending", "authorized"])
+      .eq("order_id", order.id).eq("status", "pending")
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (open) {
       const metadata = (open.metadata ?? {}) as Record<string, unknown>;
@@ -47,8 +52,8 @@ export async function POST(request: Request) {
       if (settled) {
         await settleTerminalPayment(service, open.id, intent);
         if (settled === "captured" || settled === "authorized") return json({ payment_id: open.id, state: settled });
-      } else if (intent.amountCents === order.total_cents && intent.state === "open") {
-        return json({ payment_id: open.id, client_secret: intent.clientSecret, amount_cents: order.total_cents, state: "open", reused: true });
+      } else if (intent.amountCents === dueCents && intent.state === "open") {
+        return json({ payment_id: open.id, client_secret: intent.clientSecret, amount_cents: dueCents, state: "open", reused: true });
       } else if (intent.state === "processing") {
         return json({ error: "The last card is still processing on Stripe. Wait a moment, then try again." }, 409);
       } else {

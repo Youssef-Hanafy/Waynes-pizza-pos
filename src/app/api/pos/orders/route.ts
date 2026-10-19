@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try { input = await request.json(); } catch { return Response.json({ error: "Invalid POS order request." }, { status: 400 }); }
   const parsed = posOrderInputSchema.safeParse(input);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Check the ticket." }, { status: 400 });
-  if (parsed.data.manual_discount_type && !hasPermission(access, "pos.discount.manage")) return Response.json({ error: "A manager must apply manual discounts." }, { status: 403 });
+  if (parsed.data.manual_discount_type && !parsed.data.pos_discount_id && !hasPermission(access, "pos.discount.manage")) return Response.json({ error: "A manager must apply manual discounts." }, { status: 403 });
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.rpc("wayne_create_pos_order", { payload: parsed.data });
   if (error) return Response.json({ error: safePosError(error.message) }, { status: error.code === "42501" ? 403 : 400 });

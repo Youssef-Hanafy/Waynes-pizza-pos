@@ -103,7 +103,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
   const row = (order: OpenOrder) => <li key={order.id}>
     <button aria-current={order.id === selectedId ? "true" : undefined} className={`flex min-h-16 w-full items-center justify-between gap-3 rounded-xl border-2 p-3 text-left transition ${order.id === selectedId ? "border-wayne-green bg-wayne-ok-soft" : "border-wayne-border bg-white hover:border-wayne-border-strong"}`} onClick={() => { setSelectedId(order.id); setDone(null); }} type="button">
       <span className="min-w-0"><strong className="block text-lg">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</strong><span className="block text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · {time(order.placed_at)} · {statusLabels[order.status] ?? order.status}</span></span>
-      <span className="text-right"><strong className="block text-xl">{formatCents(order.total_cents)}</strong><span className={`text-xs font-black uppercase ${order.payment_status === "paid" ? "text-wayne-ok" : "text-wayne-red"}`}>{order.payment_status === "paid" ? `Paid · ${order.payment_method}` : "Unpaid"}</span></span>
+      <span className="text-right"><strong className="block text-xl">{formatCents(order.payment_status === "paid" ? order.total_cents : Math.max(0, order.total_cents - order.paid_cents))}</strong><span className={`text-xs font-black uppercase ${order.payment_status === "paid" ? "text-wayne-ok" : "text-wayne-red"}`}>{order.payment_status === "paid" ? `Paid · ${order.payment_method}` : order.paid_cents > 0 ? `Still owed · ${formatCents(order.paid_cents)} paid` : "Unpaid"}</span></span>
     </button>
   </li>;
 
@@ -121,7 +121,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
     <section aria-label="Take payment" className="rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:overflow-y-auto">
       {done ? <PaidSummary done={done} onNext={() => setDone(null)} />
-        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onAddItems={onAddItems && selected.payment_status !== "paid" && selected.payment_status !== "authorized" ? () => onAddItems(selected) : undefined} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
+        : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onAddItems={onAddItems ? () => onAddItems(selected) : undefined} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
         : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Choose an order on the left to take payment.</p></div>}
     </section>
   </div>;
@@ -171,12 +171,14 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const [busy, setBusy] = useState(false);
   // The customer screen (owner, 2026-10-11): a tip before the card, a signature after.
   const screen = useCustomerScreen();
-  const [order, setOrder] = useState<OpenOrder>(openedOrder);
+  // Items added after a payment (owner, 2026-10-19): the same order, and this screen takes only what is still owed.
+  const paidBefore = openedOrder.payment_status === "paid" ? 0 : Math.max(0, openedOrder.paid_cents);
+  const [order, setOrder] = useState<OpenOrder>(() => paidBefore ? { ...openedOrder, total_cents: openedOrder.total_cents - paidBefore } : openedOrder);
   const [tipAsked, setTipAsked] = useState(false);
   const [signing, setSigning] = useState<Done | null>(null);
   useEffect(() => {
-    if (openedOrder.payment_status !== "paid") showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(openedOrder), total_cents: openedOrder.total_cents });
-  }, [openedOrder]);
+    if (openedOrder.payment_status !== "paid") showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(openedOrder), total_cents: openedOrder.total_cents - paidBefore });
+  }, [openedOrder, paidBefore]);
   const tipDone = useCallback((next: OpenOrder) => { setOrder(next); setTipAsked(true); }, []);
   const onPaid = useCallback((done: Done) => {
     if (done.method === "card" && !done.held && screen.screenOnline) { setSigning(done); return; }
@@ -186,7 +188,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const signed = useCallback(() => { if (signing) finishPayment(signing); }, [finishPayment, signing]);
   const due = order.total_cents;
 
-  if (signing) return <CustomerSignStep onFinished={signed} order={signing.order} tipCents={Math.max(0, signing.order.total_cents - openedOrder.total_cents)} />;
+  if (signing) return <CustomerSignStep onFinished={signed} order={signing.order} tipCents={Math.max(0, signing.order.total_cents - (openedOrder.total_cents - paidBefore))} />;
   const alreadyPaid = order.payment_status === "paid";
   const cardHeld = order.payment_status === "authorized";
   // Delivery (owner, 2026-10-11): a phone card is keyed in and the slip's tip is
@@ -204,10 +206,10 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</p><p className="mt-1 text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source === "pos" ? "in store" : order.source}</p></div>
-      <div className="text-right"><p className="text-sm font-bold">Amount due</p><p className="text-5xl font-black">{formatCents(due)}</p></div>
+      <div className="text-right"><p className="text-sm font-bold">{paidBefore ? "Still owed" : "Amount due"}</p><p className="text-5xl font-black">{formatCents(due)}</p>{paidBefore ? <p className="text-sm font-bold text-wayne-muted">Order {formatCents(openedOrder.total_cents)} · {formatCents(paidBefore)} already paid</p> : null}</div>
     </div>
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
-      : cardHeld ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
+      : cardHeld && !paidBefore ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
       {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
       {onAddItems ? <button className="mt-4 flex min-h-14 w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 text-lg font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
       <div className={`mt-5 grid grid-cols-2 gap-3 ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
@@ -218,7 +220,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       </div>
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "terminal" ? (screen.screenOnline && !tipAsked
+      {mode === "terminal" ? (screen.screenOnline && !tipAsked && !paidBefore
         ? <CustomerTipStep onDone={tipDone} order={order} />
         // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
         : order.is_test ? <TestCardTender autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />
@@ -489,7 +491,8 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid }: Te
   return <div className="rounded-2xl border-2 border-wayne-green p-4">
     <h2 className="text-xl font-black">Key in the card</h2>
     <p className="mt-1 text-sm text-wayne-muted">Type the card number, expiry, CVC and ZIP the customer reads out. The details go straight to Stripe and are never stored by the POS.</p>
-    {delivery ? <p className="mt-3 rounded-xl bg-wayne-cream p-3 text-sm font-bold">Delivery: the card is approved for {formatCents(baseCents)} now. The driver&apos;s tip from the signed slip is added in Deliveries, and the card is charged once — order + tip.</p>
+    {order.paid_cents > 0 ? <p className="mt-3 rounded-xl bg-wayne-cream p-3 text-sm font-bold">The rest of the order: {formatCents(baseCents)} (no tip on this part).</p>
+      : delivery ? <p className="mt-3 rounded-xl bg-wayne-cream p-3 text-sm font-bold">Delivery: the card is approved for {formatCents(baseCents)} now. The driver&apos;s tip from the signed slip is added in Deliveries, and the card is charged once — order + tip.</p>
       : <>
         <TipPicker baseCents={baseCents} disabled={busy || order.payment_status === "paid"} onChange={setTipCents} tipCents={tipCents} />
         <p className="mt-2 text-xs font-bold text-wayne-muted">The card is charged now, tip included, and the order is closed.</p>
@@ -532,7 +535,8 @@ function TipPicker({ baseCents, tipCents, onChange, disabled }: { baseCents: num
  */
 function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStart = false }: TenderProps & { entry: "card_reader" | "test_keyed"; autoStart?: boolean }) {
   const delivery = order.fulfillment_type === "delivery" && entry === "test_keyed";
-  const askTip = entry === "test_keyed" && !delivery;
+  // No tip on what is still owed after items were added to a paid order.
+  const askTip = entry === "test_keyed" && !delivery && order.paid_cents === 0;
   const [baseCents, setBaseCents] = useState(order.total_cents);
   const [tipCents, setTipCents] = useState(0);
   const [tipSaved, setTipSaved] = useState(0);

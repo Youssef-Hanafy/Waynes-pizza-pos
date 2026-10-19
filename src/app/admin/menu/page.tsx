@@ -7,10 +7,12 @@ import { requirePermission } from "@/lib/auth/access";
 import { getPublicAssetUrl } from "@/lib/images/public-url";
 import { formatCents } from "@/lib/menu/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { POS_COLORS, posColorName } from "@/lib/menu/pos-colors";
 import {
   createCategoryAction,
   setCategoryArchivedAction,
   setItemStateAction,
+  setMenuColorAction,
   updateCategoryAction,
 } from "./actions";
 import { MenuSearch } from "./menu-search";
@@ -27,6 +29,7 @@ type Category = {
   sort_order: number;
   customer_visible: boolean;
   archived_at: string | null;
+  pos_color: string | null;
 };
 type Item = {
   id: string;
@@ -36,6 +39,8 @@ type Item = {
   sold_out: boolean;
   customer_visible: boolean;
   archived_at: string | null;
+  pos_color: string | null;
+  special: boolean;
 };
 
 export default async function MenuAdminPage({
@@ -50,14 +55,14 @@ export default async function MenuAdminPage({
       supabase
         .from("menu_categories")
         .select(
-          "id,name,description,image_path,image_alt,sort_order,customer_visible,archived_at",
+          "id,name,description,image_path,image_alt,sort_order,customer_visible,archived_at,pos_color",
         )
         .order("sort_order")
         .order("name"),
       supabase
         .from("menu_items")
         .select(
-          "id,category_id,name,base_price_cents,sold_out,customer_visible,archived_at",
+          "id,category_id,name,base_price_cents,sold_out,customer_visible,archived_at,pos_color,special",
         )
         .order("sort_order")
         .order("name"),
@@ -85,6 +90,9 @@ export default async function MenuAdminPage({
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild variant="secondary">
             <Link href="/admin/menu/photos">Menu photos</Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href="/admin/menu/specials">⭐ Specials</Link>
           </Button>
           {categories.some((category) => !category.archived_at) ? (
             <Button asChild>
@@ -179,6 +187,14 @@ function CategoryCard({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {!category.archived_at ? (
+            <ColorPicker
+              action={setMenuColorAction.bind(null, "category", category.id)}
+              current={category.pos_color}
+              hint="Every item in this category gets this colour on the POS, unless the item has its own."
+              label="POS colour"
+            />
+          ) : null}
           {items.length && !category.archived_at ? (
             <Button asChild variant="brand">
               <Link href={`/admin/menu/categories/${category.id}/options`}>
@@ -206,7 +222,7 @@ function CategoryCard({
       </div>
       <div className="mt-5 divide-y divide-wayne-border border-t border-wayne-border">
         {items.length ? (
-          items.map((item) => <ItemRow item={item} key={item.id} />)
+          items.map((item) => <ItemRow categoryColor={category.pos_color} item={item} key={item.id} />)
         ) : (
           <p className="py-5 text-sm text-wayne-muted">
             No items in this category.
@@ -218,7 +234,7 @@ function CategoryCard({
   );
 }
 
-function ItemRow({ item }: { item: Item }) {
+function ItemRow({ item, categoryColor }: { item: Item; categoryColor: string | null }) {
   const soldOut = setItemStateAction.bind(
     null,
     item.id,
@@ -236,8 +252,15 @@ function ItemRow({ item }: { item: Item }) {
       className={`flex flex-wrap items-center justify-between gap-4 py-4 ${item.archived_at ? "opacity-50" : ""}`}
       data-menu-item
       data-search={item.name.toLowerCase()}
+      id={`item-${item.id}`}
     >
-      <div>
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-1 h-10 w-2 shrink-0 rounded-full"
+          style={{ background: item.pos_color ?? categoryColor ?? "transparent" }}
+        />
+        <div>
         <Link
           className="font-black hover:text-wayne-red"
           href={`/admin/menu/items/${item.id}`}
@@ -252,9 +275,24 @@ function ItemRow({ item }: { item: Item }) {
               ? "Public"
               : "Hidden"}
           {item.sold_out ? " · Sold out" : ""}
+          {item.special ? " · ⭐ Special" : ""}
         </p>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
+        {!item.archived_at ? (
+          <ColorPicker
+            action={setMenuColorAction.bind(null, "item", item.id)}
+            current={item.pos_color}
+            hint={categoryColor ? `Without its own colour it uses the category's (${posColorName(categoryColor)}).` : "Only this item."}
+            label="Colour"
+          />
+        ) : null}
+        {!item.archived_at ? (
+          <Button asChild variant="secondary">
+            <Link href={`/admin/menu/specials?add=${item.id}`}>{item.special ? "⭐ Special" : "☆ Make special"}</Link>
+          </Button>
+        ) : null}
         <form action={soldOut}>
           <Button type="submit" variant="secondary">
             {item.sold_out ? "Mark available" : "Mark sold out"}
@@ -339,5 +377,62 @@ function Notice({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * POS colour picker (owner, 2026-10-19): tap a colour and it is saved; the POS
+ * buttons pick it up the next time the menu refreshes (within a minute).
+ */
+function ColorPicker({
+  action,
+  current,
+  label,
+  hint,
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  current: string | null;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <details className="relative">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-wayne-border bg-white px-3 py-2 text-sm font-bold">
+        <span
+          aria-hidden
+          className="size-5 rounded-full border border-wayne-border-strong"
+          style={{ background: current ?? "repeating-linear-gradient(45deg,#fff,#fff 3px,#ddd 3px,#ddd 6px)" }}
+        />
+        🎨 {label}
+      </summary>
+      <div className="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-wayne-border bg-white p-3 shadow-xl">
+        <p className="text-xs text-wayne-muted">{hint}</p>
+        <form action={action} className="mt-2 grid grid-cols-5 gap-2">
+          {POS_COLORS.map((color) => (
+            <button
+              aria-label={color.name}
+              aria-pressed={current === color.hex}
+              className="size-11 rounded-full border-4"
+              key={color.hex}
+              name="color"
+              style={{ background: color.hex, borderColor: current === color.hex ? "#1f1a17" : "#ffffff" }}
+              title={color.name}
+              type="submit"
+              value={color.hex}
+            />
+          ))}
+        </form>
+        <form action={action} className="mt-3 flex items-center gap-2">
+          <input aria-label="Any colour" className="h-11 w-14 cursor-pointer rounded-lg border border-wayne-border" defaultValue={current ?? "#e53935"} name="color" type="color" />
+          <Button size="sm" type="submit" variant="secondary">Use this colour</Button>
+        </form>
+        {current ? (
+          <form action={action} className="mt-2">
+            <input name="color" type="hidden" value="" />
+            <Button className="w-full" size="sm" type="submit" variant="secondary">No colour</Button>
+          </form>
+        ) : null}
+      </div>
+    </details>
   );
 }

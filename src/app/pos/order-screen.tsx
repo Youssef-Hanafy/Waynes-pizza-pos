@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { StoreSettings } from "@/lib/content/schemas";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
@@ -16,7 +15,6 @@ import { draftSync, useSyncState } from "@/stores/draft-sync";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
-import { phoneActions } from "@/stores/phone-store";
 import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { ticketNumber } from "@/lib/orders/ticket-number";
@@ -25,6 +23,8 @@ import { PaymentPrompt } from "./payments-screen";
 import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-print";
 import { StartOrderCard } from "./start-order-card";
 import { OpenItemDialog } from "./open-item-dialog";
+import { DiscountDialog, type AppliedDiscount } from "./discount-dialog";
+import { closeOutUnsentTickets, restoreLastClosed, unsettledOrder, useLastClosed } from "@/stores/ticket-closeout";
 
 type MenuItem = PublicMenu[number]["items"][number];
 
@@ -47,7 +47,8 @@ type Props = {
 export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, keyedCardConfig, stripeReader }: Props) {
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
-  const held = drafts.filter((candidate) => candidate.id !== activeId);
+  // Tickets are never held (owner, 2026-10-19); only ones already sent and waiting for the connection stay.
+  const held = drafts.filter((candidate) => candidate.id !== activeId && candidate.submitPending);
   const { remote } = useSyncState();
   const update = orderActions.update;
 
@@ -55,15 +56,30 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const [editingLine, setEditingLine] = useState<CartLine | null>(null);
   /** The open-item box: null closed, "new", or the line being changed. */
   const [openItem, setOpenItem] = useState<CartLine | "new" | null>(null);
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const lastClosed = useLastClosed();
   const [itemSearch, setItemSearch] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   /** The order just sent, shown with the payment prompt until it is paid or left to pay later. */
-  const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on" } | null>(null);
+  // fresh: sent from this screen and not settled yet — leaving without a payment or Pay later closes it out (owner, 2026-10-19).
+  const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on"; fresh: boolean } | null>(null);
   const [printNote, setPrintNote] = useState("");
   /** The payment screen the cashier left with "Add more items": Cancel and Add both come back to it (owner, 2026-10-16). */
-  const [returnTo, setReturnTo] = useState<{ order: OpenOrder; delivery: boolean } | null>(null);
+  const [returnTo, setReturnTo] = useState<{ order: OpenOrder; delivery: boolean; fresh: boolean } | null>(null);
+  /**
+   * The order sent from this screen that nobody has paid or put on Pay later
+   * yet.  Leaving New Order (another tab, the phone) while it is open means it
+   * was never submitted: the server cancels it before anything prints, unless
+   * it was paid or printed meanwhile (owner, 2026-10-19).
+   */
+  useEffect(() => () => {
+    const orderId = unsettledOrder.id;
+    if (!orderId) return;
+    unsettledOrder.id = null;
+    void fetch(`/api/pos/orders/${orderId}/abandon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", keepalive: true }).catch(() => undefined);
+  }, []);
   const ticketListRef = useRef<HTMLDivElement>(null);
   const paying = created !== null;
   useEffect(() => {
@@ -145,16 +161,19 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "The items could not be added.");
       const result = parsed.data;
       setPrintNote("");
+      // Same order, same ticket (owner, 2026-10-19): the payment screen asks for what is still owed.
+      const fresh = Boolean(returnTo?.fresh && returnTo.order.id === addTo.orderId);
       setCreated({
-        duplicate: result.duplicate, delivery: addTo.fulfillment === "delivery", added: result.mode,
+        duplicate: result.duplicate, delivery: addTo.fulfillment === "delivery", added: result.mode, fresh,
         order: {
           id: result.order_id, order_number: result.order_number, daily_number: result.daily_number ?? addTo.dailyNumber,
           parent_order_id: result.mode === "add_on" ? (result.parent_order_id ?? addTo.orderId) : null,
-          total_cents: result.total_cents, customer_name: returnTo?.order.customer_name ?? addTo.customerName, fulfillment_type: addTo.fulfillment, source: returnTo?.order.source ?? draft.source,
-          status: "placed", payment_method: "", payment_status: "unpaid", placed_at: new Date().toISOString(), promised_at: null, ready_at: null,
+          total_cents: result.total_cents, paid_cents: result.paid_cents, customer_name: returnTo?.order.customer_name ?? addTo.customerName, fulfillment_type: addTo.fulfillment, source: returnTo?.order.source ?? draft.source,
+          status: "placed", payment_method: "", payment_status: result.paid_cents >= result.total_cents ? "paid" : "unpaid", placed_at: returnTo?.order.placed_at ?? new Date().toISOString(), promised_at: null, ready_at: null,
           is_test: draft.isTest,
         },
       });
+      unsettledOrder.id = fresh ? result.order_id : null;
       void draftSync.discard(draft);
       orderActions.clearActive();
       setReturnTo(null);
@@ -182,10 +201,12 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     if (result.ok) {
       setPrintNote("");
       const now = new Date().toISOString();
+      // A duplicate answer is an order sent before (e.g. a retry after a dropped connection): never closed out from here.
+      unsettledOrder.id = result.order.duplicate ? null : result.order.id;
       setCreated({
-        duplicate: result.order.duplicate, delivery,
+        duplicate: result.order.duplicate, delivery, fresh: !result.order.duplicate,
         order: {
-          id: result.order.id, order_number: result.order.order_number, total_cents: result.order.total_cents,
+          id: result.order.id, order_number: result.order.order_number, total_cents: result.order.total_cents, paid_cents: 0,
           daily_number: result.order.daily_number ?? null, parent_order_id: null,
           customer_name: customerName, fulfillment_type: delivery ? "delivery" : "pickup", source,
           status: "placed", payment_method: "", payment_status: "unpaid", placed_at: now, promised_at: null, ready_at: null,
@@ -206,9 +227,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   function clearTicket() {
     if (draftHasWork(draft) && !confirmClear) { setConfirmClear(true); return; }
     setConfirmClear(false);
-    if (draft.phoneCallKey) void phoneActions.releaseCall(draft.phoneCallKey);
-    void draftSync.discard(draft);
-    orderActions.clearActive(); setError("");
+    // Closes its phone call too, so the line is free (owner, 2026-10-19).
+    closeOutUnsentTickets(); setError("");
   }
 
   /**
@@ -219,14 +239,14 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   function addMoreItems() {
     if (!created) return;
     const order = created.order;
-    setReturnTo({ order, delivery: created.delivery });
-    orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: false });
+    setReturnTo({ order, delivery: created.delivery, fresh: created.fresh });
+    orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: (order.paid_cents ?? 0) > 0 });
     setCreated(null); setPrintNote(""); setError("");
   }
 
   function cancelAddition() {
     void draftSync.discard(draft); orderActions.clearActive(); setError("");
-    if (returnTo && addTo && returnTo.order.id === addTo.orderId) setCreated({ order: returnTo.order, delivery: returnTo.delivery, duplicate: false });
+    if (returnTo && addTo && returnTo.order.id === addTo.orderId) setCreated({ order: returnTo.order, delivery: returnTo.delivery, duplicate: false, fresh: returnTo.fresh });
     setReturnTo(null);
   }
 
@@ -234,16 +254,17 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // correctly (owner, 2026-10-12); leaving it lets the ticket print.
   function closePayment() {
     if (created) releaseOrderPrint(created.order.id);
+    unsettledOrder.id = null;
     setCreated(null);
   }
 
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
-    const resumable = held.filter(isWorthResuming);
+    const paidAlready = created.order.paid_cents ?? 0;
     return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-3 sm:p-6">
       <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
-          <p className="font-black text-wayne-ok">✓ {created.added === "merged" ? `Added to order #${ticketNumber(created.order)} — new total ${formatCents(created.order.total_cents)}` : created.added === "add_on" ? `Add-on to #${ticketNumber(created.order)} sent to the kitchen — paid on its own` : created.duplicate ? "Already sent" : "Sent to the kitchen"} · #{ticketNumber(created.order)}</p>
+          <p className="font-black text-wayne-ok">✓ {created.added ? `Added to order #${ticketNumber(created.order)} — same ticket, new total ${formatCents(created.order.total_cents)}${paidAlready ? ` · ${formatCents(paidAlready)} already paid, ${formatCents(Math.max(0, created.order.total_cents - paidAlready))} to pay` : ""}` : created.duplicate ? `Already sent · #${ticketNumber(created.order)}` : `Order #${ticketNumber(created.order)} — take payment or Pay later to send it`}</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once they pay or you tap {created.delivery ? "Cash at the door" : "Pay later"} — marked PAID / NOT PAID</span>
             <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
@@ -253,13 +274,13 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
         <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
         <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={closePayment} order={created.order} stripeReader={stripeReader} />
-        {resumable.length ? <div className="mt-6 grid gap-2 border-t border-wayne-border pt-4"><p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Tickets on hold</p><div className="flex flex-wrap gap-2">{resumable.map((candidate) => <Button key={candidate.id} onClick={() => { orderActions.resume(candidate.id); closePayment(); }} size="sm" variant="secondary">Resume {draftLabel(candidate)} · {candidate.cart.length} item{candidate.cart.length === 1 ? "" : "s"}</Button>)}</div></div> : null}
+        {created.fresh ? <p className="mt-5 border-t border-wayne-border pt-3 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
       </section>
     </div>;
   }
 
   const summary = addTo
-    ? { icon: "➕", title: `Adding to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: addTo.paid ? "Already paid — these items go out as an add-on and are paid on their own" : "Not paid yet — these items go on the same order" }
+    ? { icon: "➕", title: `Adding to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: addTo.paid ? "Already paid — these items go on the same order; you take what's still owed next" : "Not paid yet — these items go on the same order" }
     : ticketSummary(draft, settings);
   if (draft.isTest) summary.title = `🧪 TEST · ${summary.title}`;
   const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-1.5">
@@ -279,8 +300,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       <span className="ml-2 shrink-0 rounded-lg border border-wayne-border px-3 py-1.5 text-sm font-bold">Edit</span>
     </button> : <p className="flex-1 text-sm font-black uppercase tracking-[0.12em] text-wayne-muted">{draft.cart.length ? "Editing order details" : "Starting a new order"}</p>}
     {remote.length ? <details className="relative"><summary className="flex min-h-11 cursor-pointer items-center rounded-full border border-dashed border-wayne-border-strong px-3 text-sm font-bold">Other registers ({remote.length})</summary><div className="absolute right-0 z-40 mt-1 grid w-80 gap-2 rounded-2xl border border-wayne-border bg-white p-3 shadow-xl">{remote.map((ticket) => <div className="rounded-xl border border-wayne-border p-2" key={ticket.id}><p className="text-sm font-bold">{ticket.label || "Ticket"}{ticket.item_count ? ` · ${ticket.item_count} item${ticket.item_count === 1 ? "" : "s"}` : ""}</p><p className="text-xs text-wayne-muted">{ticket.status === "held" ? "On hold" : "Open"} on {ticket.terminal || "another register"}{ticket.owner_name ? ` · ${ticket.owner_name}` : ""}</p><Button className="mt-2 w-full" onClick={() => void takeOver(ticket.id)} size="sm" variant="secondary">Take over here</Button></div>)}</div></details> : null}
-    {held.length ? <div className="flex flex-wrap gap-1.5">{held.map((candidate) => <button className="min-h-11 rounded-full border border-wayne-border bg-wayne-cream px-3 text-sm font-bold" key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setError(""); }} type="button">{candidate.submitPending ? "⟳ " : "⏸ "}{draftLabel(candidate)}{candidate.cart.length ? ` · ${candidate.cart.length}` : ""}{candidate.submitPending ? " · sending" : ""}</button>)}</div> : null}
-    {draftHasWork(draft) ? <Button onClick={() => { orderActions.hold(); setError(""); }} size="sm" variant="secondary">＋ New order <span className="font-normal text-wayne-muted">(holds this one)</span></Button> : null}
+    {held.length ? <div className="flex flex-wrap gap-1.5">{held.map((candidate) => <button className="min-h-11 rounded-full border border-wayne-border bg-wayne-cream px-3 text-sm font-bold" key={candidate.id} onClick={() => { orderActions.resume(candidate.id); setError(""); }} type="button">⟳ {draftLabel(candidate)}{candidate.cart.length ? ` · ${candidate.cart.length}` : ""} · sending</button>)}</div> : null}
+    {/* Not held (owner, 2026-10-19): a new order closes this one out and frees its phone line; Bring back undoes a slip. */}
+    {!addTo && draftHasWork(draft) ? <Button onClick={() => { closeOutUnsentTickets(); setError(""); setConfirmClear(false); }} size="sm" variant="secondary">＋ New order</Button> : null}
+    {!addTo && !draftHasWork(draft) && lastClosed ? <Button onClick={() => { restoreLastClosed(); setError(""); }} size="sm" variant="secondary">↩ Bring back {draftLabel(lastClosed)} · {lastClosed.cart.length} item{lastClosed.cart.length === 1 ? "" : "s"}</Button> : null}
   </div>;
 
   if (!draft.started) return <div className="flex min-h-0 flex-1 flex-col">
@@ -292,11 +315,16 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const addToLabel = addTo ? `#${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}` : "";
   // One button from ticket to payment (owner, 2026-10-16): it sends the order and opens the payment screen.
   const submitLabel = submitting ? (addTo ? "Adding…" : "Sending…")
-    : addTo ? (addTo.paid ? `Add-on to ${addToLabel} · take payment · ${formatCents(previewTotal)}` : `Add to ${addToLabel} · take payment`)
+    : addTo ? `Add to ${addToLabel} · take payment`
     : draft.submitPending ? "Try sending now"
     : `${draft.isTest ? "TEST · " : ""}Take payment · ${formatCents(previewTotal)}`;
-  const shownCategories = itemSearch.trim() ? visibleMenu : visibleMenu.filter((category) => category.id === (categoryId ?? visibleMenu[0]?.id));
-  const shownItems = shownCategories.flatMap((category) => category.items);
+  // Specials (owner, 2026-10-19): every item marked a special, under one button before the categories.
+  const specials = visibleMenu.flatMap((category) => category.items.filter((item) => item.special));
+  const selectedCategory = categoryId === SPECIALS && !specials.length ? null : categoryId;
+  const shownItems = itemSearch.trim() ? visibleMenu.flatMap((category) => category.items)
+    : selectedCategory === SPECIALS ? specials
+    : visibleMenu.filter((category) => category.id === (selectedCategory ?? visibleMenu[0]?.id)).flatMap((category) => category.items);
+  const discount: AppliedDiscount | null = draft.manualType ? { type: draft.manualType, value: draft.manualValue, reason: draft.manualReason, presetId: draft.presetDiscountId } : null;
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <main className="grid flex-1 grid-cols-1 md:min-h-0 md:grid-cols-[1fr_20rem] lg:grid-cols-[1fr_22rem] 2xl:grid-cols-[1fr_26rem]">
@@ -306,16 +334,23 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       <section aria-label="Menu" className="flex min-w-0 flex-1 flex-col gap-2.5 p-3 md:min-h-0">
         {/* Categories as an even grid across the whole width (search takes the last two cells), so the items below get all the height that's left. */}
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(7.25rem, 1fr))" }}>
+          {specials.length ? <button aria-pressed={!itemSearch.trim() && selectedCategory === SPECIALS} className={`flex min-h-12 items-center justify-center rounded-xl px-2 text-center text-sm font-black leading-tight transition active:scale-95 ${!itemSearch.trim() && selectedCategory === SPECIALS ? "bg-wayne-red text-white shadow-md" : "border-2 border-wayne-gold bg-wayne-gold/25 text-wayne-ink shadow-sm"}`} onClick={() => { setCategoryId(SPECIALS); setItemSearch(""); }} type="button">⭐ Specials</button> : null}
           {visibleMenu.map((category) => {
-            const selected = !itemSearch.trim() && category.id === (categoryId ?? visibleMenu[0]?.id);
-            return <button aria-pressed={selected} className={`flex min-h-12 items-center justify-center rounded-xl px-2 text-center text-sm font-black leading-tight transition active:scale-95 ${selected ? "bg-wayne-green text-white shadow-md" : "border border-wayne-border bg-white text-wayne-ink shadow-sm hover:bg-wayne-cream"}`} key={category.id} onClick={() => { setCategoryId(category.id); setItemSearch(""); }} type="button">{category.name}</button>;
+            const selected = !itemSearch.trim() && selectedCategory !== SPECIALS && category.id === (selectedCategory ?? visibleMenu[0]?.id);
+            const color = safeColor(category.pos_color);
+            return <button aria-pressed={selected} className={`flex min-h-12 items-center justify-center rounded-xl px-2 text-center text-sm font-black leading-tight transition active:scale-95 ${selected ? "bg-wayne-green text-white shadow-md" : "border border-wayne-border bg-white text-wayne-ink shadow-sm hover:bg-wayne-cream"}`} key={category.id} onClick={() => { setCategoryId(category.id); setItemSearch(""); }} style={color ? (selected ? { backgroundColor: color, color: readableText(color) } : { borderColor: color, borderLeftWidth: 6, backgroundColor: `${color}1f` }) : undefined} type="button">{category.name}</button>;
           })}
           <button className="flex min-h-12 items-center justify-center rounded-xl border-2 border-dashed border-wayne-green bg-white px-2 text-center text-sm font-black leading-tight text-wayne-green active:scale-95" onClick={() => setOpenItem("new")} type="button">＋ Open item</button>
+          {!addTo ? <button aria-pressed={Boolean(discount)} className={`flex min-h-12 items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-sm font-black leading-tight active:scale-95 ${discount ? "border-wayne-red bg-wayne-red text-white" : "border-wayne-red bg-white text-wayne-red"}`} onClick={() => setDiscountOpen(true)} type="button">{discount ? "✓ Discount" : "－ Discount"}</button> : null}
           <input aria-label="Search menu" className="col-span-2 min-h-12 min-w-0 rounded-xl border border-wayne-border bg-white px-3 text-base" onChange={(event) => setItemSearch(event.target.value)} placeholder="🔍  Search" type="search" value={itemSearch} />
         </div>
-        {shownItems.length ? <FitGrid className="flex-1" count={shownItems.length} fallbackClassName="grid grid-cols-2 content-start gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" key={itemSearch.trim() ? "search" : (categoryId ?? visibleMenu[0]?.id ?? "")} label="Menu items" minHeight={64} minWidth={120} ratio={1.5}>{(cellHeight) => {
+        {shownItems.length ? <FitGrid className="flex-1" count={shownItems.length} fallbackClassName="grid grid-cols-2 content-start gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" key={itemSearch.trim() ? "search" : (selectedCategory ?? visibleMenu[0]?.id ?? "")} label="Menu items" minHeight={64} minWidth={120} ratio={1.5}>{(cellHeight) => {
           const roomy = cellHeight === null || cellHeight >= 92;
-          return shownItems.map((item) => <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-24 p-3" : roomy ? "p-3" : "px-3 py-2"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} type="button"><strong className={`line-clamp-2 block leading-tight ${roomy ? "text-lg" : "text-base"}`}>{item.name}</strong><span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-sm"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>);
+          return shownItems.map((item) => {
+            // The item's colour, else its category's (Admin → Menu → colour), so groups are easy to spot (owner, 2026-10-19).
+            const color = safeColor(item.pos_color);
+            return <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-24 p-3" : roomy ? "p-3" : "px-3 py-2"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} style={color ? { borderColor: color, borderLeftWidth: 8, backgroundColor: `${color}26` } : undefined} type="button"><strong className={`line-clamp-2 block leading-tight ${roomy ? "text-lg" : "text-base"}`}>{item.special ? "⭐ " : ""}{item.name}</strong>{item.special && item.special_note && roomy ? <span className="line-clamp-1 text-xs font-bold text-wayne-muted">{item.special_note}</span> : null}<span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-sm"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>;
+          });
         }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
       </section>
       </div>
@@ -328,7 +363,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant?.name ?? ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} quantity={line.quantity} title={line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"} />;
         })}</ul> : <p className="m-1.5 rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
         <div className="shrink-0 border-t border-wayne-border px-3 pb-3 pt-2">
-          {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes, promo &amp; discount{draft.orderNote || draft.promoCode || draft.manualType ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{canManageDiscount ? <div className="mt-2 grid gap-2"><select className="min-h-11 rounded-lg border bg-white px-2" disabled={Boolean(draft.promoCode)} onChange={(e) => update({ manualType: e.target.value as "" | "fixed" | "percent" })} value={draft.manualType}><option value="">No manual discount</option><option value="fixed">Fixed dollars</option><option value="percent">Percent</option></select>{draft.manualType ? <><Input id="pos-manual-value" label={draft.manualType === "fixed" ? "Amount ($)" : "Percent (%)"} min="0" onChange={(e) => update({ manualValue: e.target.value })} step="0.01" type="number" value={draft.manualValue} /><Input id="pos-manual-reason" label="Required reason" onChange={(e) => update({ manualReason: e.target.value })} value={draft.manualReason} /></> : null}</div> : null}</details>}
+          {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes &amp; promo code{draft.orderNote || draft.promoCode ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{draft.manualType ? <p className="mt-1 text-xs font-bold text-wayne-muted">A discount is on this ticket — remove it to use a promotion code.</p> : null}</details>}
+          {discount ? <div className="mt-2 flex items-center gap-2 rounded-xl bg-wayne-red-soft px-2 py-1 text-sm font-bold text-wayne-red"><button className="min-h-9 min-w-0 flex-1 truncate text-left" onClick={() => setDiscountOpen(true)} type="button">Discount · {discount.reason || "Discount"} · {discount.type === "percent" ? `${discount.value}% off` : `$${discount.value} off`}</button><button aria-label="Remove the discount" className="grid size-9 place-items-center rounded-lg text-lg font-black hover:bg-white" onClick={() => update({ manualType: "", manualValue: "", manualReason: "", presetDiscountId: "" })} type="button">✕</button></div> : null}
           <div className="mt-2 flex flex-wrap justify-between gap-x-3 text-sm text-wayne-muted"><span>Subtotal {formatCents(subtotal)}</span>{previewDiscount ? <span>Discount −{formatCents(previewDiscount)}</span> : null}{deliveryFee ? <span>Delivery {formatCents(deliveryFee)}</span> : null}<span>Tax {formatCents(tax)}</span></div>
           <div className="mt-0.5 flex items-baseline justify-between text-2xl font-black"><span>{addTo ? "Adding" : draft.promoCode ? "Est. total*" : "Total"}</span><span>{formatCents(previewTotal)}</span></div>
           {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing the button again is safe.</p> : null}
@@ -337,6 +373,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         </div>
       </aside>
     </main>
+    {discountOpen ? <DiscountDialog canManageDiscount={canManageDiscount} current={discount} onApply={(next) => { update({ manualType: next.type, manualValue: next.value, manualReason: next.reason, presetDiscountId: next.presetId, promoCode: "" }); setDiscountOpen(false); setError(""); }} onClose={() => setDiscountOpen(false)} onRemove={() => { update({ manualType: "", manualValue: "", manualReason: "", presetDiscountId: "" }); setDiscountOpen(false); }} subtotalCents={subtotal} /> : null}
     {openItem ? <OpenItemDialog initialLine={openItem === "new" ? null : openItem} onAdd={(line) => { setCart(openItem === "new" ? [...cart, line] : cart.map((candidate) => candidate.line_id === line.line_id ? line : candidate)); setOpenItem(null); }} onClose={() => setOpenItem(null)} /> : null}
     {selectedItem ? <PosItemDialog initialLine={editingLine} item={selectedItem} onAdd={(line) => { setCart(editingLine ? cart.map((candidate) => candidate.line_id === editingLine.line_id ? line : candidate) : [...cart, line]); setEditingLine(null); setSelectedItem(null); }} onClose={() => { setEditingLine(null); setSelectedItem(null); }} /> : null}
   </div>;
@@ -346,9 +383,6 @@ function draftHasWork(draft: PosDraft) {
   return draft.cart.length > 0 || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.orderNote);
 }
 
-function isWorthResuming(draft: PosDraft) {
-  return draftHasWork(draft);
-}
 
 /** One line saying what this ticket is, for the bar above the menu. */
 function ticketSummary(draft: PosDraft, settings: StoreSettings) {
@@ -382,3 +416,17 @@ function TicketLine({ title, detail, modifiers, note, cents, quantity, onQuantit
   </li>;
 }
 function updateQuantity(cart: CartLine[], lineId: string, quantity: number) { return quantity < 1 ? cart.filter((line) => line.line_id !== lineId) : cart.map((line) => line.line_id === lineId ? { ...line, quantity: Math.min(20, quantity) } : line); }
+
+/** The Specials button's id in the category row. */
+const SPECIALS = "__specials__";
+
+/** Only a #rrggbb colour from Admin is ever put in a style. */
+function safeColor(value: string | null | undefined) {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+}
+
+/** White or dark text, whichever reads on that colour. */
+function readableText(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  return (0.299 * r! + 0.587 * g! + 0.114 * b!) > 160 ? "#1f1a17" : "#ffffff";
+}

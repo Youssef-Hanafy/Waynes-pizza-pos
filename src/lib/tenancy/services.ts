@@ -60,6 +60,7 @@ const routeServices: ReadonlyArray<readonly [string, readonly ServiceCode[]]> = 
   ["/admin/segments", ["customer_segments"]],
   ["/admin/promotions", ["pos", "online_ordering"]],
   ["/admin/menu", ["pos", "online_ordering"]],
+  ["/admin/discounts", ["pos"]],
   ["/admin/settings", ["website_storefront"]],
   ["/admin/printing", ["pos", "hardware_management"]],
   ["/admin/hardware", ["hardware_management"]],

@@ -130,7 +130,7 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: str
               </span>
               <span className="shrink-0 text-right">
                 <strong className="block text-2xl tabular-nums">{formatCents(total)}</strong>
-                <span className={`text-sm font-black uppercase ${order.status === "cancelled" ? "text-wayne-muted" : paid && !extrasDue ? "text-wayne-ok" : "text-wayne-red"}`}>{order.status === "cancelled" ? "Cancelled" : paid && !extrasDue ? "Paid" : paid ? "Add-on due" : "Not paid"}</span>
+                <span className={`text-sm font-black uppercase ${order.status === "cancelled" ? "text-wayne-muted" : paid && !extrasDue ? "text-wayne-ok" : "text-wayne-red"}`}>{order.status === "cancelled" ? "Cancelled" : paid && !extrasDue ? "Paid" : paid ? "Add-on due" : order.paid_cents > 0 ? "Balance due" : "Not paid"}</span>
               </span>
             </button>
           </li>;
@@ -207,6 +207,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
       <p className={`text-2xl font-black ${order.status === "cancelled" ? "" : paid ? "text-wayne-ok" : "text-wayne-alert"}`}>{paymentSummary(order)}</p>
       {order.paid_method === "cash" && order.tendered_cents !== null ? <p className="mt-1 font-bold">Handed {formatCents(order.tendered_cents)} · change {formatCents(order.change_cents ?? 0)}</p> : null}
       {order.paid_at ? <p className="mt-1 text-sm">at {time(order.paid_at)}</p> : null}
+      {!paid && order.paid_cents > 0 && order.status !== "cancelled" ? <p className="mt-1 text-lg font-black">{formatCents(order.paid_cents)} paid · {formatCents(Math.max(0, order.total_cents - order.paid_cents))} still owed for items added after</p> : null}
     </div>
 
     {address && order.fulfillment_type === "delivery" ? <div className="mt-4 rounded-2xl border border-wayne-border p-4">
@@ -254,8 +255,8 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
     </div> : null}
 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
-      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">＋ Add items{paid ? " (paid separately)" : ""}</Button> : null}
-      {unpaidOpen && onPay ? <Button className="sm:col-span-2" onClick={() => onPay(order.id)} size="lg" variant="brand">Take payment · {formatCents(order.total_cents)}</Button> : null}
+      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">＋ Add items · same order</Button> : null}
+      {unpaidOpen && onPay ? <Button className="sm:col-span-2" onClick={() => onPay(order.id)} size="lg" variant="brand">Take payment · {formatCents(Math.max(0, order.total_cents - order.paid_cents))}</Button> : null}
       <Button disabled={busy} onClick={() => { void printReceipt(); }} size="lg" variant="secondary">Print receipt</Button>
       <Button disabled={busy} onClick={() => { void printKitchen(); }} size="lg" variant="secondary">Print kitchen ticket</Button>
     </div>

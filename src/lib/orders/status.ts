@@ -48,6 +48,8 @@ export const openOrderSchema = z.object({
   payment_method: z.string(),
   payment_status: z.string(),
   total_cents: z.number().int(),
+  /** Already paid on this order (items added after a payment leave the rest to pay, owner 2026-10-19). */
+  paid_cents: z.number().int().optional().default(0),
   placed_at: z.string(),
   promised_at: z.string().nullable(),
   ready_at: z.string().nullable(),

@@ -1,10 +1,12 @@
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { DealCard } from "@/components/site/deal-card";
+import { SpecialCard } from "@/components/site/special-card";
 import { MemberOffers } from "@/components/site/member-offers";
 import { getStoreSettings, storefrontSettings } from "@/lib/content/queries";
 import { brandNames } from "@/lib/content/schemas";
 import { getPublicPromotions } from "@/lib/promotions/public";
+import { getPublicSpecials } from "@/lib/menu/specials";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata() {
@@ -20,7 +22,7 @@ export async function generateMetadata() {
  * instead of an empty page.
  */
 export default async function OffersPage() {
-  const [settings, promotions] = await Promise.all([storefrontSettings(), getPublicPromotions()]);
+  const [settings, promotions, specials] = await Promise.all([storefrontSettings(), getPublicPromotions(), getPublicSpecials()]);
   return (
     <div className="storefront">
       <SiteHeader settings={settings} />
@@ -29,13 +31,21 @@ export default async function OffersPage() {
           <section>
             <p className="eyebrow">DEALS FOR EVERYONE</p>
             <h1 className="mt-2 text-4xl font-black">This week at {brandNames(settings).shortName}</h1>
+            {/* Specials from Admin → Menu → Specials (owner, 2026-10-19): the same ones the counter rings up. */}
+            {specials.length ? (
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                {specials.map((special) => (
+                  <SpecialCard key={special.id} special={special} />
+                ))}
+              </div>
+            ) : null}
             {promotions.length ? (
               <div className="mt-6 grid gap-4">
                 {promotions.map((promotion) => (
                   <DealCard key={promotion.id} promotion={promotion} />
                 ))}
               </div>
-            ) : (
+            ) : specials.length ? null : (
               <p className="mt-6 rounded-2xl border-2 border-dashed border-wayne-border p-6 text-wayne-muted">
                 No public deals are running right now. Members still get their
                 own offers by text — check yours on the right.

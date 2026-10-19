@@ -22,6 +22,7 @@ import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
 import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
+import { closeOutUnsentTickets, keepUnsettledOrder } from "@/stores/ticket-closeout";
 import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenDrawerButton } from "./open-drawer-button";
@@ -82,11 +83,18 @@ export function PosApp(props: Props) {
   const [payFocus, setPayFocus] = useState<{ orderId: string; n: number } | null>(null);
   /** Open the Payments screen on one order (from the order-sent screen or the Orders list). */
   function takePayment(orderId: string) {
+    // Paying the order that was just sent is not leaving it.
+    keepUnsettledOrder(orderId);
     setPayFocus((current) => ({ orderId, n: (current?.n ?? 0) + 1 }));
     setSection("pay");
   }
   const sectionRef = useRef<Section>(section);
-  useEffect(() => { sectionRef.current = section; }, [section]);
+  useEffect(() => {
+    // Leaving New Order closes out a ticket that was not sent, and its phone call,
+    // so the line is free (owner, 2026-10-19: tickets are not held).
+    if (sectionRef.current === "order" && section !== "order") closeOutUnsentTickets();
+    sectionRef.current = section;
+  }, [section]);
   // The customer screen (Fire tablet) mirrors this register.
   useEffect(() => startCustomerDisplayLink(), []);
   // The tip buttons on the customer screen come from Admin → Settings.
@@ -95,7 +103,7 @@ export function PosApp(props: Props) {
   const hardwareState = useHardwareState();
   const { drafts } = useDrafts();
   const currentDraft = useActiveDraft();
-  const heldCount = drafts.filter((draft) => draft.held).length;
+  const sendingCount = drafts.filter((draft) => draft.submitPending).length;
 
   const runtimeReady = useHardware(hardware);
   const stripeReaderOn = hardware.payment_terminal_mode === "integrated";
@@ -112,6 +120,11 @@ export function PosApp(props: Props) {
   }, [stripeReaderOn, runtimeReady]);
   const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
+  // Tickets held before 2026-10-19 (and their phone lines) are closed out when the register opens; the one on screen stays.
+  useEffect(() => {
+    const timer = window.setTimeout(() => closeOutUnsentTickets({ keepActive: true }), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const { notices } = useSyncState();
   const pendingCount = drafts.filter((draft) => draft.submitPending).length;
 
@@ -179,7 +192,7 @@ export function PosApp(props: Props) {
     : printStationWarning(printStation);
 
   const tabs: { id: Section; label: string }[] = [
-    { id: "order", label: `${draftHasContent(currentDraft) ? "Current Order" : "New Order"}${heldCount ? ` · ${heldCount} held` : ""}` },
+    { id: "order", label: `${draftHasContent(currentDraft) ? "Current Order" : "New Order"}${sendingCount ? ` · ${sendingCount} sending` : ""}` },
     ...(callerIdEnabled ? [{ id: "phone" as const, label: badge.waiting ? `Phone (${badge.waiting})` : "Phone" }] : []),
     { id: "pay", label: "Payments" },
     ...(canManageOrders ? [{ id: "orders" as const, label: "Orders" }] : []),
@@ -229,13 +242,14 @@ export function PosApp(props: Props) {
     </div> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} onAddItems={(order) => {
       // Same as Today's Orders → Add items; adding to an unpaid order brings its payment straight back with the new total.
-      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: false });
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 });
       setPayFocus(null); setSection("order");
     }} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
-      // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items.
-      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.payment_status === "paid" || order.payment_status === "authorized" });
+      // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items,
+      // and they go on that same order even if it was paid (owner, 2026-10-19).
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 || order.payment_status === "paid" || order.payment_status === "authorized" });
       setPayFocus(null); setSection("order");
     }} onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}

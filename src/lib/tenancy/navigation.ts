@@ -50,6 +50,8 @@ const groups: ReadonlyArray<{ name: string; items: Candidate[] }> = [
     name: "Setup",
     items: [
       { href: "/admin/menu", label: "Menu", permission: "menu.manage", operational: true },
+      { href: "/admin/menu/specials", label: "Specials", permission: "menu.manage", operational: true },
+      { href: "/admin/discounts", label: "POS discounts", permission: "pos.discount.manage", operational: true },
       { href: "/admin/settings", label: "Website & hours", permission: "content.manage", operational: true },
       { href: "/admin/tips", label: "Tips", permission: "content.manage", operational: true },
       { href: "/admin/printing", label: "Printing", permission: "printing.manage", operational: true },
