@@ -281,9 +281,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
           <p className="font-black text-wayne-ok">✓ {created.added ? `Added to order #${ticketNumber(created.order)} — same ticket, new total ${formatCents(created.order.total_cents)}${paidAlready ? ` · ${formatCents(paidAlready)} already paid, ${formatCents(Math.max(0, created.order.total_cents - paidAlready))} to pay` : ""}` : created.duplicate ? `Already sent · #${ticketNumber(created.order)}` : `Order #${ticketNumber(created.order)} — take payment or Pay later to send it`}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-wayne-muted">{created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once they pay or you tap {created.delivery ? "Cash at the door" : "Pay later"} — marked PAID / NOT PAID</span>
+            {/* Recalled order whose slip is already out: nothing new prints (owner, 2026-10-19). */}
+            <span className="text-xs font-bold text-wayne-muted">{created.added && !created.fresh ? "No new slip prints — the added items are on the kitchen screen" : `${created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once, with everything on it, when they pay or you tap ${created.delivery ? "Cash at the door" : "Pay later"}`}</span>
             <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
-            <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">Print kitchen now</Button>
+            <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">{created.added && !created.fresh ? "Reprint full ticket" : "Print kitchen now"}</Button>
           </div>
         </div>
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
