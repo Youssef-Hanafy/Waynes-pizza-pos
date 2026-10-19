@@ -19,7 +19,7 @@ import { CustomerSignStep, CustomerTipStep, thankCustomer } from "./customer-ste
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
 
-type Done = { order: OpenOrder; method: "cash" | "card"; changeCents: number; tenderedCents: number | null;
+export type Done = { order: OpenOrder; method: "cash" | "card"; changeCents: number; tenderedCents: number | null;
   /** A delivery card approved for the order — charged with the tip on the slip at the driver's cash-out. */
   held?: boolean };
 type Mode = "choose" | "cash" | "terminal" | "keyed";
@@ -236,10 +236,9 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
  * 2026-09-30): Cash, Card reader, Key in card, or Pay later.  Pay later
  * leaves the order unpaid; it is in Payments whenever the customer pays.
  */
-export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater, onFinished, onAddItems }: { order: OpenOrder; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; onPayLater: () => void; onFinished: () => void; onAddItems?: () => void }) {
+export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater, onFinished, onAddItems }: { order: OpenOrder; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; onPayLater: () => void; /** Paid: straight back to taking orders, no "Next order" screen (owner, 2026-10-19). */ onFinished: (done: Done) => void; onAddItems?: () => void }) {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [shiftId, setShiftId] = useState("");
-  const [done, setDone] = useState<Done | null>(null);
   const mounted = useRef(true);
 
   const loadDrawer = useCallback(async () => {
@@ -260,8 +259,7 @@ export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater
     return () => { mounted.current = false; window.clearTimeout(first); };
   }, [loadDrawer]);
 
-  if (done) return <PaidSummary done={done} onNext={onFinished} />;
-  return <PaymentPage keyedCardConfig={keyedCardConfig} onAddItems={onAddItems} onDrawerChanged={loadDrawer} onPaid={setDone} onPayLater={onPayLater} order={order} shiftId={shiftId} stripeReader={stripeReader} terminals={terminals} />;
+  return <PaymentPage keyedCardConfig={keyedCardConfig} onAddItems={onAddItems} onDrawerChanged={loadDrawer} onPaid={onFinished} onPayLater={onPayLater} order={order} shiftId={shiftId} stripeReader={stripeReader} terminals={terminals} />;
 }
 
 type TenderProps = { order: OpenOrder; busy: boolean; setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (done: Done) => void };

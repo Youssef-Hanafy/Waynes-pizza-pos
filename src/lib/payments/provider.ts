@@ -20,6 +20,9 @@ export type ProviderPayment = {
    * driver returns (owner, 2026-10-11).  Null when the card can't be increased.
    */
   maxCapturableCents?: number | null;
+  /** The saved card (Stripe) behind a tip-adjust approval, used to charge order + tip once. */
+  paymentMethodId?: string | null;
+  customerId?: string | null;
 };
 
 export type ProviderTerminalCheckout = ProviderPayment & { checkoutId: string };
@@ -67,6 +70,10 @@ export interface PaymentProvider {
   /** Charge a held card. amountCents (≤ the hold) charges less than the hold and releases the rest. */
   capturePayment(providerPaymentId: string, options?: { amountCents?: number; idempotencyKey?: string }): Promise<ProviderPayment>;
   voidPayment(providerPaymentId: string): Promise<ProviderPayment>;
+  /** Charge a saved card once, off-session (order + tip at cash-out). Stripe only. */
+  chargeSavedCard?(input: { customerId: string; paymentMethodId: string; amountCents: number; idempotencyKey: string; note: string; metadata?: Record<string, string> }): Promise<ProviderPayment>;
+  /** Cancel an approval that a fresh charge replaced, marked so its webhook is ignored. */
+  releaseHold?(providerPaymentId: string, replacedBy: string): Promise<ProviderPayment>;
   refundPayment(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string; reason: string }): Promise<ProviderRefund>;
   getPaymentStatus(providerPaymentId: string): Promise<ProviderPayment>;
   /** Verifies the signature and normalises the envelope. Never trusts an unsigned body. */

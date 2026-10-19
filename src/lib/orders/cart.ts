@@ -110,6 +110,11 @@ export function describeLineModifiers(item: ItemLike | undefined, line: Pick<Car
 export type SizeRule = { variant_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null };
 type RuledGroup = { size_rules?: SizeRule[]; max_select: number; choices: ChoiceLike[] };
 
+/** "Extra Cheese", "Extra Sauce": an extra by name, never one of the free picks (mirrors wayne_is_extra_choice). */
+export function isExtraChoice(choice: { name: string }) {
+  return /^\s*extra\b/i.test(choice.name);
+}
+
 /** "No Sauce", "Light Cheese": instructions, never a counted portion. */
 export function isInstructionChoice(choice: { name: string }) {
   return /^(no|light|lite)\b/i.test(choice.name.trim());
@@ -147,7 +152,7 @@ export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId
   }).sort((a, b) => (b.unit - a.unit) || (a.choice.id < b.choice.id ? -1 : a.choice.id > b.choice.id ? 1 : 0));
   let freeLeft = rule.included_count;
   return picks.map(({ choice, quantity, unit }) => {
-    if (isInstructionChoice(choice)) return { choice_id: choice.id, portions: quantity, free: 0, unit_cents: unit, charge_cents: unit * quantity };
+    if (isInstructionChoice(choice) || isExtraChoice(choice)) return { choice_id: choice.id, portions: quantity, free: 0, unit_cents: unit, charge_cents: unit * quantity };
     const free = Math.min(quantity, freeLeft);
     freeLeft -= free;
     const each = rule.extra_each_cents ?? unit;
@@ -155,9 +160,9 @@ export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId
   });
 }
 
-/** Portions picked in a group, not counting "No …" / "Light …". */
+/** Portions picked in a group toward the free ones, not counting "No …" / "Light …" / "Extra …". */
 export function countedPortions(group: { choices: ChoiceLike[] }, counts: Record<string, number>) {
-  return group.choices.reduce((total, choice) => total + (isInstructionChoice(choice) ? 0 : counts[choice.id] ?? 0), 0);
+  return group.choices.reduce((total, choice) => total + (isInstructionChoice(choice) || isExtraChoice(choice) ? 0 : counts[choice.id] ?? 0), 0);
 }
 
 export function cartLineUnitCents(menu: PublicMenu, line: CartLine) {

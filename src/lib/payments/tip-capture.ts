@@ -107,9 +107,45 @@ export async function captureHeldCards(options: {
         continue;
       }
       if (status.status !== "authorized") throw new PaymentProviderError(status.status === "voided" ? "the card's approval was cancelled or ran out" : "the card is no longer approved", "NOT_AUTHORIZED");
-      const room = tipRoomCents(authorized, status.maxCapturableCents ?? authorized);
+      const room = Math.max(0, (status.maxCapturableCents ?? authorized) - authorized);
+      const stripeApi = provider.value.provider;
+
+      // The tip doesn't fit on the approval (no overcapture on this account):
+      // charge the saved card ONCE for order + tip, then cancel the approval.
+      if (wanted > room && stripeApi.chargeSavedCard && stripeApi.releaseHold && status.paymentMethodId && status.customerId) {
+        const amount = authorized + wanted;
+        try {
+          const charged = await stripeApi.chargeSavedCard({
+            customerId: status.customerId, paymentMethodId: status.paymentMethodId, amountCents: amount,
+            idempotencyKey: `${options.keyPrefix}-recharge-${payment.id}-${amount}`,
+            note: `${label} with tip`,
+            metadata: { wayne_payment_id: payment.id, wayne_order_number: orderNumber, wayne_tip_adjust: "true", wayne_replaces: payment.provider_payment_id },
+          });
+          if (charged.status !== "captured" || !charged.providerPaymentId) throw new PaymentProviderError(charged.status === "failed" ? "the card was declined for order + tip" : "the charge with the tip is still pending — try the cash-out again in a minute", "NOT_CAPTURED", charged.status !== "failed");
+          // Point the payment at the new charge BEFORE cancelling the approval.
+          const { error: moveError } = await service.from("payments").update({
+            provider_payment_id: charged.providerPaymentId, provider_status: charged.providerStatus,
+            metadata: { ...metadata, replaced_intent: payment.provider_payment_id, charged_with_tip: true },
+          }).eq("id", payment.id);
+          if (moveError) logger.error("payments.tip_recharge_record_failed", new Error(moveError.message), { payment_id: payment.id });
+          try { await stripeApi.releaseHold(payment.provider_payment_id, charged.providerPaymentId); }
+          catch (releaseCause) { logger.error("payments.tip_release_failed", releaseCause, { payment_id: payment.id }); result.problems.push(`${label}: charged with the tip, but the first approval wasn't released — it drops off the card by itself in a few days.`); }
+          const total = charged.amountCents ?? amount;
+          result.captures.push({ order_id: payment.order_id, payment_id: payment.id, captured_cents: total, tip_cents: Math.max(0, total - authorized), card_brand: charged.cardBrand ?? payment.card_brand ?? null, card_last4: charged.cardLast4 ?? payment.card_last4 ?? null });
+          continue;
+        } catch (rechargeCause) {
+          // No answer from Stripe: the charge may have gone through, so never also
+          // capture the approval — leave it waiting; a retry reuses the same key.
+          if (rechargeCause instanceof PaymentProviderError && rechargeCause.retryable) throw rechargeCause;
+          logger.error("payments.tip_recharge_failed", rechargeCause, { payment_id: payment.id });
+          result.problems.push(`${label}: the card didn't go through for order + ${money(wanted)} tip, so only the order was charged. Collect the tip another way.`);
+          // fall through: charge the order on the approval as it stands
+        }
+      } else if (wanted > room && !(status.paymentMethodId && status.customerId)) {
+        result.problems.push(`${label}: this card was approved before tips could be added to it, so only the order was charged.`);
+      }
       const tip = Math.min(wanted, room);
-      if (wanted > tip) result.problems.push(`${label}: this card could only take ${money(tip)} of the ${money(wanted)} tip (Stripe's limit for this card), so ${money(wanted - tip)} was not charged.`);
+      if (wanted > tip && room > 0) result.problems.push(`${label}: this card could only take ${money(tip)} of the ${money(wanted)} tip (Stripe's limit for this card), so ${money(wanted - tip)} was not charged.`);
       const amount = authorized + tip;
       const captured = await provider.value.provider.capturePayment(payment.provider_payment_id, { amountCents: amount, idempotencyKey: `${options.keyPrefix}-${payment.id}-${amount}` });
       if (captured.status !== "captured") throw new PaymentProviderError("the card was not charged", "NOT_CAPTURED");

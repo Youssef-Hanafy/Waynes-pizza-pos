@@ -17,7 +17,9 @@ type StripeCard = { brand?: string; last4?: string };
 type StripePaymentIntent = {
   id?: string; status?: string; amount?: number; client_secret?: string;
   last_payment_error?: { code?: string; message?: string };
-  payment_method?: { card?: StripeCard } | string | null;
+  payment_method?: { id?: string; card?: StripeCard } | string | null;
+  customer?: string | { id?: string } | null;
+  metadata?: Record<string, string>;
   charges?: { data?: Array<{ receipt_url?: string; payment_method_details?: { card?: StripeCard } }> };
   amount_capturable?: number;
   latest_charge?: string | {
@@ -57,6 +59,8 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     receiptUrl: charge?.receipt_url ?? intent.charges?.data?.[0]?.receipt_url ?? null,
     failureReason: intent.last_payment_error ? "The card was declined. Try another card." : null,
     maxCapturableCents,
+    paymentMethodId: typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id ?? null,
+    customerId: typeof intent.customer === "string" ? intent.customer : intent.customer?.id ?? null,
   };
 }
 
@@ -136,6 +140,20 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
     async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents, tipAdjust }) {
       const hold = holdCents && holdCents > 0 ? Math.round(holdCents) : null;
       const manual = Boolean(hold) || Boolean(tipAdjust);
+      // Tip adjust without Stripe "overcapture" (2026-10-19: the account is not
+      // eligible — Stripe answered "This account is not eligible for the requested
+      // card features").  The card is approved for the order and SAVED to a Stripe
+      // customer; at cash-out a card with a tip is charged once for order + tip from
+      // the saved card and the first approval is cancelled (no fee on a cancelled
+      // approval), so it is still one charge, one fee.
+      let customerId: string | null = null;
+      if (tipAdjust) {
+        const customer = await call<{ id?: string }>("/v1/customers", {
+          method: "POST", idempotencyKey: `${idempotencyKey}-customer`,
+          body: form({ description: `Order ${referenceId}`.slice(0, 350), "metadata[wayne_payment_id]": paymentId, "metadata[wayne_order_number]": referenceId }),
+        }, "The payment could not be prepared. Please try again.");
+        customerId = customer.id ?? null;
+      }
       const intent = await call<StripePaymentIntent>("/v1/payment_intents", {
         method: "POST",
         idempotencyKey,
@@ -145,7 +163,8 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
           // driver's cash-out for the order PLUS the tip on the slip — one charge, one fee.
           // Stripe "overcapture" lets the capture be larger than the authorisation.
           capture_method: manual ? "manual" : undefined,
-          "payment_method_options[card][request_overcapture]": tipAdjust ? "if_available" : undefined,
+          customer: customerId ?? undefined,
+          setup_future_usage: customerId ? "off_session" : undefined,
           "metadata[wayne_tip_adjust]": tipAdjust ? "true" : undefined,
           "metadata[wayne_hold_cents]": hold ?? undefined,
           currency: "usd",
@@ -179,6 +198,25 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
         idempotencyKey: options?.idempotencyKey,
         body: form({ amount_to_capture: options?.amountCents ? Math.round(options.amountCents) : undefined, "expand[]": "latest_charge" }),
       }, "The card could not be charged.");
+      return mapIntent(intent);
+    },
+    async chargeSavedCard({ customerId, paymentMethodId, amountCents, idempotencyKey, note, metadata }) {
+      const extra: Record<string, string> = {};
+      for (const [key, value] of Object.entries(metadata ?? {})) extra[`metadata[${key}]`] = value;
+      const intent = await call<StripePaymentIntent>("/v1/payment_intents", {
+        method: "POST", idempotencyKey,
+        body: form({
+          amount: Math.round(amountCents), currency: "usd", customer: customerId, payment_method: paymentMethodId,
+          off_session: true, confirm: true, description: note.slice(0, 500), "expand[]": "latest_charge", ...extra,
+        }),
+      }, "The card could not be charged for the tip.");
+      return mapIntent(intent);
+    },
+    async releaseHold(providerPaymentId, replacedBy) {
+      await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}`, {
+        method: "POST", body: form({ "metadata[wayne_replaced_by]": replacedBy }),
+      }, "The first approval could not be marked.");
+      const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/cancel`, { method: "POST", body: form({ cancellation_reason: "duplicate" }) }, "The first approval could not be released.");
       return mapIntent(intent);
     },
     async voidPayment(providerPaymentId) {

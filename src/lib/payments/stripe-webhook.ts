@@ -24,6 +24,9 @@ export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType
   // driver cash-out or the 4:30 am safety net — which records order + tip in
   // the same step.  Settling it here first would hide the tip, so leave it.
   if (status === "captured" && intent.metadata?.wayne_tip_adjust === "true") return;
+  // An approval replaced at cash-out by one charge for order + tip: the payment
+  // now points at the new charge, so this cancellation must not void it.
+  if (intent.metadata?.wayne_replaced_by) return;
   const card = intent.charges?.data?.[0]?.payment_method_details?.card;
   const { error } = await supabase.rpc("wayne_settle_payment", {
     payload: {

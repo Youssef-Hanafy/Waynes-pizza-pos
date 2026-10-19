@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
-import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, countedPortions, groupAllowanceLines, groupMaxPortions, groupSizeRule, includedSelection, isIncludedChoice, isInstructionChoice } from "@/lib/orders/cart";
+import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, countedPortions, groupAllowanceLines, groupMaxPortions, groupSizeRule, includedSelection, isIncludedChoice, isExtraChoice, isInstructionChoice } from "@/lib/orders/cart";
 import type { CartLine } from "@/lib/orders/schemas";
 import { uuid } from "@/lib/uuid";
 
@@ -101,7 +101,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           const comesWith = isIncludedChoice(choice);
           const state = count ? "on" : comesWith ? "removed" : "off";
           const portion = allowance.find((entry) => entry.choice_id === choice.id);
-          const ruled = rule && !isInstructionChoice(choice);
+          const ruled = rule && !isInstructionChoice(choice) && !isExtraChoice(choice);
           const status = ruled
             ? (!count ? (comesWith ? "NO — taken off" : "not on it") : `× ${count}${portion ? ` · ${portion.free} free${portion.portions > portion.free ? ` + ${portion.portions - portion.free} extra` : ""}` : ""}`)
             : state === "removed" ? "NO — taken off" : !count ? "not on it" : comesWith ? (count > 1 ? `comes with it + ${count - 1} extra` : "comes with it") : count > 1 ? `added × ${count}` : "added";

@@ -19,7 +19,7 @@ import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { PosItemDialog } from "./item-dialog";
-import { PaymentPrompt } from "./payments-screen";
+import { PaymentPrompt, type Done } from "./payments-screen";
 import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-print";
 import { StartOrderCard } from "./start-order-card";
 import { OpenItemDialog } from "./open-item-dialog";
@@ -66,6 +66,12 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // fresh: sent from this screen and not settled yet — leaving without a payment or Pay later closes it out (owner, 2026-10-19).
   const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on"; fresh: boolean } | null>(null);
   const [printNote, setPrintNote] = useState("");
+  const [paidFlash, setPaidFlash] = useState("");
+  useEffect(() => {
+    if (!paidFlash) return;
+    const timer = window.setTimeout(() => setPaidFlash(""), paidFlash.includes("CHANGE DUE") ? 15_000 : 6_000);
+    return () => window.clearTimeout(timer);
+  }, [paidFlash]);
   /** The payment screen the cashier left with "Add more items": Cancel and Add both come back to it (owner, 2026-10-16). */
   const [returnTo, setReturnTo] = useState<{ order: OpenOrder; delivery: boolean; fresh: boolean } | null>(null);
   /**
@@ -252,10 +258,19 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
 
   // The kitchen ticket waits for this payment step so it prints PAID / NOT PAID
   // correctly (owner, 2026-10-12); leaving it lets the ticket print.
-  function closePayment() {
+  function closePayment(done?: Done) {
     if (created) releaseOrderPrint(created.order.id);
     unsettledOrder.id = null;
     setCreated(null);
+    // Paid → straight back to taking the next order (owner, 2026-10-19): no
+    // "Next order" screen, just a note at the top that clears itself.
+    if (done) {
+      const label = `#${ticketNumber(done.order)}`;
+      setPaidFlash(done.method === "cash"
+        ? `${label} paid cash · CHANGE DUE ${formatCents(done.changeCents)}`
+        : done.held ? `${label} card approved ${formatCents(done.order.total_cents)} · tip added at cash-out`
+        : `${label} paid ${formatCents(done.order.total_cents)} on card`);
+    }
   }
 
   // Sent: ask for payment right away (owner, 2026-09-30).
@@ -273,7 +288,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         </div>
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
         <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
-        <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={closePayment} order={created.order} stripeReader={stripeReader} />
+        <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
         {created.fresh ? <p className="mt-5 border-t border-wayne-border pt-3 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
       </section>
     </div>;
@@ -284,6 +299,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     : ticketSummary(draft, settings);
   if (draft.isTest) summary.title = `🧪 TEST · ${summary.title}`;
   const topBar = <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-wayne-border bg-white px-3 py-1.5">
+    {paidFlash ? <button aria-live="polite" className={`basis-full rounded-xl px-3 py-2 text-left font-black ${paidFlash.includes("CHANGE DUE") ? "bg-wayne-ok text-white text-xl" : "bg-wayne-ok-soft text-wayne-ok"}`} onClick={() => setPaidFlash("")} type="button">✓ {paidFlash}</button> : null}
     {addTo ? <div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 px-2 py-1">
       <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-wayne-gold text-xl">{summary.icon}</span>
       <span className="min-w-0">
