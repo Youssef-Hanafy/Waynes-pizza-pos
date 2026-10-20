@@ -75,7 +75,7 @@ export default async function PlatformWorkspaceMessagingPage({ params, searchPar
               <Row label="Provider" value="AWS End User Messaging" />
               <Row label="Region" value={connection.aws_region ?? "—"} />
               <Row label="Who sends" value={connection.dispatch_mode === "platform" ? "Hanafy Platform" : "Old Hanafy CRM (bridge)"} tone={connection.dispatch_mode === "platform" ? undefined : "warn"} />
-              <Row label="Platform sending" value={connection.dispatch_mode !== "platform" ? "Off (CRM sends)" : connection.live_sending ? "Live" : "Simulated"} />
+              <Row label="Platform sending" value={connection.dispatch_mode !== "platform" ? "Off (CRM sends)" : connection.live_sending ? "Live" : "Delivery disabled (messages fail)"} />
               <Row label="Credentials" value={connection.secret_reference ?? "Not set"} tone={connection.dispatch_mode === "platform" && connection.live_sending && !connection.secret_reference ? "alert" : undefined} />
               <Row label="10DLC / registration" value={connection.registration_status ?? "unknown"} />
               <Row label="Production access" value={connection.production_access_status ?? "unknown"} />
@@ -92,7 +92,7 @@ export default async function PlatformWorkspaceMessagingPage({ params, searchPar
           <div className="mt-3">
             <Row label="Sent (24 hours)" value={messaging.usage.sent_24h} />
             <Row label="Sent (30 days)" value={messaging.usage.sent_30d} />
-            <Row label="Simulated (30 days)" value={messaging.usage.simulated_30d} />
+            <Row label="Prior simulated records (30 days)" value={messaging.usage.simulated_30d} />
             <Row label="Failed (30 days)" value={messaging.usage.failed_30d} tone={messaging.usage.failed_30d ? "alert" : undefined} />
             <Row label="Skipped for consent/opt-out (30 days)" value={messaging.usage.skipped_30d} />
             <Row label="Outcome unknown" value={messaging.usage.unknown} tone={messaging.usage.unknown ? "warn" : undefined} />
@@ -145,7 +145,7 @@ export default async function PlatformWorkspaceMessagingPage({ params, searchPar
               <select className={select} defaultValue="" name="dispatch_mode"><option value="">(unchanged)</option><option value="legacy_crm_bridge">Old Hanafy CRM (bridge)</option><option value="platform">Hanafy Platform</option></select>
             </label>
             <label className="grid gap-1.5 text-sm font-bold">Platform sending
-              <select className={select} defaultValue="" name="live_sending"><option value="">(unchanged)</option><option value="no">Simulated</option><option value="yes">Live (real texts)</option></select>
+              <select className={select} defaultValue="" name="live_sending"><option value="">(unchanged)</option><option value="no">Disable delivery (messages fail)</option><option value="yes">Live (real texts)</option></select>
             </label>
             <Input label="AWS region" name="aws_region" placeholder={connection?.aws_region ?? "us-east-1"} />
             <Input label="Credentials reference" name="secret_reference" placeholder="env:WAYNES_SMS" />

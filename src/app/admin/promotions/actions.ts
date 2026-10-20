@@ -56,5 +56,5 @@ export async function publishOffer(form: FormData) {
   if (error) back(error.message.includes("permission") ? "You need promotion access to publish." : error.message || "The offer could not be published.");
   const result = z.object({ issued: z.number(), texted: z.number() }).parse(data);
   revalidatePath("/admin/promotions");
-  back(`Published. ${result.issued} new personal code${result.issued === 1 ? "" : "s"} made, ${result.texted} text${result.texted === 1 ? "" : "s"} queued to the Hanafy CRM.`, "saved");
+  back(`Published. ${result.issued} new personal code${result.issued === 1 ? "" : "s"} made, ${result.texted} one-time offer event${result.texted === 1 ? "" : "s"} sent to Hanafy CRM. An SMS appears there only when its matching CRM automation is active.`, "saved");
 }

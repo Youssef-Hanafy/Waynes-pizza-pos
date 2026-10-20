@@ -37,6 +37,12 @@ describe("public rewards endpoint", () => {
     expect(db.rpc.mock.calls[0][1].client_key).toMatch(/^[a-f0-9]{64}$/);
     expect(upserts[1]).toMatchObject({ channel: "sms", status: "opted_in", consent_text_version: REWARDS_CONSENT_VERSION });
   });
+  it("recognizes an existing text member instead of presenting a second signup", async () => {
+    database([{ error: null }, { data: { id: "customer-1", sms_marketing_opt_in: true } }, { data: null }, { error: null }]);
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, membership: "already_member" });
+  });
   it("does not override an existing opt-out", async () => {
     const { upserts, chain } = database([{ error: null }, { data: { id: "customer-1", sms_marketing_opt_in: false } }, { data: { status: "opted_out" } }]);
     expect((await POST(request())).status).toBe(409);

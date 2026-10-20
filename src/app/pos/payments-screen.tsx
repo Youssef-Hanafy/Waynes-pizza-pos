@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { StripeReaderTender } from "@/components/pos/stripe-reader-panel";
@@ -79,15 +80,16 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); void loadDrawer(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 10_000);
+    const first = window.setTimeout(() => { void loadDrawer(); }, 0);
     // Readers linked to the POS (listed only when reader payment is switched on).
     fetch("/api/pos/terminal", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : []))
       .then((body: unknown) => { const parsed = terminalSchema.array().safeParse(body); if (mounted.current && parsed.success) setTerminals(parsed.data); })
       .catch(() => undefined);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); };
+    return () => { mounted.current = false; window.clearTimeout(first); };
   }, [load, loadDrawer]);
+
+  useVisiblePolling(load, 30_000);
 
   const unpaid = orders.filter((order) => order.payment_status !== "paid" && order.status !== "payment_pending");
   const paid = orders.filter((order) => order.payment_status === "paid");

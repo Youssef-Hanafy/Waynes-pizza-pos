@@ -172,6 +172,16 @@
   line-height: 1.55;
 }
 
+.memberLookup {
+  display: block;
+  margin: 0.9rem auto 0;
+  color: var(--wayne-red, #a53125);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: underline;
+}
+
 .perks {
   display: flex;
   flex-wrap: wrap;

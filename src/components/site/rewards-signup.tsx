@@ -21,6 +21,8 @@ type Reward = {
   minimum_order_cents: number;
 };
 
+type Membership = "joined" | "already_member";
+
 const money = (cents: number) =>
   `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
 
@@ -40,6 +42,7 @@ export function RewardsSignup({
   const [status, setStatus] = useState<"idle" | "submitting" | "done">("idle");
   const [error, setError] = useState("");
   const [reward, setReward] = useState<Reward | null>(null);
+  const [membership, setMembership] = useState<Membership>("joined");
 
   useEffect(() => {
     const element = dialog.current;
@@ -75,6 +78,10 @@ export function RewardsSignup({
           result.error || "We couldn’t complete your signup. Please try again.",
         );
       setReward(result.reward ?? null);
+      setMembership(result.membership === "already_member" ? "already_member" : "joined");
+      try {
+        sessionStorage.setItem("waynes-rewards-phone", phone);
+      } catch {}
       setStatus("done");
     } catch (failure) {
       setError(
@@ -144,12 +151,13 @@ export function RewardsSignup({
           <span className={styles.successMark}>
             <SiteIcon name="check" size={30} />
           </span>
-          <h3>You’re in.</h3>
+          <h3>{membership === "already_member" ? "You’re already a text member." : "You’re in."}</h3>
           {reward ? (
             <>
               <p>
-                Here’s your welcome offer — we’re texting it to you as well, so
-                it’s there when you’re hungry.
+                {membership === "already_member"
+                  ? "Your rewards are ready — we did not create another membership or send a duplicate welcome text."
+                  : "Here’s your welcome offer — we’re texting it to you as well, so it’s there when you’re hungry."}
               </p>
               <div className={styles.rewardCode}>
                 <small>YOUR CODE</small>
@@ -235,6 +243,9 @@ export function RewardsSignup({
           >
             No thanks, I’m just hungry
           </button>
+          <Link className={styles.memberLookup} href="/rewards#member-offers" onClick={onClose}>
+            Already a text member? View my rewards
+          </Link>
         </form>
       )}
     </dialog>

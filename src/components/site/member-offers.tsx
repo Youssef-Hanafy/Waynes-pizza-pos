@@ -1,7 +1,7 @@
 "use client";
 
 import { useStorefrontBrand } from "./storefront-brand";
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { MemberOffersResult } from "@/lib/promotions/member-offers";
 import { OfferList, PersonalLink } from "./offer-list";
 import { RewardsButton } from "./rewards-experience";
@@ -22,13 +22,16 @@ import { SiteIcon } from "./site-icon";
 
 export function MemberOffers() {
   const brand = useStorefrontBrand();
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try { return sessionStorage.getItem("waynes-rewards-phone") ?? ""; } catch { return ""; }
+  });
   const [status, setStatus] = useState<"idle" | "checking">("idle");
   const [result, setResult] = useState<MemberOffersResult | null>(null);
   const [error, setError] = useState("");
+  const checkedSavedNumber = useRef(false);
 
-  async function check(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const checkNumber = useCallback(async (number: string) => {
     setError("");
     setResult(null);
     setStatus("checking");
@@ -36,17 +39,36 @@ export function MemberOffers() {
       const response = await fetch("/api/rewards/offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: number }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "We couldn’t check that number.");
       setResult(body);
+      if (body.member) {
+        try { sessionStorage.setItem("waynes-rewards-phone", number); } catch {}
+      } else {
+        try { sessionStorage.removeItem("waynes-rewards-phone"); } catch {}
+      }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Please try again in a moment.");
     } finally {
       setStatus("idle");
     }
+  }, []);
+
+  async function check(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await checkNumber(phone);
   }
+
+  useEffect(() => {
+    if (checkedSavedNumber.current) return;
+    checkedSavedNumber.current = true;
+    if (phone) {
+      const timer = window.setTimeout(() => { void checkNumber(phone); }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [checkNumber, phone]);
 
   return (
     <section className="member-offers" id="member-offers">

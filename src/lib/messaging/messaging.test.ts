@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAwsError, credentialsFor, liveSendingAllowed, smsSegments } from "./aws-sms";
+import { classifyAwsError, credentialsFor, liveSendingAllowed, liveSendingError, smsSegments } from "./aws-sms";
 import { isTrustedSnsUrl, readSmsPayload, snsStringToSign, type SnsMessage } from "./sns";
 
 describe("platform messaging helpers", () => {
@@ -15,6 +15,8 @@ describe("platform messaging helpers", () => {
     expect(liveSendingAllowed({ live_sending: true }, { MESSAGING_LIVE_SEND: "true" } as unknown as NodeJS.ProcessEnv)).toBe(true);
     expect(liveSendingAllowed({ live_sending: true }, {} as unknown as NodeJS.ProcessEnv)).toBe(false);
     expect(liveSendingAllowed({ live_sending: false }, { MESSAGING_LIVE_SEND: "true" } as unknown as NodeJS.ProcessEnv)).toBe(false);
+    expect(liveSendingError({ live_sending: false }, { MESSAGING_LIVE_SEND: "true" } as unknown as NodeJS.ProcessEnv)).toMatch(/No text was sent/);
+    expect(liveSendingError({ live_sending: true }, {} as unknown as NodeJS.ProcessEnv)).toMatch(/MESSAGING_LIVE_SEND/);
   });
 
   it("retries only what AWS says is temporary", () => {

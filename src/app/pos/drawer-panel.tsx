@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import {
   cashMovementLabels, expectedCashCents, needsVarianceNote, parseCashCountInput,
@@ -50,10 +51,10 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 15_000);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); };
+    return () => { mounted.current = false; };
   }, [load]);
+
+  useVisiblePolling(load, 60_000);
 
   async function send(body: Record<string, unknown>, success: string) {
     if (pending) return false;

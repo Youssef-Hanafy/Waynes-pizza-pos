@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { elapsedLabel, kitchenBoardSchema, nextKitchenAction, type KitchenTicket } from "@/lib/kitchen/schemas";
 import { nextHandOff } from "@/lib/orders/status";
+import { nextReconciliationDelay } from "@/lib/refresh/reconciliation";
 import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; businessName: string; canOpenAdmin: boolean; canOpenPos: boolean; canManageOrders: boolean };
@@ -21,46 +22,76 @@ export function KitchenBoard({ initialTickets, initialError, staffName, business
   const [station, setStation] = useState("");
   const busy = useRef(false);
   const mounted = useRef(true);
-  const inFlight = useRef<Promise<void> | null>(null);
+  const inFlight = useRef<Promise<boolean> | null>(null);
   const refreshAgain = useRef(false);
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     if (inFlight.current) { refreshAgain.current = true; return inFlight.current; }
     const run = async () => {
+      let succeeded = false;
       do {
         refreshAgain.current = false;
         try {
           const response = await fetch("/api/kitchen", { cache: "no-store", signal: AbortSignal.timeout(8000) });
           if (!response.ok) throw new Error(response.status === 403 ? "Session expired or access changed. Sign in again." : "Connection interrupted. Displaying the last saved tickets.");
           const result = kitchenBoardSchema.parse(await response.json());
+          succeeded = true;
           if (mounted.current) { setTickets(result); setError(""); setLastSynced(Date.now()); }
-        } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Unable to refresh tickets."); }
+        } catch (cause) {
+          succeeded = false;
+          if (mounted.current) setError(cause instanceof Error ? cause.message : "Unable to refresh tickets.");
+        }
       } while (mounted.current && refreshAgain.current);
+      return succeeded;
     };
     inFlight.current = run();
-    try { await inFlight.current; } finally { inFlight.current = null; }
+    try { return await inFlight.current; } finally { inFlight.current = null; }
   }, []);
 
   useEffect(() => {
     mounted.current = true;
+    let live = false;
+    let consecutiveFailures = 0;
+    let reconciliationTimer: number | null = null;
+    const stopReconciliation = () => {
+      if (reconciliationTimer !== null) window.clearTimeout(reconciliationTimer);
+      reconciliationTimer = null;
+    };
+    const reconcile = async () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      stopReconciliation();
+      const succeeded = await refresh();
+      consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1;
+      scheduleReconciliation();
+    };
+    const scheduleReconciliation = () => {
+      stopReconciliation();
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      reconciliationTimer = window.setTimeout(() => { void reconcile(); }, nextReconciliationDelay({ live, consecutiveFailures }));
+    };
     const client = createBrowserSupabaseClient();
     const channel = client?.channel(`hanafy-kitchen-board-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, () => { void refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, () => {
+        if (document.visibilityState === "visible") void reconcile();
+      })
       .subscribe((status) => {
         if (!mounted.current) return;
-        setConnection(status === "SUBSCRIBED" ? "Live" : "Reconnecting · backup refresh on");
-        if (status === "SUBSCRIBED") void refresh();
+        live = status === "SUBSCRIBED";
+        setConnection(live ? "Live" : "Reconnecting · backup refresh on");
+        if (live) void reconcile();
+        else scheduleReconciliation();
       });
-    const online = () => { setConnection("Reconnecting"); void refresh(); };
-    const offline = () => { setConnection("Offline"); setError("Connection lost. Showing last saved tickets; actions are paused."); };
-    const visible = () => { if (document.visibilityState === "visible") void refresh(); };
+    const online = () => { setConnection("Reconnecting"); void reconcile(); };
+    const offline = () => { stopReconciliation(); setConnection("Offline"); setError("Connection lost. Showing last saved tickets; actions are paused."); };
+    const visible = () => {
+      if (document.visibilityState === "visible") void reconcile();
+      else stopReconciliation();
+    };
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    // Snapshot refresh heals missed events and covers a disconnected socket.
-    const poll = window.setInterval(() => { void refresh(); }, 5000);
     window.addEventListener("online", online); window.addEventListener("offline", offline);
     document.addEventListener("visibilitychange", visible);
-    void refresh();
+    scheduleReconciliation();
     return () => {
-      mounted.current = false; window.clearInterval(timer); window.clearInterval(poll);
+      mounted.current = false; window.clearInterval(timer); stopReconciliation();
       window.removeEventListener("online", online); window.removeEventListener("offline", offline);
       document.removeEventListener("visibilitychange", visible);
       if (client && channel) void client.removeChannel(channel);

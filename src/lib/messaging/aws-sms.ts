@@ -5,6 +5,8 @@ import { signRequest, type SigV4Credentials } from "./sigv4";
  * with a SigV4-signed JSON request.  The platform only ever reaches this from
  * the dispatcher, for a connection whose dispatch_mode is 'platform' and whose
  * live_sending switch is on, with MESSAGING_LIVE_SEND=true on the server.
+ * A disabled switch is a configuration error, never permission to record a
+ * fictional successful send.
  */
 export type AwsSendInput = {
   region: string;
@@ -87,9 +89,20 @@ export function credentialsFor(secretReference: string | null, env: NodeJS.Proce
   return { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) };
 }
 
+/**
+ * The two explicit production gates protect against a staging database or a
+ * copied connection accidentally sending to customers.  The dispatcher turns
+ * a failed gate into a failed job; it must never mark it sent or simulated.
+ */
+export function liveSendingError(job: { live_sending: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  if (!job.live_sending) return "Live sending is disabled for this messaging connection. No text was sent.";
+  if (env.MESSAGING_LIVE_SEND !== "true") return "The production SMS server switch (MESSAGING_LIVE_SEND=true) is not configured. No text was sent.";
+  return null;
+}
+
 /** Real AWS sends need both the connection switch and the server switch. */
 export function liveSendingAllowed(job: { live_sending: boolean }, env: NodeJS.ProcessEnv = process.env) {
-  return job.live_sending && env.MESSAGING_LIVE_SEND === "true";
+  return liveSendingError(job, env) === null;
 }
 
 /** GSM-7 texts split at 153 characters per part, anything else at 67. */

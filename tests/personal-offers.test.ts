@@ -81,12 +81,19 @@ describe("personal offer codes, personal links and tracked redemptions", () => {
       insert into public.customer_segment_memberships(customer_id,segment_id,entered_at,evaluated_at) values('${ritaId}','${segmentId}',now(),now())`);
     expect((await outbox("customer.offer.winback")).length).toBe(1);
 
+    // Even after the old configurable reissue window, this offer remains a
+    // one-time communication and cannot create a second code or CRM event.
+    await database.exec(`update public.promotions set created_at=now()-interval '61 days' where customer_id='${ritaId}' and code like 'WINBACK-%';
+      update public.customer_segment_memberships set active=false, exited_at=now() where customer_id='${ritaId}' and segment_id='${segmentId}' and active;
+      insert into public.customer_segment_memberships(customer_id,segment_id,entered_at,evaluated_at) values('${ritaId}','${segmentId}',now(),now())`);
+    expect((await outbox("customer.offer.winback")).length).toBe(1);
+
     // No text consent → no code, no text.
     await database.exec(`insert into public.customer_segment_memberships(customer_id,segment_id,entered_at,evaluated_at) values('${quietId}','${segmentId}',now(),now())`);
     expect((await one<{ count: number }>(`select count(*)::int as count from public.promotions where customer_id='${quietId}'`)).count).toBe(0);
   });
 
-  it("publishes a weekly offer: a code per member and one link text each per day", async () => {
+  it("publishes a weekly offer: a code and one coupon-bearing CRM event per member", async () => {
     const offerId = (await one<{ id: string }>(`select id from public.promotions where code='WEEK'`)).id;
     await expect(call("authenticated", null, `public.wayne_publish_offer('${offerId}', true)`)).rejects.toThrow(/permission/i);
     const first = await call<{ issued: number; texted: number }>("authenticated", ownerId, `public.wayne_publish_offer('${offerId}', true)`);
@@ -96,8 +103,9 @@ describe("personal offer codes, personal links and tracked redemptions", () => {
     const texts = await outbox("customer.offers.published");
     expect(texts.length).toBe(2);
     const reward = texts[0]!.payload.data.reward as { code: string; link_key: string };
-    expect(reward.code).toMatch(/^[a-z2-9]{10}$/);
-    expect(reward.code).toBe(reward.link_key);
+    expect(reward.code).toMatch(/^WEEK-[0-9A-F]{6}$/);
+    expect(reward.link_key).toMatch(/^[a-z2-9]{10}$/);
+    expect((await one<{ count: number }>(`select count(*)::int as count from public.promotion_deliveries where promotion_id='${offerId}'`)).count).toBe(2);
   });
 
   it("opens a member's offers from their link, from a code, or from their phone", async () => {

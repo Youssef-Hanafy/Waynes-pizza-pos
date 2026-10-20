@@ -55,5 +55,6 @@ function redirectToLogin(request: NextRequest, error?: string) {
   return NextResponse.redirect(target);
 }
 
-// Every page (host routing), but not static files or build assets.
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"] };
+// Host routing only applies to pages. API handlers authenticate and authorize
+// themselves, while webhook and hardware traffic must not invoke Proxy.
+export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"] };

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { nextHandOff, openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import { z } from "zod";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { parseCashCountInput, posDrawerSchema } from "@/lib/cash/schemas";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 
@@ -74,10 +75,10 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay }
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 10_000);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); };
+    return () => { mounted.current = false; };
   }, [load]);
+
+  useVisiblePolling(load, 30_000);
 
   async function move(order: OpenOrder, nextStatus: "completed" | "out_for_delivery") {
     if (pending) return;
@@ -172,7 +173,7 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay }
 
   const title = fulfillment === "delivery" ? "Deliveries" : "Open orders";
   const body = <>
-        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">{title}</h2><p className="text-sm text-wayne-muted">{fulfillment === "delivery" ? "Today\u2019s delivery tickets that are not yet delivered." : "Today\u2019s tickets that are not yet picked up or delivered."} Updates every 10 seconds.</p></div>{inline ? null : <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>}</div>
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">{title}</h2><p className="text-sm text-wayne-muted">{fulfillment === "delivery" ? "Today\u2019s delivery tickets that are not yet delivered." : "Today\u2019s tickets that are not yet picked up or delivered."} Updates every 30 seconds while this screen is open.</p></div>{inline ? null : <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>}</div>
         {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
         {terminals.length > 1 ? <label className="mt-4 grid gap-2 text-sm font-bold">Card reader
           <select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>

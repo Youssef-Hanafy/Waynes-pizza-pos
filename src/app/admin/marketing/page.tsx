@@ -46,7 +46,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
           <p className="mt-2 text-sm text-wayne-muted">
             {!overview.connection ? "Hanafy has not set up texting for this business yet." :
               legacy ? "Texts currently go out from the Hanafy CRM." :
-              overview.connection.live_sending ? "Live: texts are delivered through AWS." : "Test mode: texts are recorded but not delivered."}
+              overview.connection.live_sending ? "Live: texts are delivered through AWS." : "Live sending is not configured. Campaigns will fail visibly until it is enabled; they are never recorded as sent."}
           </p>
         </Card>
         <Card className="p-5"><p className="text-sm text-wayne-muted">Text subscribers</p><strong className="mt-1 block text-3xl">{overview.subscribers}</strong></Card>
@@ -191,9 +191,9 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
               {overview.recent_messages.map((message) => (
                 <tr className="border-t border-wayne-border/60" key={message.id}>
                   <td className="py-2">{when(message.sent_at ?? message.created_at, tz)}</td>
-                  <td>…{message.recipient_last4}{message.is_test ? " (test)" : ""}</td>
+                  <td>…{message.recipient_last4}{message.is_test ? " (staff test)" : ""}</td>
                   <td>{message.campaign_id ? "Campaign" : message.automation_run_id ? "Automation" : message.message_type}</td>
-                  <td>{message.status}{message.simulated ? " (test mode)" : ""}{message.skip_reason ? ` — ${skipReasonLabels[message.skip_reason] ?? message.skip_reason}` : ""}{message.last_error ? ` — ${message.last_error}` : ""}</td>
+                  <td>{message.status}{message.simulated ? " (not delivered — pre-production record)" : ""}{message.skip_reason ? ` — ${skipReasonLabels[message.skip_reason] ?? message.skip_reason}` : ""}{message.last_error ? ` — ${message.last_error}` : ""}</td>
                 </tr>
               ))}
             </tbody>

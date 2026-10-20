@@ -114,7 +114,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
         <section className="mt-8">
           <h2 className="text-xl font-black">Latest texts</h2>
           <ul className="mt-3 grid gap-1 text-sm">
-            {messages.map((message) => <li key={message.id}>…{message.recipient_last4}{message.is_test ? " (test)" : ""}: {message.status}{message.simulated ? " (test mode)" : ""}{message.skip_reason ? ` — ${skipReasonLabels[message.skip_reason] ?? message.skip_reason}` : ""}</li>)}
+            {messages.map((message) => <li key={message.id}>…{message.recipient_last4}{message.is_test ? " (staff test)" : ""}: {message.status}{message.simulated ? " (not delivered — pre-production record)" : ""}{message.skip_reason ? ` — ${skipReasonLabels[message.skip_reason] ?? message.skip_reason}` : ""}</li>)}
           </ul>
         </section>
       ) : null}

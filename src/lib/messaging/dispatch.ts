@@ -2,7 +2,7 @@ import "server-only";
 
 import { logger } from "@/lib/logging/logger";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
-import { credentialsFor, liveSendingAllowed, sendAwsTextMessage, smsSegments } from "./aws-sms";
+import { credentialsFor, liveSendingError, sendAwsTextMessage, smsSegments } from "./aws-sms";
 
 /** One job as hanafy_message_jobs_claim hands it over. */
 export type ClaimedJob = {
@@ -21,7 +21,7 @@ export type ClaimedJob = {
   attempt: number;
 };
 
-export type DispatchSummary = { claimed: number; sent: number; simulated: number; failed: number; retried: number; unknown: number; released_campaigns: number };
+export type DispatchSummary = { claimed: number; sent: number; failed: number; configuration_failed: number; retried: number; unknown: number; released_campaigns: number };
 
 /**
  * Sends what the database says is due.  The database already re-checked
@@ -31,7 +31,7 @@ export type DispatchSummary = { claimed: number; sent: number; simulated: number
  */
 export async function dispatchDueMessages(maxJobs = 50): Promise<DispatchSummary> {
   const supabase = createServiceSupabaseClient();
-  const summary: DispatchSummary = { claimed: 0, sent: 0, simulated: 0, failed: 0, retried: 0, unknown: 0, released_campaigns: 0 };
+  const summary: DispatchSummary = { claimed: 0, sent: 0, failed: 0, configuration_failed: 0, retried: 0, unknown: 0, released_campaigns: 0 };
 
   const { data: released } = await supabase.rpc("hanafy_campaigns_release_due");
   summary.released_campaigns = typeof released === "number" ? released : 0;
@@ -46,17 +46,21 @@ export async function dispatchDueMessages(maxJobs = 50): Promise<DispatchSummary
     let outcome: "sent" | "retry" | "failed" | "unknown";
     let providerMessageId: string | null = null;
     let errorText: string | null = null;
-    let simulated = false;
+    let configurationFailed = false;
 
-    if (!liveSendingAllowed(job)) {
-      simulated = true;
-      outcome = "sent";
-      providerMessageId = `simulated_${crypto.randomUUID()}`;
+    const productionError = liveSendingError(job);
+    if (productionError) {
+      // A message is successful only when AWS accepts it.  Do not give staff
+      // a simulated-success result when the platform is not ready to deliver.
+      outcome = "failed";
+      errorText = productionError;
+      configurationFailed = true;
     } else {
       const credentials = credentialsFor(job.secret_reference);
       if (!credentials || !job.aws_region) {
         outcome = "failed";
         errorText = "Live sending is on but the connection's AWS credentials or region are missing on the server.";
+        configurationFailed = true;
       } else {
         const result = await sendAwsTextMessage({
           region: job.aws_region,
@@ -82,16 +86,18 @@ export async function dispatchDueMessages(maxJobs = 50): Promise<DispatchSummary
       outcome,
       provider_message_value: providerMessageId,
       error_value: errorText,
-      simulated_value: simulated,
+      simulated_value: false,
       segments_value: segments,
     });
     if (finishError) logger.error("messaging.finish_failed", new Error(finishError.message), { job_id: job.job_id });
 
-    if (outcome === "sent" && simulated) summary.simulated += 1;
-    else if (outcome === "sent") summary.sent += 1;
+    if (outcome === "sent") summary.sent += 1;
     else if (outcome === "retry") summary.retried += 1;
     else if (outcome === "unknown") summary.unknown += 1;
-    else summary.failed += 1;
+    else {
+      summary.failed += 1;
+      if (configurationFailed) summary.configuration_failed += 1;
+    }
     if (errorText) logger.warn("messaging.send_problem", { job_id: job.job_id, workspace_id: job.workspace_id, outcome, error: errorText.slice(0, 200) });
   }
   return summary;

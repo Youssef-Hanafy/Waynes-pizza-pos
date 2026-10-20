@@ -25,6 +25,7 @@ export function AutoRefresh({ intervalMs = 30_000, live = false, label = "Update
 
   useEffect(() => {
     const refresh = () => {
+      if (document.visibilityState !== "visible") return;
       if (pending.current !== null) return;
       // Coalesce bursts (an order insert touches several rows) into one refresh.
       pending.current = window.setTimeout(() => { pending.current = null; router.refresh(); }, 750);
@@ -33,11 +34,19 @@ export function AutoRefresh({ intervalMs = 30_000, live = false, label = "Update
     const channel = client?.channel(`hanafy-auto-refresh-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, refresh)
       .subscribe((state) => setStatus(state === "SUBSCRIBED" ? "Live" : label));
-    const timer = window.setInterval(refresh, intervalMs);
-    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    let timer: number | null = null;
+    const start = () => {
+      if (document.visibilityState !== "visible" || timer !== null) return;
+      timer = window.setInterval(refresh, intervalMs);
+    };
+    const visible = () => {
+      if (document.visibilityState === "visible") { refresh(); start(); }
+      else if (timer !== null) { window.clearInterval(timer); timer = null; }
+    };
     document.addEventListener("visibilitychange", visible);
+    start();
     return () => {
-      window.clearInterval(timer);
+      if (timer !== null) window.clearInterval(timer);
       if (pending.current !== null) window.clearTimeout(pending.current);
       document.removeEventListener("visibilitychange", visible);
       if (client && channel) void client.removeChannel(channel);

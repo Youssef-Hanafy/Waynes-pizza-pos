@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import {
   driverBoardSchema, driverStepLabels, formatAddress, minutesBetween, navigationUrl,
@@ -52,22 +53,18 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
   useEffect(() => {
     mounted.current = true;
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
-    const poll = window.setInterval(() => { void refresh(); }, 10_000);
-    const visible = () => { if (document.visibilityState === "visible") void refresh(); };
     const offline = () => setError("No signal. Showing the last saved deliveries; actions are paused until you reconnect.");
-    const online = () => { void refresh(); };
-    document.addEventListener("visibilitychange", visible);
     window.addEventListener("offline", offline);
-    window.addEventListener("online", online);
-    void refresh();
     return () => {
       mounted.current = false;
-      window.clearInterval(clock); window.clearInterval(poll);
-      document.removeEventListener("visibilitychange", visible);
+      window.clearInterval(clock);
       window.removeEventListener("offline", offline);
-      window.removeEventListener("online", online);
     };
   }, [refresh]);
+
+  // The driver board has no safe realtime projection for unclaimed orders.
+  // Keep a visible-only reconciliation as the durable fallback.
+  useVisiblePolling(refresh, 30_000);
 
   async function send(orderId: string, body: Record<string, unknown>, success: string) {
     if (busy.current) return false;

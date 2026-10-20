@@ -36,7 +36,8 @@ export async function POST(request: Request) {
     const consentId = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
     const consent = await db.from("marketing_consents").upsert({ id: consentId, customer_id: customer.data.id, channel: "sms", status: "opted_in", source: "text_daily_website", consent_text_version: input.consentVersion, metadata: { consent_text: rewardsConsentText(brand.brandName), source_page: "/rewards" } }, { onConflict: "id", ignoreDuplicates: true });
     if (consent.error) throw consent.error;
-    if (!customer.data.sms_marketing_opt_in) {
+    const alreadyMember = customer.data.sms_marketing_opt_in;
+    if (!alreadyMember) {
       // Existing database triggers update the Text Club segment and enqueue the signed Hanafy consent event.
       const updated = await db.from("customers").update({ sms_marketing_opt_in: true }).eq("id", customer.data.id).eq("sms_marketing_opt_in", false);
       if (updated.error) throw updated.error;
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     let reward: { code: string; expires_at: string; minimum_order_cents: number; discount_cents: number } | null = null;
     const issued = await db.rpc("wayne_issue_welcome_reward", { target_customer_id: customer.data.id });
     if (!issued.error && issued.data && typeof issued.data === "object") reward = issued.data as typeof reward;
-    return Response.json({ ok: true, reward }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ ok: true, membership: alreadyMember ? "already_member" : "joined", reward }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: `${brand.rewardsName} signup is temporarily unavailable. Please try again later.` }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }

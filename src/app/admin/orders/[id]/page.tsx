@@ -43,7 +43,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
       <Button asChild variant="secondary"><Link href="/admin/orders">← Order history</Link></Button>
       <div className="mt-6 flex flex-wrap items-end justify-between gap-5">
         <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">Order detail</p><h1 className="mt-2 text-4xl font-black">{order.order_number}</h1><p className="mt-2 text-wayne-muted">Placed {formatAdminDateTime(order.placed_at, settings.timezone)}</p></div>
-        <div className="flex flex-wrap items-center gap-2">{isOpenOrderStatus(order.status) ? <AutoRefresh intervalMs={20_000} live /> : null}<Badge>{titleCase(order.status)}</Badge><Badge className="bg-wayne-ink">{titleCase(order.fulfillment_type)}</Badge></div>
+        <div className="flex flex-wrap items-center gap-2">{isOpenOrderStatus(order.status) ? <AutoRefresh intervalMs={60_000} live /> : null}<Badge>{titleCase(order.status)}</Badge><Badge className="bg-wayne-ink">{titleCase(order.fulfillment_type)}</Badge></div>
       </div>
       {notice.saved && savedMessages[notice.saved] ? <p role="status" className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{savedMessages[notice.saved]}</p> : null}
       {notice.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{notice.error}</p> : null}

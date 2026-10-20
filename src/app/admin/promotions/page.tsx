@@ -52,7 +52,7 @@ function OfferNumbers({ promotion, stats }: { promotion: Promotion; stats?: Prom
   const personal = promotion.code_mode === "personal";
   const items = [
     ...(personal ? [["Codes sent", String(stats?.codes_issued ?? 0)]] : []),
-    ...(promotion.texts_queued ? [["Texts sent", String(promotion.texts_queued)]] : []),
+    ...(promotion.texts_queued ? [["One-time CRM offer events", String(promotion.texts_queued)]] : []),
     ["Orders", String(stats?.orders_count ?? 0)],
     ["Sales from those orders", money(stats?.revenue_cents ?? 0)],
     ["Discount given", money(stats?.discount_cents ?? 0)],
@@ -74,7 +74,7 @@ function PublishForm({ promotion, segmentName }: { promotion: Promotion; segment
       <Button variant="secondary">Send to everyone already in {segmentName}</Button>
     </> : <>
       <p className="flex-1 text-sm">{promotion.published_at ? `Published ${new Date(promotion.published_at).toLocaleDateString("en-US")}. ` : "Not published yet. "}{personal ? `Publishing makes a personal code for ${audience}.` : `Publishing texts ${audience} a link to their offers.`}</p>
-      <label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked name="send_text" type="checkbox" />Text them their personal link</label>
+      <label className="flex items-center gap-2 text-sm font-semibold"><input defaultChecked name="send_text" type="checkbox" />Send their one-time offer event to the CRM</label>
       <Button>{promotion.published_at ? "Publish again (new members only)" : "Publish"}</Button>
     </>}
   </form>;
@@ -101,9 +101,8 @@ function PromotionForm({ promotion, segments, timeZone }: { promotion?: Promotio
       <label className="grid gap-2 text-sm font-semibold" htmlFor={`delivery-${key}`}>Sent (personal codes)<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.delivery ?? "publish"} id={`delivery-${key}`} name="delivery"><option value="publish">When I press Publish (weekly offers)</option><option value="segment_entered">Automatically when a customer enters the segment (win-back)</option></select></label>
       <label className="grid gap-2 text-sm font-semibold" htmlFor={`segment-${key}`}>Who gets it<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3 font-normal" defaultValue={promotion?.audience_segment_id ?? ""} id={`segment-${key}`} name="audience_segment_id"><option value="">All Rewards members</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
       <Input defaultValue={promotion?.code_valid_days ?? ""} id={`valid-${key}`} label="Each personal code good for (days, blank = until the offer ends)" min="1" max="365" name="code_valid_days" step="1" type="number" />
-      <Input defaultValue={promotion?.reissue_after_days ?? ""} id={`reissue-${key}`} label="Automatic: wait before sending the same customer another (days, blank = 60)" min="1" max="3650" name="reissue_after_days" step="1" type="number" />
       <Input defaultValue={promotion?.crm_event_name ?? ""} id={`event-${key}`} label="Automatic: CRM event name (e.g. winback)" maxLength={40} name="crm_event_name" pattern="[a-z_]{2,40}" />
-      <p className="text-xs text-wayne-muted md:col-span-3">For personal codes, the code above is the start of every customer&apos;s code (WINBACK → WINBACK-7F3A9C) and doesn&apos;t work on its own. An automatic offer sends <code>customer.offer.&lt;event name&gt;</code> to the Hanafy CRM; point a CRM automation (&quot;Any other POS event&quot;) at that name and use {"{{reward_code}}"} in the text.</p>
+      <p className="text-xs text-wayne-muted md:col-span-3">For personal codes, the code above is the start of every customer&apos;s code (WINBACK → WINBACK-7F3A9C) and doesn&apos;t work on its own. Each customer receives a promotion only once. An automatic offer sends <code>customer.offer.&lt;event name&gt;</code> to the Hanafy CRM; point an active CRM automation (&quot;Any other POS event&quot;) at that name and use {"{{reward_code}}"} in the text.</p>
     </fieldset>
     <Input defaultValue={promotion?.total_usage_limit ?? ""} id={`total-${key}`} label="Total uses allowed (blank = unlimited)" min="1" name="total_usage_limit" step="1" type="number" />
     <Input defaultValue={promotion?.per_customer_limit ?? ""} id={`per-${key}`} label="Uses per customer (blank = unlimited)" min="1" name="per_customer_limit" step="1" type="number" />
