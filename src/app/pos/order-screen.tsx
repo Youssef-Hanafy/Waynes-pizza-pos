@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { StoreSettings } from "@/lib/content/schemas";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
-import { draftLabel, draftToAddItemsPayload, type PosDraft } from "@/lib/orders/drafts";
+import { draftHasTypedAddress, draftLabel, draftToAddItemsPayload, type PosDraft } from "@/lib/orders/drafts";
 import { posItemsAddedSchema } from "@/lib/pos/schemas";
 import type { CartLine } from "@/lib/orders/schemas";
 import type { OpenOrder } from "@/lib/orders/status";
@@ -406,7 +406,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
 }
 
 function draftHasWork(draft: PosDraft) {
-  return draft.cart.length > 0 || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.orderNote);
+  return draft.cart.length > 0 || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.orderNote) || draftHasTypedAddress(draft);
 }
 
 

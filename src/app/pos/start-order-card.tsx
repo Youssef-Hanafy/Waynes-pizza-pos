@@ -98,26 +98,21 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   );
 
   /*
-   * The delivery address step stays open once it has opened (owner,
-   * 2026-10-20: "as soon as you press the first letter it closes it out").
-   * It used to show only while the street was empty, so the first letter
-   * typed counted as "address entered" and the whole step — box, keyboard
-   * focus and suggestions — vanished.  Now it closes only when the ticket
-   * starts (an address is picked from the list or "Go to the menu" is
-   * tapped), or the cashier switches to Walk-in / Pickup.
+   * Delivery: the address step shows the whole time a delivery is being set
+   * up — never only "while the street is empty" (owner, 2026-10-20: "as soon
+   * as you press the first letter it closes it out").  That rule hid the step,
+   * and the box being typed in, the moment one letter was typed.  It also means
+   * Edit on a delivery ticket brings the address back to change it.
    */
-  const missingStreet = kind === "delivery" && !draft.started && settings.delivery_enabled && Boolean(startProblem(draft, "delivery", settings));
-  const [streetOpen, setStreetOpen] = useState(missingStreet);
-  if (missingStreet && !streetOpen) setStreetOpen(true);
-  if (kind !== "delivery" && streetOpen) setStreetOpen(false);
-  const needsStreet = kind === "delivery" && !draft.started && settings.delivery_enabled && (missingStreet || streetOpen);
+  const needsStreet = kind === "delivery" && !draft.started && settings.delivery_enabled;
 
-  return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-4">
-    <section aria-labelledby="start-order-title" className="w-full min-w-0 max-w-4xl rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5">
+  return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-3">
+    <section aria-labelledby="start-order-title" className={`w-full min-w-0 rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5 ${needsStreet ? "max-w-6xl" : "max-w-4xl"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black" id="start-order-title">{editing ? "Order details" : "New order"}</h1>
-          <p className="text-sm font-bold text-wayne-muted">{editing ? "Change the customer or tap a type — the items stay on the ticket." : "Customer if you have it, then tap the order type. That's it."}</p>
+          {/* Delivery needs the room for the address. */}
+          {needsStreet ? null : <p className="text-sm font-bold text-wayne-muted">{editing ? "Change the customer or tap a type — the items stay on the ticket." : "Customer if you have it, then tap the order type. That's it."}</p>}
         </div>
         {fromCall ? <div className="rounded-2xl border-2 border-wayne-green bg-wayne-green/5 px-4 py-2 text-right">
           <p className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-wayne-green">Phone call{draft.phoneLine ? ` · Line ${draft.phoneLine}` : ""}</p>
@@ -127,6 +122,9 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
         </div> : null}
       </div>
 
+      {/* Delivery: customer + type on the left, the address on the right, so the whole card fits on one screen (owner: no scrolling). */}
+      <div className={needsStreet ? "grid min-w-0 gap-x-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "min-w-0"}>
+      <div className="min-w-0">
       <Step n={1} title="Customer (optional)">
         {draft.customer ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-wayne-ok bg-wayne-ok-soft p-3">
           <div>
@@ -175,12 +173,14 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
         </div>
       </Step>
 
+      </div>
       {needsStreet ? <Step n={3} title="Delivery address — pick it and the menu opens">
         <AddressPicker address={draft.address} addressId={draft.addressId} customer={draft.customer} onAddress={(address) => update({ address })} onAddressId={(addressId) => update({ addressId })}
           onPicked={(patch) => { setError(""); update({ ...patch, ...(startProblem({ ...draft, ...patch }, "delivery", settings) ? {} : { started: true }) }); }} />
-        {outsideArea ? <p className="mt-3 rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">⚠ ZIP {zip} is outside the delivery area set in Admin → Settings. Check with the manager before sending a driver.</p> : null}
-        <Button className="mt-3 min-h-14 w-full text-lg" onClick={start} size="lg">Go to the menu →</Button>
+        {outsideArea ? <p className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">⚠ ZIP {zip} is outside the delivery area set in Admin → Settings. Check with the manager before sending a driver.</p> : null}
+        <Button className="mt-3 min-h-14 w-full text-lg" onClick={start} size="lg">{editing ? "Back to the order →" : "Go to the menu →"}</Button>
       </Step> : null}
+      </div>
 
       {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
       {editing && !needsStreet ? <Button className="mt-4 min-h-14 w-full text-lg" onClick={start} size="lg">Back to the order →</Button> : null}
@@ -197,23 +197,24 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 function AddressPicker({ address, addressId, customer, onAddress, onAddressId, onPicked }: { address: DraftAddress; addressId: string; customer: PosCustomer | null; onAddress: (value: DraftAddress) => void; onAddressId: (value: string) => void; onPicked: (patch: Partial<PosDraft>) => void }) {
   const saved = customer?.addresses ?? [];
-  return <div className="grid min-w-0 gap-3">
-    {saved.length ? <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      {saved.map((candidate) => <button aria-pressed={addressId === candidate.id} className={`min-h-16 rounded-xl border-2 p-3 text-left ${addressId === candidate.id ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border bg-white"}`} key={candidate.id} onClick={() => onPicked({ addressId: candidate.id })} type="button">
+  return <div className="grid min-w-0 gap-2">
+    {/* Saved addresses side by side (as many per row as fit), so the card stays on one screen. */}
+    {saved.length ? <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(10rem, 1fr))" }}>
+      {saved.map((candidate) => <button aria-pressed={addressId === candidate.id} className={`min-h-14 rounded-xl border-2 p-2.5 text-left ${addressId === candidate.id ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border bg-white"}`} key={candidate.id} onClick={() => onPicked({ addressId: candidate.id })} type="button">
         <strong className="block">{candidate.address1}{candidate.address2 ? `, ${candidate.address2}` : ""}</strong>
         <span className="block text-sm">{candidate.city}, {candidate.state} {candidate.postal_code}</span>
         {candidate.delivery_instructions ? <span className="block truncate text-xs text-wayne-muted">{candidate.delivery_instructions}</span> : null}
       </button>)}
-      <button aria-pressed={!addressId} className={`min-h-16 rounded-xl border-2 border-dashed p-3 text-left font-bold ${!addressId ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border-strong bg-white"}`} onClick={() => onAddressId("")} type="button">＋ A different address</button>
+      <button aria-pressed={!addressId} className={`min-h-14 rounded-xl border-2 border-dashed p-2.5 text-left font-bold ${!addressId ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border-strong bg-white"}`} onClick={() => onAddressId("")} type="button">＋ A different address</button>
     </div> : null}
-    {!addressId ? <div className="grid min-w-0 gap-3">
+    {!addressId ? <div className="grid min-w-0 gap-2">
       {/* Wrapped: the address field spans two columns when it sits in a form grid, which here would split this list into two columns. */}
-      <div className="pos-address min-w-0"><PosAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onPicked({ address: { ...address, ...selected }, addressId: "" })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} /></div>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem_7rem]">
+      <div className="pos-address min-w-0"><PosAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onPicked({ address: { ...address, ...selected }, addressId: "" })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing — pick it from the list" value={address.address1} /></div>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_3.75rem_5.5rem] gap-2">
         <Input id="start-address2" label="Apt / unit" onChange={(event) => onAddress({ ...address, address2: event.target.value })} value={address.address2} />
-        <Input id="start-city" label="City (optional)" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
+        <Input id="start-city" label="City" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
         <Input id="start-state" label="State" maxLength={2} onChange={(event) => onAddress({ ...address, state: event.target.value.toUpperCase() })} value={address.state} />
-        <Input id="start-zip" inputMode="numeric" label="ZIP (optional)" maxLength={10} onChange={(event) => onAddress({ ...address, postal_code: event.target.value })} value={address.postal_code} />
+        <Input id="start-zip" inputMode="numeric" label="ZIP" maxLength={10} onChange={(event) => onAddress({ ...address, postal_code: event.target.value })} value={address.postal_code} />
       </div>
       <Input id="start-delivery-instructions" label="Delivery instructions (optional)" onChange={(event) => onAddress({ ...address, delivery_instructions: event.target.value })} placeholder="Side door, ring bell, 2nd floor…" value={address.delivery_instructions} />
     </div> : null}

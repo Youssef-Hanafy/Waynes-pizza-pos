@@ -181,10 +181,13 @@ function addressFromPlace(place: Place): SuggestedAddress {
   };
 }
 
+/** What picking a suggestion fills: always the street; city, state and ZIP when Google has them. */
+export type PickedAddress = Partial<SuggestedAddress> & { address1: string };
+
 type PosAddressProps = {
   id: string; name: string; label?: string; value: string; required?: boolean; placeholder?: string;
   onChange?: (value: string) => void;
-  onAddressSelect?: (address: SuggestedAddress) => void;
+  onAddressSelect?: (address: PickedAddress) => void;
 };
 
 export function PosAddressInput({ id, name, label = "Street address", value, required = true, placeholder, onChange, onAddressSelect }: PosAddressProps) {
@@ -210,7 +213,8 @@ export function PosAddressInput({ id, name, label = "Street address", value, req
       if (!Suggest || request !== requestRef.current) return;
       if (!sessionRef.current && library?.AutocompleteSessionToken) sessionRef.current = new library.AutocompleteSessionToken();
       try {
-        const result = await Suggest.fetchAutocompleteSuggestions({ input: text, includedRegionCodes: ["us"], includedPrimaryTypes: ["street_address"], sessionToken: sessionRef.current ?? undefined });
+        // House-number addresses: Google files some as "premise" (a building) rather than "street_address".
+        const result = await Suggest.fetchAutocompleteSuggestions({ input: text, includedRegionCodes: ["us"], includedPrimaryTypes: ["street_address", "premise", "subpremise"], sessionToken: sessionRef.current ?? undefined });
         if (request !== requestRef.current) return;
         const next: SuggestItem[] = [];
         for (const [index, suggestion] of (result.suggestions ?? []).entries()) {
@@ -228,6 +232,12 @@ export function PosAddressInput({ id, name, label = "Street address", value, req
     }, 180);
     return () => window.clearTimeout(timer);
   }, [apiKey, value]);
+
+  // The list is never left hidden under Wayne's keyboard or the bottom of the card: show all of it.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (items.length) listRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [items.length]);
 
   // A tap anywhere else closes the list (taps on Wayne's on-screen keyboard don't).
   useEffect(() => {
@@ -250,14 +260,20 @@ export function PosAddressInput({ id, name, label = "Street address", value, req
     requestRef.current++;
     setItems([]);
     setActive(-1);
-    const place = item.toPlace();
+    let found: SuggestedAddress = { address1: "", city: "", state: "", postal_code: "" };
     try {
+      const place = item.toPlace();
       await place.fetchFields({ fields: ["addressComponents", "formattedAddress"] });
+      found = addressFromPlace(place);
     } catch {
-      return;
+      // Google didn't answer: the street that was tapped still goes in; the rest stays as typed.
     }
     sessionRef.current = null; // Google's search session ends once an address is picked
-    const address = addressFromPlace(place);
+    // Only the parts Google gave: a blank one never wipes what's already in City / State / ZIP.
+    const address: PickedAddress = { address1: found.address1 || item.main };
+    if (found.city) address.city = found.city;
+    if (found.state) address.state = found.state;
+    if (found.postal_code) address.postal_code = found.postal_code;
     if (selectRef.current) selectRef.current(address);
     else onChange?.(address.address1);
   };
@@ -267,22 +283,25 @@ export function PosAddressInput({ id, name, label = "Street address", value, req
 
   return <div className="grid content-start gap-1.5 sm:col-span-2" ref={wrapRef}>
     <label className="text-sm font-bold tracking-tight" htmlFor={id}>{label}{required ? <span aria-hidden className="ml-1 text-wayne-red">*</span> : null}</label>
-    <input aria-activedescendant={active >= 0 ? `${id}-option-${active}` : undefined} aria-autocomplete="list" aria-controls={`${id}-suggestions`} aria-expanded={items.length > 0} autoComplete="off" className="min-h-11 rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" id={id} name={name} onChange={(event) => { typedRef.current = true; onChange?.(event.target.value); }}
+    <div className="relative min-w-0">
+    <input aria-activedescendant={active >= 0 ? `${id}-option-${active}` : undefined} aria-autocomplete="list" aria-controls={`${id}-suggestions`} aria-expanded={items.length > 0} autoComplete="off" className="min-h-11 w-full rounded-xl border border-wayne-border bg-white px-3.5 py-2 font-normal transition hover:border-wayne-border-strong" id={id} name={name} onChange={(event) => { typedRef.current = true; onChange?.(event.target.value); }}
       onKeyDown={(event) => {
         if (!items.length) return;
         if (event.key === "ArrowDown") { event.preventDefault(); setActive((current) => (current + 1) % items.length); }
         else if (event.key === "ArrowUp") { event.preventDefault(); setActive((current) => (current <= 0 ? items.length - 1 : current - 1)); }
-        else if (event.key === "Enter" && active >= 0) { event.preventDefault(); void pick(active); }
+        // Enter (also Wayne's on-screen Enter) takes the highlighted match, or the top one.
+        else if (event.key === "Enter") { event.preventDefault(); void pick(active >= 0 ? active : 0); }
         else if (event.key === "Escape") { requestRef.current++; setItems([]); setActive(-1); }
       }}
-      placeholder={placeholder} required={required} role="combobox" spellCheck={false} value={value} />
-    {items.length ? <div className="grid overflow-hidden rounded-xl border border-wayne-border bg-white shadow-lg" id={`${id}-suggestions`} role="listbox">
+      placeholder={placeholder ?? (apiKey ? "Start typing, then pick the address" : "Street address")} required={required} role="combobox" spellCheck={false} value={value} />
+    {/* Floats over the boxes below it, so nothing on the screen moves while typing. */}
+    {items.length ? <div className="absolute inset-x-0 top-full z-40 mt-1 grid max-h-[min(20rem,50vh)] overflow-y-auto overscroll-contain rounded-xl border border-wayne-border-strong bg-white shadow-xl" id={`${id}-suggestions`} ref={listRef} role="listbox">
       {items.map((item, index) => <button aria-selected={index === active} className={`block min-h-12 w-full px-3.5 py-2 text-left ${index === active ? "bg-wayne-cream" : "bg-white hover:bg-wayne-cream"}`} id={`${id}-option-${index}`} key={item.key} onClick={() => { void pick(index); }} onMouseDown={hold} onPointerDown={hold} role="option" type="button">
         <span className="block font-bold">{item.main}</span>
         {item.secondary ? <span className="block text-sm text-wayne-muted">{item.secondary}</span> : null}
       </button>)}
       <span className="block px-3.5 py-1 text-right text-xs text-wayne-muted">Powered by Google</span>
     </div> : null}
-    <p className="text-xs text-wayne-muted">{apiKey ? "Start typing, then choose an address to fill in the city, state, and ZIP." : "Enter the full street address."}</p>
+    </div>
   </div>;
 }

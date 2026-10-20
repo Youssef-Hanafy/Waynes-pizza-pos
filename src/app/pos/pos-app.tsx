@@ -22,7 +22,7 @@ import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
 import { dismissNotice, useSyncState } from "@/stores/draft-sync";
 import { useDraftSync } from "@/stores/use-draft-sync";
-import { closeOutUnsentTickets, keepUnsettledOrder } from "@/stores/ticket-closeout";
+import { closeOutUnsentTickets, keepUnsettledOrder, unsettledOrder } from "@/stores/ticket-closeout";
 import { CustomersScreen } from "./customers-screen";
 import { DrawerPanel } from "./drawer-panel";
 import { OpenDrawerButton } from "./open-drawer-button";
@@ -41,6 +41,7 @@ import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
+import { useAppUpdate } from "@/stores/use-app-update";
 
 type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "tips" | "closeout" | "more";
 
@@ -111,7 +112,8 @@ export function PosApp(props: Props) {
   // Diagnostics for the counter tablet: script errors and what this register was given.
   useEffect(() => {
     installDeviceErrorLogging();
-    logDevice("pos.open", "", { payment_terminal_mode: hardware.payment_terminal_mode, runtime_ready: runtimeReady, ...describeNativeApp() });
+    // Screen size too, so layouts can be checked against the real counter tablet.
+    logDevice("pos.open", "", { payment_terminal_mode: hardware.payment_terminal_mode, runtime_ready: runtimeReady, viewport: `${window.innerWidth}x${window.innerHeight}`, screen: `${window.screen.width}x${window.screen.height}`, dpr: window.devicePixelRatio, build: process.env.WAYNE_BUILD_ID ?? "", ...describeNativeApp() });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per page load
   }, []);
   // Stripe Reader M2: inside the POS app, connect as soon as the register opens and keep it connected.
@@ -125,6 +127,12 @@ export function PosApp(props: Props) {
     const timer = window.setTimeout(() => closeOutUnsentTickets({ keepActive: true }), 0);
     return () => window.clearTimeout(timer);
   }, []);
+  // A newer deploy is live: reload onto it the next time this register is idle on New Order (owner, 2026-10-20).
+  useAppUpdate(() => {
+    const state = orderStore.get();
+    return sectionRef.current === "order" && isDraftIdle(activeDraft(state)) && !paymentPromptStore.get()
+      && !state.drafts.some((draft) => draft.submitPending) && !unsettledOrder.id;
+  });
   const { notices } = useSyncState();
   const pendingCount = drafts.filter((draft) => draft.submitPending).length;
 

@@ -183,6 +183,11 @@ export function PosKeyboard() {
   const [shift, setShift] = useState(false);
   const panel = useRef<HTMLDivElement | null>(null);
   const [physical, setPhysical] = useState(false);
+  /** The box the keyboard is showing for right now (null while the keyboard is down). */
+  const shownRef = useRef<Field | null>(null);
+  useEffect(() => {
+    shownRef.current = enabled && field && field.isConnected && !(physical && setting === "auto") ? field : null;
+  });
 
   // Physical keyboard: checked at start, on every box tapped, and on any real key press.
   useEffect(() => {
@@ -222,14 +227,57 @@ export function PosKeyboard() {
         }
         record.addedNodes.forEach((node) => { if (node instanceof Element) quietAll(node); });
       }
+      // The box being typed in was taken off the screen (a step closed, a dialog
+      // shut, an address was picked and the menu opened): put the keyboard away.
+      // Browsers don't always send a blur for that, and keys pressed into a box
+      // that's gone do nothing — the screen looks frozen (owner, 2026-10-20).
+      setField((current) => (current && !current.isConnected ? null : current));
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["inputmode", "type"] });
 
     // A touch on a box (also inside Google's address box) quiets it before it takes focus.
+    let lastPointer = 0;
     const onPointerDown = (event: PointerEvent) => {
+      lastPointer = performance.now();
       const target = event.composedPath()[0];
-      if (isField(target)) quiet(target);
+      if (isField(target)) { quiet(target); return; }
+      holdFocusThroughTap(event, target);
     };
+    /*
+     * Owner, 2026-10-20: taps "not working", the system "bugging out".  With
+     * the keyboard up, a tap on a button (Delivery, a customer, Go to the menu)
+     * took the focus off the box on the tap's mousedown; the screen moved
+     * (the button being focused scrolled into view, the keyboard started to
+     * go) before the tap's mouseup, so the click landed on whatever slid under
+     * the finger and the tap did nothing.  Now the box keeps the focus through
+     * the tap — exactly like the keyboard's own keys — the click lands where
+     * the finger is, and the keyboard is put away right after it.
+     */
+    const holdFocusThroughTap = (event: PointerEvent, target: EventTarget | undefined) => {
+      const open = shownRef.current;
+      if (!open || !open.isConnected || !(target instanceof Element)) return;
+      if (panel.current?.contains(target)) return;
+      // Anything that needs the focus or the press itself keeps working normally.
+      if (target.closest("input, textarea, select, label, [contenteditable='true']")) return;
+      event.preventDefault();
+      let timer = 0;
+      const afterClick = () => {
+        window.clearTimeout(timer);
+        document.removeEventListener("click", afterClick, true);
+        // The tap may have opened another box (a dialog, the address step): leave that one alone.
+        window.setTimeout(() => {
+          if (document.activeElement !== open || !open.isConnected) return;
+          open.blur();
+          // The tap is over: the keyboard goes now, not after the tap-wait below.
+          waiting?.();
+          pick();
+        }, 0);
+      };
+      document.addEventListener("click", afterClick, true);
+      // A drag or a scroll is not a tap: no click comes, nothing changes.
+      timer = window.setTimeout(() => document.removeEventListener("click", afterClick, true), 800);
+    };
+    const onPointerUp = () => { lastPointer = performance.now(); };
     const pick = () => {
       const active = deepActive();
       if (isField(active)) {
@@ -238,21 +286,49 @@ export function PosKeyboard() {
         const mode = active.dataset.posIm ?? "";
         setLayout(mode === "tel" || mode === "numeric" || mode === "decimal" ? "numbers" : "letters");
         setShift(false);
-        window.setTimeout(() => active.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
+        // Only as far as needed to show the box above the keyboard: "center" also
+        // scrolled the one-screen POS frame itself, shifting the whole screen.
+        window.setTimeout(() => { if (active.isConnected) active.scrollIntoView({ block: "nearest", inline: "nearest" }); }, 60);
       } else if (!panel.current?.contains(document.activeElement)) {
         setField(null);
       }
     };
     const onFocusIn = () => pick();
-    const onFocusOut = () => window.setTimeout(pick, 0);
+    /*
+     * A tap on a button while typing (owner, 2026-10-20: taps "not working",
+     * the system "bugging out"): the box loses focus on the tap's mousedown,
+     * and putting the keyboard away right then moved the whole screen before
+     * the tap's mouseup — so the click landed on whatever slid under the
+     * finger, not the button.  The keyboard now waits for that tap's click to
+     * finish (or 450 ms) before it goes away.
+     */
+    let waiting: (() => void) | null = null;
+    const onFocusOut = () => {
+      if (waiting) return;
+      if (performance.now() - lastPointer > 700) { window.setTimeout(pick, 0); return; }
+      let timer = 0;
+      const finish = () => {
+        document.removeEventListener("click", onClick, true);
+        window.clearTimeout(timer);
+        waiting = null;
+        pick();
+      };
+      const onClick = () => { window.setTimeout(finish, 0); };
+      document.addEventListener("click", onClick, true);
+      timer = window.setTimeout(finish, 450);
+      waiting = () => { document.removeEventListener("click", onClick, true); window.clearTimeout(timer); waiting = null; };
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("focusin", onFocusIn, true);
     document.addEventListener("focusout", onFocusOut, true);
     const first = window.setTimeout(pick, 0);
     return () => {
       window.clearTimeout(first);
+      waiting?.();
       observer.disconnect();
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("focusin", onFocusIn, true);
       document.removeEventListener("focusout", onFocusOut, true);
       document.querySelectorAll("input, textarea").forEach((node) => { if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) restore(node); });
@@ -274,6 +350,7 @@ export function PosKeyboard() {
 
   const type = useCallback((text: string) => {
     if (!field) return;
+    if (!field.isConnected) { setField(null); return; }
     // Names start with a capital letter.
     const mode = field.dataset.posIm ?? "";
     const autoCap = layout === "letters" && mode !== "email" && (field.getAttribute("type") ?? "text") !== "email"
@@ -285,6 +362,7 @@ export function PosKeyboard() {
 
   const backspace = useCallback(() => {
     if (!field) return;
+    if (!field.isConnected) { setField(null); return; }
     write(field, (value, start, end) => {
       if (start !== end) return { value: value.slice(0, start) + value.slice(end), caret: start };
       if (start === 0) return null;
@@ -314,7 +392,7 @@ export function PosKeyboard() {
     setField(null);
   }, [field]);
 
-  if (!enabled || !field || (physical && setting === "auto")) return null;
+  if (!enabled || !field || !field.isConnected || (physical && setting === "auto")) return null;
 
   // Keys never take the focus away from the box being typed in.
   const hold = (event: ReactPointerEvent | ReactMouseEvent) => event.preventDefault();
@@ -336,7 +414,7 @@ export function PosKeyboard() {
       {key(".", () => type("."))}
       {key("0", () => type("0"))}
       {key("-", () => type("-"))}
-      {key("Done", () => field.blur(), "bg-wayne-green text-base text-white", "Hide keyboard")}
+      {key("Done", () => { field.blur(); setField(null); }, "bg-wayne-green text-base text-white", "Hide keyboard")}
     </div> : <div className="mx-auto grid max-w-5xl gap-1.5">
       {rows.map((row, index) => <div className="grid grid-cols-10 gap-1.5" key={index}>
         {row.map((character) => key(shift && layout === "letters" ? character.toUpperCase() : character, () => type(character)))}
@@ -348,7 +426,7 @@ export function PosKeyboard() {
         {key("space", () => type(" "), "text-base text-wayne-muted", "Space")}
         {key("⌫", backspace, "bg-[#b9bcc2]", "Delete")}
         {key("Enter ⏎", enter, "bg-[#b9bcc2] text-base", "Enter")}
-        {key("Done", () => field.blur(), "bg-wayne-green text-base text-white", "Hide keyboard")}
+        {key("Done", () => { field.blur(); setField(null); }, "bg-wayne-green text-base text-white", "Hide keyboard")}
       </div>
     </div>}
   </div>;

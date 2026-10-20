@@ -132,7 +132,17 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
 
 /** Anything a cashier would be upset to lose. */
 export function draftHasContent(draft: PosDraft): boolean {
-  return draft.cart.length > 0 || draft.addTo !== null || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.lastName || draft.phone || draft.orderNote);
+  return draft.cart.length > 0 || draft.addTo !== null || draft.source === "phone" || Boolean(draft.customer || draft.firstName || draft.lastName || draft.phone || draft.orderNote)
+    || draftHasTypedAddress(draft);
+}
+
+/**
+ * A delivery address picked or typed on this ticket.  City and state don't
+ * count: a blank ticket already has the register's own city and state in them.
+ */
+export function draftHasTypedAddress(draft: PosDraft): boolean {
+  const address = draft.address;
+  return Boolean(draft.addressId || address.address1.trim() || address.address2.trim() || address.postal_code.trim() || address.delivery_instructions.trim());
 }
 
 export function initialDrafts(): DraftsState {
@@ -319,11 +329,17 @@ export function draftBody(draft: PosDraft) {
 
 /**
  * Nothing has been started on this ticket: no items, no customer, not from a
- * call, nothing typed.  A ringing phone may open itself over an idle ticket,
- * never over one someone is in the middle of (§34.1).
+ * call, nothing typed, no order type tapped.  A ringing phone may open itself
+ * over an idle ticket, never over one someone is in the middle of (§34.1).
+ *
+ * Owner, 2026-10-20: a ticket with Pickup / Delivery tapped, or a delivery
+ * address being typed, used to count as idle (no name, phone or items yet), so
+ * a ringing line pulled the cashier to the Phone screen and the ticket — with
+ * its address — was closed out.
  */
 export function isDraftIdle(draft: PosDraft): boolean {
   return draft.cart.length === 0 && draft.customer === null && draft.phoneCallKey === null && draft.addTo === null
     && !draft.firstName.trim() && !draft.lastName.trim() && !draft.phone.trim() && !draft.orderNote.trim()
-    && !draft.submitPending;
+    && !draft.submitPending && !draft.started && draft.customerMode === "walk_in" && draft.fulfillment === "pickup"
+    && !draftHasTypedAddress(draft);
 }

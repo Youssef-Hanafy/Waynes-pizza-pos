@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  activeDraft, blankDraft, draftFromCall, draftToOrderPayload, findDraftForCall, heldDrafts, holdActive, initialDrafts, isDraftIdle, parseSavedDrafts, removeDraft, resumeDraft, startDraft, updateDraft,
+  activeDraft, blankDraft, draftFromCall, draftHasContent, draftToOrderPayload, findDraftForCall, heldDrafts, holdActive, initialDrafts, isDraftIdle, parseSavedDrafts, removeDraft, resumeDraft, startDraft, updateDraft,
 } from "./drafts";
 
 const line = { line_id: "l1", menu_item_id: "64000000-0000-4000-8000-000000000001", variant_id: null, quantity: 1, special_instructions: "", modifiers: [] };
@@ -98,5 +98,18 @@ describe("an idle ticket (a ringing phone may open over it)", () => {
     expect(isDraftIdle({ ...fresh, cart: [line] })).toBe(false);
     expect(isDraftIdle({ ...fresh, firstName: "Rita" })).toBe(false);
     expect(isDraftIdle({ ...fresh, phoneCallKey: "call-1" })).toBe(false);
+  });
+
+  it("is not idle once Pickup / Delivery is tapped or an address is typed (owner, 2026-10-20)", () => {
+    const fresh = activeDraft(initialDrafts());
+    expect(isDraftIdle({ ...fresh, customerMode: "identified", fulfillment: "delivery", source: "phone" })).toBe(false);
+    expect(isDraftIdle({ ...fresh, customerMode: "identified", fulfillment: "pickup" })).toBe(false);
+    expect(isDraftIdle({ ...fresh, started: true })).toBe(false);
+    expect(isDraftIdle({ ...fresh, address: { ...fresh.address, address1: "9" } })).toBe(false);
+    expect(isDraftIdle({ ...fresh, addressId: "saved-address" })).toBe(false);
+    // The register's own city and state are pre-filled on every ticket: not typed by anyone.
+    expect(isDraftIdle({ ...fresh, address: { ...fresh.address, city: "Worcester", state: "MA" } })).toBe(true);
+    expect(draftHasContent({ ...fresh, address: { ...fresh.address, address1: "93 W" } })).toBe(true);
+    expect(draftHasContent({ ...fresh, address: { ...fresh.address, city: "Worcester", state: "MA" } })).toBe(false);
   });
 });
