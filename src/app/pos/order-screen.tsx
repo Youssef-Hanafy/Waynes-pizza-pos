@@ -117,6 +117,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const noProfile = draft.customerMode === "walk_in";
   /** Adding items to an order already sent (owner, 2026-10-13). */
   const addTo = draft.addTo;
+  /** Specials are for walk-ins, pickups and phone pickups only (owner, 2026-10-19). */
+  const ticketIsDelivery = addTo ? addTo.fulfillment === "delivery" : draft.fulfillment === "delivery" && !noProfile;
+  const specialsAllowed = !ticketIsDelivery;
+  const specialOnTicket = cart.some((line) => { const item = findMenuItem(menu, line.menu_item_id); return Boolean(item && isSpecialItem(item)); });
   const subtotal = cartSubtotalCents(menu, cart);
   const manualInput = Number(draft.manualValue) || 0;
   const previewDiscount = addTo ? 0 : draft.manualType === "fixed" ? Math.min(subtotal, Math.round(manualInput * 100)) : draft.manualType === "percent" ? Math.min(subtotal, Math.round(subtotal * manualInput / 100)) : 0;
@@ -157,6 +161,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   async function submitAddition() {
     if (!addTo || submitting) return;
     if (!cart.length) { setError("Add at least one item."); return; }
+    if (ticketIsDelivery && specialOnTicket) { setError(SPECIALS_NOT_FOR_DELIVERY); return; }
     setSubmitting(true); setError("");
     try {
       const response = await fetch(`/api/pos/orders/${addTo.orderId}/items`, {
@@ -194,6 +199,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   async function submitOrder() {
     if (addTo) { await submitAddition(); return; }
     if (!cart.length) { setError("Add at least one item to the ticket."); return; }
+    if (ticketIsDelivery && specialOnTicket) { setError(SPECIALS_NOT_FOR_DELIVERY); return; }
     if (submitting) return;
     setSubmitting(true); setError("");
     // Only a server answer counts as sent (§30). A dropped connection keeps the
@@ -276,9 +282,9 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
     const paidAlready = created.order.paid_cents ?? 0;
-    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-3 sm:p-6">
-      <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-5 shadow-xl sm:p-7">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-wayne-ok-soft px-4 py-3">
+    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-3">
+      <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-wayne-ok-soft px-4 py-2">
           <p className="font-black text-wayne-ok">✓ {created.added ? `Added to order #${ticketNumber(created.order)} — same ticket, new total ${formatCents(created.order.total_cents)}${paidAlready ? ` · ${formatCents(paidAlready)} already paid, ${formatCents(Math.max(0, created.order.total_cents - paidAlready))} to pay` : ""}` : created.duplicate ? `Already sent · #${ticketNumber(created.order)}` : `Order #${ticketNumber(created.order)} — take payment or Pay later to send it`}</p>
           <div className="flex flex-wrap items-center gap-2">
             {/* Recalled order whose slip is already out: nothing new prints (owner, 2026-10-19). */}
@@ -288,9 +294,9 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           </div>
         </div>
         {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
-        <h1 className="mb-4 text-3xl font-black">How are they paying?</h1>
+        <h1 className="mb-2 text-2xl font-black">How are they paying?</h1>
         <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
-        {created.fresh ? <p className="mt-5 border-t border-wayne-border pt-3 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
+        {created.fresh ? <p className="mt-3 border-t border-wayne-border pt-2 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
       </section>
     </div>;
   }
@@ -335,12 +341,14 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     : addTo ? `Add to ${addToLabel} · take payment`
     : draft.submitPending ? "Try sending now"
     : `${draft.isTest ? "TEST · " : ""}Take payment · ${formatCents(previewTotal)}`;
-  // Specials (owner, 2026-10-19): every item marked a special, under one button before the categories.
-  const specials = visibleMenu.flatMap((category) => category.items.filter((item) => item.special));
+  // Specials (owner, 2026-10-19): only under the Specials button — never in their
+  // category — and only for walk-ins, pickups and phone pickups (not deliveries).
+  const specials = specialsAllowed ? visibleMenu.flatMap((category) => category.items.filter((item) => item.special)) : [];
+  const regularMenu = visibleMenu.map((category) => ({ ...category, items: category.items.filter((item) => !isSpecialItem(item)) })).filter((category) => category.items.length);
   const selectedCategory = categoryId === SPECIALS && !specials.length ? null : categoryId;
-  const shownItems = itemSearch.trim() ? visibleMenu.flatMap((category) => category.items)
+  const shownItems = itemSearch.trim() ? [...specials, ...regularMenu.flatMap((category) => category.items)]
     : selectedCategory === SPECIALS ? specials
-    : visibleMenu.filter((category) => category.id === (selectedCategory ?? visibleMenu[0]?.id)).flatMap((category) => category.items);
+    : regularMenu.filter((category) => category.id === (selectedCategory ?? regularMenu[0]?.id)).flatMap((category) => category.items);
   const discount: AppliedDiscount | null = draft.manualType ? { type: draft.manualType, value: draft.manualValue, reason: draft.manualReason, presetId: draft.presetDiscountId } : null;
 
   return <div className="flex min-h-0 flex-1 flex-col">
@@ -352,8 +360,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         {/* Categories as an even grid across the whole width (search takes the last two cells), so the items below get all the height that's left. */}
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(7.25rem, 1fr))" }}>
           {specials.length ? <button aria-pressed={!itemSearch.trim() && selectedCategory === SPECIALS} className={`flex min-h-12 items-center justify-center rounded-xl px-2 text-center text-sm font-black leading-tight transition active:scale-95 ${!itemSearch.trim() && selectedCategory === SPECIALS ? "bg-wayne-red text-white shadow-md" : "border-2 border-wayne-gold bg-wayne-gold/25 text-wayne-ink shadow-sm"}`} onClick={() => { setCategoryId(SPECIALS); setItemSearch(""); }} type="button">⭐ Specials</button> : null}
-          {visibleMenu.map((category) => {
-            const selected = !itemSearch.trim() && selectedCategory !== SPECIALS && category.id === (selectedCategory ?? visibleMenu[0]?.id);
+          {regularMenu.map((category) => {
+            const selected = !itemSearch.trim() && selectedCategory !== SPECIALS && category.id === (selectedCategory ?? regularMenu[0]?.id);
             const color = safeColor(category.pos_color);
             return <button aria-pressed={selected} className={`flex min-h-12 items-center justify-center rounded-xl px-2 text-center text-sm font-black leading-tight transition active:scale-95 ${selected ? "bg-wayne-green text-white shadow-md" : "border border-wayne-border bg-white text-wayne-ink shadow-sm hover:bg-wayne-cream"}`} key={category.id} onClick={() => { setCategoryId(category.id); setItemSearch(""); }} style={color ? (selected ? { backgroundColor: color, color: readableText(color) } : { borderColor: color, borderLeftWidth: 6, backgroundColor: `${color}1f` }) : undefined} type="button">{category.name}</button>;
           })}
@@ -361,7 +369,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           {!addTo ? <button aria-pressed={Boolean(discount)} className={`flex min-h-12 items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-sm font-black leading-tight active:scale-95 ${discount ? "border-wayne-red bg-wayne-red text-white" : "border-wayne-red bg-white text-wayne-red"}`} onClick={() => setDiscountOpen(true)} type="button">{discount ? "✓ Discount" : "－ Discount"}</button> : null}
           <input aria-label="Search menu" className="col-span-2 min-h-12 min-w-0 rounded-xl border border-wayne-border bg-white px-3 text-base" onChange={(event) => setItemSearch(event.target.value)} placeholder="🔍  Search" type="search" value={itemSearch} />
         </div>
-        {shownItems.length ? <FitGrid className="flex-1" count={shownItems.length} fallbackClassName="grid grid-cols-2 content-start gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" key={itemSearch.trim() ? "search" : (selectedCategory ?? visibleMenu[0]?.id ?? "")} label="Menu items" minHeight={64} minWidth={120} ratio={1.5}>{(cellHeight) => {
+        {shownItems.length ? <FitGrid className="flex-1" count={shownItems.length} fallbackClassName="grid grid-cols-2 content-start gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" key={itemSearch.trim() ? "search" : (selectedCategory ?? regularMenu[0]?.id ?? "")} label="Menu items" minHeight={64} minWidth={120} ratio={1.5}>{(cellHeight) => {
           const roomy = cellHeight === null || cellHeight >= 92;
           return shownItems.map((item) => {
             // The item's colour, else its category's (Admin → Menu → colour), so groups are easy to spot (owner, 2026-10-19).
@@ -436,6 +444,12 @@ function updateQuantity(cart: CartLine[], lineId: string, quantity: number) { re
 
 /** The Specials button's id in the category row. */
 const SPECIALS = "__specials__";
+const SPECIALS_NOT_FOR_DELIVERY = "Specials are for walk-in and pickup orders only. Take the special off, or change the order to pickup.";
+
+/** A special (running or ended) only ever shows under the Specials button. */
+function isSpecialItem(item: { special?: boolean; special_item?: boolean }) {
+  return Boolean(item.special_item ?? item.special);
+}
 
 /** Only a #rrggbb colour from Admin is ever put in a style. */
 function safeColor(value: string | null | undefined) {

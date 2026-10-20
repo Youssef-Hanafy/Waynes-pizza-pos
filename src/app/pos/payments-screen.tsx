@@ -195,11 +195,14 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   // added at the driver's cash-out; cash is collected at the door by the driver.
   const isDelivery = order.fulfillment_type === "delivery";
 
+  // Once a way to pay is picked the buttons shrink to one row, so the cash
+  // keypad and Record cash fit on one screen with no scrolling (owner, 2026-10-19).
+  const compact = mode !== "choose";
   const option = (value: Exclude<Mode, "choose">, icon: string, title: string, note: string, disabled = false) => (
-    <button aria-pressed={mode === value} className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => { setMode(value); setError(""); }} type="button">
-      <span aria-hidden className="text-2xl leading-none">{icon}</span>
-      <strong className="mt-1 text-lg font-black leading-tight">{title}</strong>
-      <span className={`text-xs font-bold ${mode === value ? "text-white/80" : "text-wayne-muted"}`}>{note}</span>
+    <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => { setMode(value); setError(""); }} type="button">
+      <span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{icon}</span>
+      <strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{title}</strong>
+      {compact ? null : <span className="text-xs font-bold text-wayne-muted">{note}</span>}
     </button>
   );
 
@@ -211,14 +214,14 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
       : cardHeld && !paidBefore ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
       {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
-      {onAddItems ? <button className="mt-4 flex min-h-14 w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 text-lg font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
-      <div className={`mt-5 grid grid-cols-2 gap-3 ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+      {onAddItems ? <button className={`flex w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40 ${compact ? "mt-3 min-h-11 text-base" : "mt-4 min-h-14 text-lg"}`} disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
+      <div className={`grid grid-cols-2 ${compact ? "mt-3 gap-2" : "mt-5 gap-3"} ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
         {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · tip on slip" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
         {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? `Phone order · tip at cash-out${order.is_test ? " (test)" : ""}` : "Needs Stripe") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
-        {onPayLater ? <button className="flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40" disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className="text-2xl leading-none">{isDelivery ? "🚗" : "⏱"}</span><strong className="mt-1 text-lg font-black leading-tight">{isDelivery ? "Cash at the door" : "Pay later"}</strong><span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span></button> : null}
+        {onPayLater ? <button className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"}`} disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{isDelivery ? "🚗" : "⏱"}</span><strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{isDelivery ? "Cash at the door" : "Pay later"}</strong>{compact ? null : <span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span>}</button> : null}
       </div>
-      {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
+      {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
       {mode === "terminal" ? (screen.screenOnline && !tipAsked && !paidBefore
         ? <CustomerTipStep onDone={tipDone} order={order} />
@@ -299,23 +302,26 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
     }
   }
 
-  return <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_18rem]">
-    <div>
-      <div className="rounded-2xl border-2 border-wayne-border p-4">
-        <p className="text-sm font-bold">Cash received</p>
-        <p aria-live="polite" className="text-5xl font-black tabular-nums">{formatCents(tendered)}</p>
-        <p aria-live="polite" className={`mt-3 text-3xl font-black ${change === null ? "text-wayne-red" : "text-wayne-ok"}`}>{change === null ? (tendered ? `Still owed ${formatCents(due - tendered)}` : "Enter the cash handed over") : `Change ${formatCents(change)}`}</p>
+  // One screen, no scrolling (owner, 2026-10-19): what was handed over and the
+  // change on the left, the keypad and Record cash on the right.
+  return <div className="mt-3 grid gap-3 md:grid-cols-[1fr_17rem]">
+    <div className="grid content-start gap-2">
+      <div className="rounded-2xl border-2 border-wayne-border px-4 py-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3"><p className="text-sm font-bold">Cash received</p><p aria-live="polite" className="text-4xl font-black tabular-nums">{formatCents(tendered)}</p></div>
+        <p aria-live="polite" className={`mt-1 text-3xl font-black ${change === null ? "text-wayne-red" : "text-wayne-ok"}`}>{change === null ? (tendered ? `Still owed ${formatCents(due - tendered)}` : "Enter the cash handed over") : `Change ${formatCents(change)}`}</p>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {quickCashAmounts(due).map((amount) => <Button key={amount} onClick={() => { onError(""); setDigits(String(amount)); }} size="lg" variant="secondary">{amount === due ? "Exact" : formatCents(amount)}</Button>)}
+      <div className="grid grid-cols-3 gap-2">
+        {quickCashAmounts(due).map((amount) => <Button className="min-h-12 text-lg" key={amount} onClick={() => { onError(""); setDigits(String(amount)); }} variant="secondary">{amount === due ? "Exact" : formatCents(amount)}</Button>)}
       </div>
     </div>
-    <div>
-      <div className="grid grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"].map((key) => <button aria-label={key === "back" ? "Delete last digit" : key} className="min-h-16 rounded-xl border border-wayne-border bg-white text-2xl font-black shadow-sm active:translate-y-px" key={key} onClick={() => press(key)} type="button">{key === "back" ? "⌫" : key}</button>)}
+    <div className="grid content-start gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"].map((key) => <button aria-label={key === "back" ? "Delete last digit" : key} className="min-h-12 rounded-xl border border-wayne-border bg-white text-2xl font-black shadow-sm active:translate-y-px" key={key} onClick={() => press(key)} type="button">{key === "back" ? "⌫" : key}</button>)}
       </div>
-      <Button className="mt-2 w-full" onClick={() => press("clear")} variant="ghost">Clear</Button>
-      <Button className="mt-2 w-full text-xl" disabled={busy || change === null} onClick={() => { void record(); }} size="lg">{busy ? "Saving…" : change === null ? "Record cash" : `Record cash · change ${formatCents(change)}`}</Button>
+      <div className="grid grid-cols-[auto_1fr] gap-1.5">
+        <Button className="min-h-14" onClick={() => press("clear")} variant="ghost">Clear</Button>
+        <Button className="min-h-14 text-lg" disabled={busy || change === null} onClick={() => { void record(); }}>{busy ? "Saving…" : change === null ? "Record cash" : `Record cash · change ${formatCents(change)}`}</Button>
+      </div>
     </div>
   </div>;
 }

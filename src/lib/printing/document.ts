@@ -139,7 +139,8 @@ function itemLines(item: PrintDocument["items"][number], withPrice: boolean): Pr
   for (const modifier of item.modifiers) {
     // "NO <option>" lines are the ones a cook must not miss.
     const removed = modifier.name.toUpperCase().startsWith("NO ");
-    lines.push({ kind: "text", text: `   ${removed ? modifier.name.toUpperCase() : `+ ${modifier.name}`}${modifier.quantity > 1 ? ` ×${modifier.quantity}` : ""}`, bold: removed, highlight: removed });
+    // Modifiers print twice as tall (owner, 2026-10-19: "make modifiers text on printed slips bigger"); same width, so nothing is cut off.
+    lines.push({ kind: "text", text: `   ${removed ? modifier.name.toUpperCase() : `+ ${modifier.name}`}${modifier.quantity > 1 ? ` ×${modifier.quantity}` : ""}`, bold: removed, highlight: removed, tall: true });
   }
   if (item.instructions) lines.push({ kind: "text", text: `   Note: ${item.instructions}`, bold: true, highlight: true });
   return lines;
@@ -171,7 +172,17 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
   if (order.taken_by) lines.push({ kind: "text", text: `Taken by ${order.taken_by}`, align: "center" });
   lines.push({ kind: "text", text: `Ref ${order.order_number}${order.add_on_to ? ` (add-on to ${order.add_on_to})` : ""}`, align: "center" });
   lines.push({ kind: "text", text: "Thank you!", align: "center", bold: true }, { kind: "feed", lines: 3 });
-  return { title: `Receipt ${order.order_number}`, lines };
+  return { title: `Receipt ${order.order_number}`, lines: order.fulfillment_type === "delivery" ? driverSized(lines) : lines };
+}
+
+/**
+ * The driver's slips (delivery receipt, tip & signature slip): every line
+ * twice as tall, so the address, phone, items and tip lines read as easily as
+ * the total (owner, 2026-10-19: "driver slip overall text is very tiny, price
+ * is a good size").  Same width, so nothing is cut off; lines already big stay.
+ */
+export function driverSized(lines: PrintLine[]): PrintLine[] {
+  return lines.map((line) => (line.kind === "text" || line.kind === "pair") && !line.large ? { ...line, tall: true } : line);
 }
 
 /**
@@ -227,7 +238,7 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
     { kind: "text", text: "I agree to pay the above total amount.", align: "center" },
     { kind: "feed", lines: 3 },
   );
-  return { title: `Tip & signature ${order.order_number}`, lines };
+  return { title: `Tip & signature ${order.order_number}`, lines: order.fulfillment_type === "delivery" ? driverSized(lines) : lines };
 }
 
 function paymentLine(method: string, status: string, fulfillment: string) {

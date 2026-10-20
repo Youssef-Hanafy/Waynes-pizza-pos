@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { brandLabels, closeoutLayout, countedFromDenominations, dayCloseoutSchema, DENOMINATIONS, expectedCash, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
+import { brandLabels, closeoutLayout, dayCloseoutSchema, expectedCash, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
+import { deliveryCloseoutLayout, deliveryDayReportSchema } from "@/lib/delivery/day-report";
 import { formatCents } from "@/lib/menu/schemas";
 import { getHardwareRuntime } from "@/stores/hardware-store";
 
@@ -18,17 +19,18 @@ function shiftDay(day: string, by: number) {
  *   Sales — orders, food & drink, discounts, delivery fees, tax, tips, total
  *   Payments — cash, card, and card by brand (Visa, Mastercard, Amex, Discover)
  *   Online orders — totalled on their own
- *   Cash count — bill by bill, expected vs counted, over / short
+ *   Cash count — just the total counted, expected vs counted, over / short
+ *                (owner, 2026-10-19: no bill-by-bill counting)
  *
  * "Close out the day" closes the open drawer with the count and keeps the
- * close out on file; it can be printed on the receipt printer.
+ * close out on file.  Any day can be printed on the receipt printer as a
+ * store close out slip and a delivery close out slip (per driver).
  */
 export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the owner" }: { storeName: string; onOpenTips?: () => void; /** Admin → Tips: who the card tips are paid out to. */ tipPayoutName?: string }) {
   const [day, setDay] = useState<string | null>(null);
   const [today, setToday] = useState("");
   const [report, setReport] = useState<DayCloseout | null>(null);
   const [error, setError] = useState("");
-  const [counts, setCounts] = useState<Record<string, number>>({});
   const [typedTotal, setTypedTotal] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -55,9 +57,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     return () => { window.clearTimeout(first); window.clearInterval(timer); };
   }, [day, load]);
 
-  const billTotal = countedFromDenominations(counts);
   const typed = typedTotal.trim() ? Math.round(Number(typedTotal.replace(/[$,\s]/g, "")) * 100) : null;
-  const counted = typed !== null && Number.isFinite(typed) ? typed : Object.keys(counts).length ? billTotal : null;
+  const counted = typed !== null && Number.isFinite(typed) && typed >= 0 ? typed : null;
   const isToday = Boolean(report && report.day === today);
   const expected = report ? expectedCash(report, isToday) : 0;
   const variance = counted === null ? null : counted - expected;
@@ -70,7 +71,7 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     try {
       const response = await fetch("/api/pos/closeout", {
         method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-        body: JSON.stringify({ business_date: report.day, counted_cash_cents: counted, denominations: counts, note: note.trim(), close_drawer: report.day === today }),
+        body: JSON.stringify({ business_date: report.day, counted_cash_cents: counted, denominations: {}, note: note.trim(), close_drawer: report.day === today }),
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The close out could not be saved.");
@@ -89,7 +90,26 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     if (!runtime) { setNotice("Printing is still starting up. Try again in a moment."); return; }
     setNotice("Printing…");
     const result = await runtime.receiptPrinter.printLayout(closeoutLayout(report, storeName, counted ?? report.saved?.counted_cash_cents ?? null, report.day === today, tipPayoutName));
-    setNotice(result.ok ? "Close out sent to the receipt printer." : result.reason);
+    setNotice(result.ok ? "Store close out sent to the receipt printer." : result.reason);
+  }
+
+  /** The day's delivery close out slip: every driver's deliveries, tips and cash (owner, 2026-10-19). */
+  async function printDeliveries() {
+    if (!report) return;
+    const runtime = getHardwareRuntime();
+    if (!runtime) { setNotice("Printing is still starting up. Try again in a moment."); return; }
+    setNotice("Printing…");
+    try {
+      const response = await fetch(`/api/pos/delivery/day-report?day=${report.day}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The delivery close out is unavailable.");
+      const parsed = deliveryDayReportSchema.safeParse(body);
+      if (!parsed.success) throw new Error("The delivery close out could not be read.");
+      const result = await runtime.receiptPrinter.printLayout(deliveryCloseoutLayout(parsed.data, storeName));
+      setNotice(result.ok ? "Delivery close out sent to the receipt printer." : result.reason);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "The delivery close out could not be printed.");
+    }
   }
 
   if (!report) {
@@ -107,7 +127,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
         <Button onClick={() => setDay(shiftDay(report.day, -1))} size="sm" variant="secondary">← Day before</Button>
         {report.day !== today ? <Button onClick={() => setDay(today)} size="sm" variant="secondary">Today</Button> : null}
         {report.day < today ? <Button onClick={() => setDay(shiftDay(report.day, 1))} size="sm" variant="secondary">Next day →</Button> : null}
-        <Button onClick={() => void print()} size="sm">🖨 Print</Button>
+        <Button onClick={() => void print()} size="sm">🖨 Store close out</Button>
+        <Button onClick={() => void printDeliveries()} size="sm">🖨 Delivery close out</Button>
       </div>
       {error ? <p className="rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">{error}</p> : null}
       {report.saved ? <p className="rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok">✓ Closed out {new Date(report.saved.closed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{report.saved.closed_by_name ? ` by ${report.saved.closed_by_name}` : ""}: counted {formatCents(report.saved.counted_cash_cents)}, expected {formatCents(report.saved.expected_cash_cents)} ({varianceText(report.saved.variance_cents)}). Closing again replaces it.</p> : null}
@@ -190,17 +211,12 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
         </Card>
       </div>
 
-      <Card title="Count the cash">
+      <Card title="Cash in the drawer">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-              {DENOMINATIONS.map((denomination) => <label className="grid gap-1 rounded-xl border border-wayne-border p-2 text-sm font-bold" key={denomination.key}>
-                <span className="flex justify-between"><span>{denomination.label}</span><span className="text-wayne-muted">{formatCents((counts[denomination.key] ?? 0) * denomination.cents)}</span></span>
-                <input className="min-h-11 rounded-lg border border-wayne-border px-2 text-lg font-black" inputMode="numeric" min={0} onChange={(event) => { const value = Math.max(0, Math.floor(Number(event.target.value) || 0)); setTypedTotal(""); setCounts((current) => ({ ...current, [denomination.key]: value })); }} placeholder="0" type="number" value={counts[denomination.key] ?? ""} />
-              </label>)}
-            </div>
-            <label className="mt-3 grid gap-1 text-sm font-bold">Or type the total counted ($)
-              <input className="min-h-11 rounded-lg border border-wayne-border px-3 text-lg font-black" inputMode="decimal" onChange={(event) => setTypedTotal(event.target.value)} placeholder={Object.keys(counts).length ? (billTotal / 100).toFixed(2) : "0.00"} value={typedTotal} />
+            {/* Just the total (owner, 2026-10-19): no bill-by-bill counting. */}
+            <label className="grid gap-1 text-sm font-bold">Total cash counted ($)
+              <input className="min-h-14 rounded-lg border border-wayne-border px-3 text-2xl font-black" inputMode="decimal" onChange={(event) => setTypedTotal(event.target.value)} placeholder="0.00" value={typedTotal} />
             </label>
           </div>
           <div className="grid content-start gap-2 rounded-2xl bg-wayne-cream p-4">

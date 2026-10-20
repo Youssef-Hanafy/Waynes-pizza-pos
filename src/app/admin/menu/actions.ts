@@ -498,9 +498,11 @@ function specialsRedirect(message: string, key: "error" | "saved" = "saved"): ne
 }
 
 /*
- * Specials (owner, 2026-10-19): any menu item can be a special.  The POS lists
- * specials under one "Specials" button and, when "Show on the website" is on,
- * the Offers page lists them for everyone.
+ * Specials (owner, 2026-10-19): a special is POS-only.  "Make it a special"
+ * makes a separate copy of the menu item (sizes, options, what it comes with)
+ * with its own price; it shows only under the POS Specials button, for
+ * walk-ins and pickups.  The regular item, the online menu and the website
+ * never change.
  */
 export async function saveSpecialAction(formData: FormData) {
   await requirePermission("menu.manage", "/admin/menu/specials");
@@ -511,31 +513,58 @@ export async function saveSpecialAction(formData: FormData) {
   const endsOn = String(formData.get("special_ends_on") ?? "").trim();
   if (endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) specialsRedirect("Pick a valid end date, or leave it empty.", "error");
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from("menu_items")
-    .update({ special: true, special_note: note, special_ends_on: endsOn || null, special_online: formData.get("special_online") === "on" })
-    .eq("id", id.data!)
-    .is("archived_at", null)
-    .select("name")
-    .maybeSingle();
-  if (error || !data) specialsRedirect(error?.message ?? "That menu item could not be found.", "error");
+  const { data: item, error: readError } = await supabase.from("menu_items").select("id,name,special").eq("id", id.data!).is("archived_at", null).maybeSingle();
+  if (readError || !item) specialsRedirect(readError?.message ?? "That menu item could not be found.", "error");
+  let message: string;
+  if (item!.special) {
+    // A running special: its headline and end date.
+    const { error } = await supabase.from("menu_items")
+      .update({ special_note: note, special_ends_on: endsOn || null, special_online: false, customer_visible: false })
+      .eq("id", item!.id);
+    if (error) specialsRedirect(error.message, "error");
+    message = `${item!.name} special saved.`;
+  } else {
+    // A regular item: the special is its own copy, so the regular item never changes.
+    const { error } = await supabase.rpc("wayne_make_special", { source_item_id: item!.id, headline: note, ends_on: endsOn || null });
+    if (error) specialsRedirect(error.message, "error");
+    message = `${item!.name} special added — it's only under ⭐ Specials on the POS. Set its special price with “Edit price & options”.`;
+  }
   revalidateMenu();
   revalidatePath("/offers");
   revalidatePath("/pos");
+  revalidatePath("/admin/menu");
   revalidatePath("/admin/menu/specials");
-  specialsRedirect(`${data!.name} is a special.`);
+  specialsRedirect(message);
 }
 
+/** Stop a special: its copy is taken off the POS (kept for past orders); the regular item is untouched. */
 export async function removeSpecialAction(formData: FormData) {
   await requirePermission("menu.manage", "/admin/menu/specials");
   const id = z.uuid().safeParse(formData.get("id"));
   if (!id.success) specialsRedirect("That special could not be found.", "error");
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.from("menu_items").update({ special: false }).eq("id", id.data!).select("name").maybeSingle();
+  const { data, error } = await supabase.from("menu_items")
+    .update({ archived_at: new Date().toISOString(), pos_visible: false, customer_visible: false })
+    .eq("id", id.data!).eq("special", true).is("archived_at", null)
+    .select("name").maybeSingle();
   if (error || !data) specialsRedirect(error?.message ?? "That special could not be found.", "error");
   revalidateMenu();
   revalidatePath("/offers");
   revalidatePath("/pos");
+  revalidatePath("/admin/menu");
   revalidatePath("/admin/menu/specials");
-  specialsRedirect(`${data!.name} is no longer a special (it stays on the menu).`);
+  specialsRedirect(`The ${data!.name} special is stopped (the regular ${data!.name} stays on the menu).`);
+}
+
+/** POS: the item adds itself to the ticket once its first option group is filled (owner, 2026-10-19). */
+export async function savePosAutoAddAction(formData: FormData) {
+  await requirePermission("menu.manage", "/admin/menu");
+  const id = z.uuid().safeParse(formData.get("id"));
+  if (!id.success) redirect("/admin/menu");
+  const on = formData.get("pos_auto_add") === "on";
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.from("menu_items").update({ pos_auto_add: on }).eq("id", id.data!).is("archived_at", null);
+  revalidatePath("/pos");
+  revalidatePath(`/admin/menu/items/${id.data!}`);
+  redirect(`/admin/menu/items/${id.data!}?${error ? `error=${encodeURIComponent(error.message)}` : `saved=${encodeURIComponent(on ? "Adds itself to the POS ticket once its first choice is picked." : "Auto-add switched off — the POS waits for Add to ticket.")}`}`);
 }

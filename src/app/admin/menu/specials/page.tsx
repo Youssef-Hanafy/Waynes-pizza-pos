@@ -26,13 +26,14 @@ type Item = {
 type Category = { id: string; name: string };
 
 /**
- * Specials (owner, 2026-10-19): "an area to add specials … that you can add in
- * the POS when a customer is making an order … and it also adds to the online
- * for public offers."
+ * Specials (owner, 2026-10-19, evening): "the special section should only be
+ * for specials … only if you click it, it's not for the whole menu or online",
+ * for walk-ins, pickups and phone pickups.
  *
- * A special is a menu item marked as one, so it keeps its own sizes, options
- * and price.  The POS shows every special under one ⭐ Specials button; with
- * "Show on the website" on, the Offers page lists it for everyone.
+ * Making an item a special makes its own copy (sizes, options, what it comes
+ * with) with its own price.  The copy shows only under the POS ⭐ Specials
+ * button, on walk-in and pickup orders; the regular item, the online menu and
+ * the website never change.
  */
 export default async function SpecialsPage({ searchParams }: { searchParams: Promise<{ add?: string; saved?: string; error?: string }> }) {
   await requirePermission("menu.manage", "/admin/menu/specials");
@@ -58,9 +59,10 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
       <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red"><Link className="hover:underline" href="/admin/menu">Menu</Link> / Specials</p>
       <h1 className="mt-3 text-4xl font-black">⭐ Specials</h1>
       <p className="mt-3 max-w-3xl text-wayne-muted">
-        Any menu item can be a special. On the POS they all sit under one <strong>⭐ Specials</strong> button, so whoever is taking the order can ring one up straight away.
-        With <strong>Show on the website</strong> on, it is also listed on the website&apos;s Offers page for everyone. To sell a brand-new deal
-        (e.g. “2 Large Cheese + 2-Liter $24.99”), first <Link className="font-bold underline" href="/admin/menu/new">create it as a menu item</Link> with its price and choices, then add it here.
+        Specials are for the POS only: they sit under the <strong>⭐ Specials</strong> button for walk-in, pickup and phone pickup orders — never in the regular menu,
+        never on deliveries, never online. Making an item a special makes <strong>its own copy</strong> with its own price, so the regular item doesn&apos;t change.
+        After adding one, set its special price with <strong>Edit price &amp; options</strong>. For a brand-new deal (e.g. “2 Large Cheese + 2-Liter $24.99”), first
+        {" "}<Link className="font-bold underline" href="/admin/menu/new">create it as a menu item</Link> (untick “show online”), then add it here.
       </p>
       {params.saved ? <p className="mt-5 rounded-xl border border-wayne-ok/30 bg-wayne-ok-soft p-4 font-semibold text-wayne-ok">{params.saved}</p> : null}
       {params.error ? <p className="mt-5 rounded-xl border border-wayne-alert/30 bg-wayne-alert-soft p-4 font-semibold text-wayne-alert">{params.error}</p> : null}
@@ -82,23 +84,22 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-wayne-muted">{categoryName.get(item.category_id) ?? "Menu"}</p>
                     <h3 className="text-xl font-black">{item.name} <span className="font-bold text-wayne-red">{formatCents(item.base_price_cents)}</span></h3>
                     <p className="mt-1 text-sm font-bold">
-                      {ended ? <span className="text-wayne-alert">Ended {item.special_ends_on} — not on the POS or the website</span> : item.special_ends_on ? `Runs through ${item.special_ends_on}` : "No end date"}
-                      {" · "}{item.special_online && item.customer_visible ? "On the website" : item.special_online ? "Hidden item — not on the website" : "POS only"}
+                      {ended ? <span className="text-wayne-alert">Ended {item.special_ends_on} — not on the POS</span> : item.special_ends_on ? `Runs through ${item.special_ends_on}` : "No end date"}
+                      {" · "}POS Specials only · walk-in &amp; pickup
                       {item.sold_out ? " · Sold out" : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit item, price &amp; options</Link></Button>
+                    <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit price &amp; options</Link></Button>
                     <form action={removeSpecialAction}><input name="id" type="hidden" value={item.id} /><Button type="submit" variant="danger">Stop the special</Button></form>
                   </div>
                 </div>
-                <form action={saveSpecialAction} className="mt-4 grid gap-3 border-t border-wayne-border pt-4 md:grid-cols-[1fr_12rem_auto_auto] md:items-end">
+                <form action={saveSpecialAction} className="mt-4 grid gap-3 border-t border-wayne-border pt-4 md:grid-cols-[1fr_12rem_auto] md:items-end">
                   <input name="id" type="hidden" value={item.id} />
-                  <Field defaultValue={item.special_note} label="Headline (shown on the POS button and the website)" name="special_note" />
+                  <Field defaultValue={item.special_note} label="Headline (shown on the POS button)" name="special_note" />
                   <label className="grid gap-1.5 text-sm font-semibold">Ends on (optional)
                     <input className="min-h-11 rounded-lg border border-wayne-border px-3 font-normal" defaultValue={item.special_ends_on ?? ""} name="special_ends_on" type="date" />
                   </label>
-                  <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input className="size-5 accent-wayne-red" defaultChecked={item.special_online} name="special_online" type="checkbox" />Show on the website</label>
                   <Button type="submit">Save</Button>
                 </form>
               </Card>
@@ -134,7 +135,7 @@ function SpecialForm({ items, categories, selected, today }: { items: Item[]; ca
           <input className="min-h-11 rounded-lg border border-wayne-border px-3 font-normal" min={today} name="special_ends_on" type="date" />
         </label>
       </div>
-      <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input className="size-5 accent-wayne-red" defaultChecked name="special_online" type="checkbox" />Show on the website&apos;s Offers page</label>
+      <p className="text-sm text-wayne-muted">This makes a separate copy of the item for the POS Specials button only. The regular item stays exactly as it is.</p>
       <div className="flex flex-wrap gap-2">
         <Button type="submit">⭐ Make it a special</Button>
         {selected ? <Button asChild variant="secondary"><Link href="/admin/menu/specials">Choose a different item</Link></Button> : null}

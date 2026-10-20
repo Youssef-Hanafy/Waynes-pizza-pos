@@ -120,6 +120,13 @@ export const publicMenuItemSchema = z.object({
   /** A special today (Admin → Menu → Specials); the POS lists these under one Specials button. */
   special: z.boolean().optional(),
   special_note: z.string().optional(),
+  /**
+   * The item IS a special (even one that has ended): POS-only, never in its
+   * regular category — it shows only under the Specials button (owner, 2026-10-19).
+   */
+  special_item: z.boolean().optional(),
+  /** POS: adds itself to the ticket once its first option group is filled, e.g. One Topping Pizza (owner, 2026-10-19). */
+  pos_auto_add: z.boolean().optional(),
   available_days: z.array(z.number().int()),
   available_start: z.string().nullable(),
   available_end: z.string().nullable(),

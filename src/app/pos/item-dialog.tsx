@@ -58,23 +58,55 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
       return;
     }
     setError("");
-    setSelectedChoices((current) => ({ ...current, [choiceId]: safeCount }));
+    const next = { ...selectedChoices, [choiceId]: safeCount };
+    setSelectedChoices(next);
+    if (safeCount > currentCount && group.id === pickGroup?.id && sizeTapped && pickComplete(next, variantId)) addWith(next, variantId);
   }
 
-  function add() {
+  function add() { addWith(selectedChoices, variantId); }
+
+  function addWith(choices: Record<string, number>, chosenVariantId: string | null) {
+    const chosenName = item.variants.find((variant) => variant.id === chosenVariantId)?.name ?? null;
     for (const group of item.modifier_groups) {
-      const count = groupCount(group);
+      const count = group.choices.reduce((total, choice) => total + (choices[choice.id] ?? 0), 0);
       if (count < group.min_select || count > group.max_select || (group.required && !count)) {
         setError(`${group.customer_label}: choose ${group.min_select}–${group.max_select}.`);
         return;
       }
-      const rule = ruleFor(group);
-      if (rule?.max_portions && countedPortions(group, selectedChoices) > rule.max_portions) {
-        setError(`${group.customer_label}: up to ${rule.max_portions}${variantName ? ` on a ${variantName}` : ""}. Take some off first.`);
+      const rule = groupSizeRule(group, chosenName);
+      if (rule?.max_portions && countedPortions(group, choices) > rule.max_portions) {
+        setError(`${group.customer_label}: up to ${rule.max_portions}${chosenName ? ` on a ${chosenName}` : ""}. Take some off first.`);
         return;
       }
     }
-    onAdd({ ...draftLine, line_id: initialLine?.line_id ?? uuid() });
+    onAdd({
+      ...draftLine,
+      variant_id: chosenVariantId,
+      modifiers: Object.entries(choices).filter(([, count]) => count > 0).map(([choice_id, count]) => ({ choice_id, quantity: count })),
+      line_id: initialLine?.line_id ?? uuid(),
+    });
+  }
+
+  /**
+   * Auto-add (owner, 2026-10-19): an item marked in Admin (One / Two / Three
+   * Topping Pizza) goes on the ticket by itself the moment its first option
+   * group is full — e.g. the topping on a One Topping Pizza — once the size
+   * has been tapped.  Every other item keeps its Add to ticket button, and
+   * editing a line on the ticket never adds by itself.
+   */
+  const pickGroup = !initialLine && item.pos_auto_add ? item.modifier_groups[0] ?? null : null;
+  const [sizeTapped, setSizeTapped] = useState(item.variants.length <= 1);
+  function pickComplete(choices: Record<string, number>, chosenVariantId: string | null) {
+    if (!pickGroup) return false;
+    const rule = groupSizeRule(pickGroup, item.variants.find((variant) => variant.id === chosenVariantId)?.name ?? null);
+    const target = groupMaxPortions(pickGroup, rule);
+    const picked = rule ? countedPortions(pickGroup, choices) : pickGroup.choices.reduce((total, choice) => total + (choices[choice.id] ?? 0), 0);
+    return target > 0 && picked >= target;
+  }
+  function chooseSize(nextVariantId: string) {
+    setVariantId(nextVariantId);
+    setSizeTapped(true);
+    if (pickComplete(selectedChoices, nextVariantId)) addWith(selectedChoices, nextVariantId);
   }
 
   return <div aria-modal="true" className="fixed inset-0 z-50 bg-black/60 p-3 sm:grid sm:place-items-center" role="dialog">
@@ -86,7 +118,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
       <div className="overflow-y-auto p-5">
         <ComesWithPanel included={included} onToggle={(group, choiceId, on) => setChoiceCount(group, choiceId, on ? 1 : 0)} selectedChoices={selectedChoices} />
         <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-wayne-muted"><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-wayne-ok" /> on the item</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-wayne-red" /> comes with it, taken off</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-wayne-border bg-white" /> not on it</span><span>Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.</span></p>
-        {item.variants.length ? <fieldset className="mt-5"><legend className="font-black">Size</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{item.variants.map((variant) => <button className={`min-h-14 rounded-xl border p-3 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => setVariantId(variant.id)} type="button"><span className="block font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
+        {item.variants.length ? <fieldset className="mt-5"><legend className="font-black">Size{pickGroup && !sizeTapped ? <span className="ml-2 font-bold text-wayne-red">tap the size first — the item adds itself once its {pickGroup.customer_label.toLowerCase()} {pickGroup.max_select === 1 ? "is" : "are"} picked</span> : null}</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{item.variants.map((variant) => <button className={`min-h-14 rounded-xl border p-3 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => chooseSize(variant.id)} type="button"><span className="block font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
         {item.modifier_groups.length ? item.modifier_groups.map((group) => {
           const rule = ruleFor(group);
           const allowance = rule ? groupAllowanceLines(group, rule, variantId, Object.entries(selectedChoices).map(([choice_id, quantity]) => ({ choice_id, quantity }))) : [];

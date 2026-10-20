@@ -7,6 +7,8 @@ import {
   type PosCashoutResult, type PosDeliveryBoard, type PosDeliveryOrder,
 } from "@/lib/delivery/pos-board";
 import { formatCents } from "@/lib/menu/schemas";
+import { deliveryDayReportSchema, driverTipsLayout, type DeliveryDayDriver } from "@/lib/delivery/day-report";
+import { getHardwareRuntime } from "@/stores/hardware-store";
 import { PinPad } from "@/components/ui/pin-pad";
 import { ClockButton } from "./clock-button";
 
@@ -51,13 +53,13 @@ function minutesAgo(iso: string | null | undefined) {
  *                        charges each delivery card once (order + the tip on
  *                        the signed slip), and pays the tips out of the drawer.
  */
-export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
+export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { timeZone: string; storeName?: string }) {
   const [board, setBoard] = useState<PosDeliveryBoard | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [tips, setTips] = useState<Record<string, string>>({});
   const [cashingOut, setCashingOut] = useState<string | null>(null);
-  const [result, setResult] = useState<(PosCashoutResult & { problems: string[] }) | null>(null);
+  const [result, setResult] = useState<(PosCashoutResult & { problems: string[]; driver_id: string }) | null>(null);
   const mounted = useRef(true);
   // Orders ticked to go out together; the driver then types his PIN.
   const [selected, setSelected] = useState<string[]>([]);
@@ -65,6 +67,32 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
   const [pinBusy, setPinBusy] = useState(false);
   const [pinError, setPinError] = useState("");
   const [notice, setNotice] = useState("");
+  const [printNote, setPrintNote] = useState("");
+
+  /**
+   * The driver's tips receipt (owner, 2026-10-19: "when closing out a shift
+   * print a receipt for driver total tips for the day"): this cash-out and
+   * the driver's total tips for the whole day.  Printed by itself after each
+   * cash-out; "Print tips slip" prints it again.
+   */
+  async function printDriverTips(driverId: string, driverName: string, cashout: PosCashoutResult | null) {
+    const runtime = getHardwareRuntime();
+    if (!runtime) { setPrintNote("Printing is still starting up — tap Print tips slip in a moment."); return; }
+    setPrintNote("Printing the tips slip…");
+    let day = new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+    let today: DeliveryDayDriver | null = null;
+    try {
+      const response = await fetch("/api/pos/delivery/day-report", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      const parsed = deliveryDayReportSchema.safeParse(response.ok ? await response.json() : null);
+      if (parsed.success) { day = parsed.data.day; today = parsed.data.drivers.find((driver) => driver.driver_id === driverId) ?? null; }
+    } catch { /* the slip still prints this cash-out without the day's total */ }
+    try {
+      const result = await runtime.receiptPrinter.printLayout(driverTipsLayout({ storeName, day, driverName, cashout, today, timeZone }));
+      setPrintNote(result.ok ? `Tips slip for ${driverName} sent to the receipt printer.${today ? "" : " (Today's total couldn't be loaded — reprint in a moment.)"}` : result.reason);
+    } catch (cause) {
+      setPrintNote(cause instanceof Error ? cause.message : "The tips slip could not be printed.");
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -145,7 +173,10 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
       if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "The cash-out could not be saved.");
       const parsed = posCashoutResultSchema.safeParse(body);
       const problems = body && typeof body === "object" && "problems" in body && Array.isArray((body as { problems: unknown }).problems) ? (body as { problems: string[] }).problems : [];
-      if (parsed.success) setResult({ ...parsed.data, problems });
+      if (parsed.success) {
+        setResult({ ...parsed.data, problems, driver_id: driverId });
+        void printDriverTips(driverId, parsed.data.driver_name, parsed.data);
+      }
       setCashingOut(null);
       setTips((current) => {
         const next = { ...current };
@@ -190,8 +221,12 @@ export function DeliveriesScreen({ timeZone }: { timeZone: string }) {
             <p className="mt-1 text-4xl font-black">{result.hand_in_cents >= 0 ? `Hands in ${formatCents(result.hand_in_cents)}` : `Pay ${result.driver_name} ${formatCents(-result.hand_in_cents)}`}</p>
             <p className="mt-1 text-sm text-wayne-muted">{result.order_count} deliveries · cash orders {formatCents(result.cash_orders_cents)} · card tips {formatCents(result.card_tips_cents)} · cash tips kept {formatCents(result.cash_tips_cents)}</p>
           </div>
-          <Button onClick={() => setResult(null)} variant="secondary">Done</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => { void printDriverTips(result.driver_id, result.driver_name, result); }} variant="secondary">🖨 Print tips slip</Button>
+            <Button onClick={() => { setResult(null); setPrintNote(""); }} variant="secondary">Done</Button>
+          </div>
         </div>
+        {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
         {result.detail.length ? <table className="mt-3 w-full text-left text-sm">
           <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-4 text-right">Tip</th><th>Driver</th></tr></thead>
           <tbody>{result.detail.map((line) => {

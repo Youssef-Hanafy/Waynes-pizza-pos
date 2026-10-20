@@ -253,7 +253,7 @@ export function PosApp(props: Props) {
       setPayFocus(null); setSection("order");
     }} onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
-    {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen timeZone={settings.timezone} /> : null}
+    {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen storeName={settings.store_name || workspaceName} timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "tips" && canCloseOut ? <TipsScreen onOpenDeliveries={canManageOrders && deliveryEnabled && settings.delivery_enabled ? () => setSection("delivery") : undefined} /> : null}
     {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
