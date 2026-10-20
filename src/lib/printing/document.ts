@@ -176,7 +176,7 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
 }
 
 export function readableSlipLines(lines: PrintLine[]): PrintLine[] {
-  return lines.map((line) => line.kind === "pair" ? { ...line, large: true } : line.kind === "text" && !line.large ? { ...line, tall: true } : line);
+  return lines.map((line) => line.kind === "text" || line.kind === "pair" ? { ...line, large: false, tall: true } : line);
 }
 
 /**
@@ -187,11 +187,11 @@ export function buildOnlineOrderSlip(doc: PrintDocument): PrintLayout {
   const receipt = buildReceipt(doc);
   return {
     title: `Online order ${doc.order.order_number}`,
-    lines: [
+    lines: readableSlipLines([
       { kind: "text", text: "*** ONLINE ORDER ***", align: "center", bold: true, large: true },
       { kind: "feed", lines: 1 },
       ...receipt.lines,
-    ],
+    ]),
   };
 }
 

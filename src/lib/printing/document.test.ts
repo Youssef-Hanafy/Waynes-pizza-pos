@@ -21,19 +21,23 @@ const doc: PrintDocument = {
 };
 
 describe("receipts and kitchen tickets (build sheet §23)", () => {
-  it("uses readable body text and large figures across every order slip, even with a Normal printer setting", () => {
+  it("matches every order slip line to kitchen item text without oversized headings or figures", () => {
     const pickup = { ...doc, order: { ...doc.order, fulfillment_type: "pickup" as const } };
     for (const layout of [buildReceipt(doc), buildReceipt(pickup), buildOnlineOrderSlip(pickup), buildTipSignatureSlip(doc), buildTipSignatureSlip(pickup), buildKitchenTicket(doc)!]) {
       for (const line of layout.lines) {
-        if (line.kind === "text") expect(line.large || line.tall, `${layout.title}: ${line.text}`).toBe(true);
-        if (line.kind === "pair") expect(line.large, `${layout.title}: ${line.left}`).toBe(true);
+        if (line.kind === "text" || line.kind === "pair") {
+          expect(line.tall).toBe(true);
+          expect(line.large).toBe(false);
+        }
       }
       const totals = { ...layout, lines: layout.lines.filter((line) => line.kind === "pair" && line.right === "$33.99") };
       const output = String.fromCharCode(...encodeEscPos(totals, { columns: 48, textSize: "normal", cut: "none" }));
       const amount = output.indexOf("$33.99");
       expect(amount).toBeGreaterThan(0);
       const sizeCommand = output.lastIndexOf("\x1d\x21", amount);
-      expect(output.charCodeAt(sizeCommand + 2)).toBe(0x11);
+      expect(output.charCodeAt(sizeCommand + 2)).toBe(0x01);
+      const html = renderLayoutHtml(layout, 80, "normal");
+      expect(html).not.toMatch(/class="[^"]*\bl\b/);
     }
   });
 

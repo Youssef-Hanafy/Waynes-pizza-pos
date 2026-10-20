@@ -13,12 +13,14 @@ const deliveries = deliveryDayReportSchema.parse({
 });
 
 describe("close out cash count (owner, 2026-10-13)", () => {
-  it("makes manager, delivery and driver closeouts readable regardless of the saved small-font setting", () => {
+  it("matches manager, delivery and driver closeout text and figures to kitchen item size", () => {
     const layouts = [closeoutLayout(report, "Wayne's Pizza", 20000, true, "Manager with a long name"), deliveryCloseoutLayout(deliveries, "Wayne's Pizza"), driverTipsLayout({ storeName: "Wayne's Pizza", day: report.day, driverName: deliveries.drivers[0]!.name, cashout: null, today: deliveries.drivers[0]! })];
     for (const layout of layouts) {
       for (const line of layout.lines) {
-        if (line.kind === "pair") expect(line.large, `${layout.title}: ${line.left}`).toBe(true);
-        if (line.kind === "text") expect(line.large || line.tall, `${layout.title}: ${line.text}`).toBe(true);
+        if (line.kind === "pair" || line.kind === "text") {
+          expect(line.tall).toBe(true);
+          expect(line.large).toBe(false);
+        }
       }
       expect(() => encodeEscPos(layout, { columns: 32, textSize: "xlarge", cut: "none" })).not.toThrow();
     }
