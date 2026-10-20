@@ -97,7 +97,20 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     </button>
   );
 
-  const needsStreet = kind === "delivery" && !draft.started && Boolean(startProblem(draft, "delivery", settings)) && settings.delivery_enabled;
+  /*
+   * The delivery address step stays open once it has opened (owner,
+   * 2026-10-20: "as soon as you press the first letter it closes it out").
+   * It used to show only while the street was empty, so the first letter
+   * typed counted as "address entered" and the whole step — box, keyboard
+   * focus and suggestions — vanished.  Now it closes only when the ticket
+   * starts (an address is picked from the list or "Go to the menu" is
+   * tapped), or the cashier switches to Walk-in / Pickup.
+   */
+  const missingStreet = kind === "delivery" && !draft.started && settings.delivery_enabled && Boolean(startProblem(draft, "delivery", settings));
+  const [streetOpen, setStreetOpen] = useState(missingStreet);
+  if (missingStreet && !streetOpen) setStreetOpen(true);
+  if (kind !== "delivery" && streetOpen) setStreetOpen(false);
+  const needsStreet = kind === "delivery" && !draft.started && settings.delivery_enabled && (missingStreet || streetOpen);
 
   return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-4">
     <section aria-labelledby="start-order-title" className="w-full min-w-0 max-w-4xl rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5">
