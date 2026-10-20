@@ -10,6 +10,8 @@ export type OptionSection = {
   max_select: number;
   required: boolean;
   allow_quantities: boolean;
+  /** Left / Whole / Right buttons on the POS (pizza toppings). */
+  allow_halves?: boolean;
   /** How many of the category's items have this section. */
   item_count: number;
   /**
@@ -47,6 +49,7 @@ type SectionState = {
   max: string;
   required: boolean;
   allowQuantities: boolean;
+  allowHalves: boolean;
   addToAll: boolean;
   itemCount: number;
   choices: ChoiceState[];
@@ -87,6 +90,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
     max: String(section.max_select),
     required: section.required,
     allowQuantities: section.allow_quantities,
+    allowHalves: Boolean(section.allow_halves),
     addToAll: false,
     itemCount: section.item_count,
     original: section,
@@ -181,7 +185,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         });
         sizeRules.push({ label: section.label.trim() || section.key, rules });
       }
-      const rulesChanged = section.label.trim() !== original.label || min !== original.min_select || max !== original.max_select || section.required !== original.required || section.allowQuantities !== original.allow_quantities;
+      const rulesChanged = section.label.trim() !== original.label || min !== original.min_select || max !== original.max_select || section.required !== original.required || section.allowQuantities !== original.allow_quantities || section.allowHalves !== Boolean(original.allow_halves);
       if (!rulesChanged && !choices.length && !section.addToAll) return null;
       return {
         key: section.key,
@@ -190,6 +194,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         max_select: max,
         required: section.required,
         allow_quantities: section.allowQuantities,
+        allow_halves: section.allowHalves,
         add_to_all_items: section.addToAll,
         choices,
       };
@@ -221,6 +226,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
             <label className="grid w-24 gap-1 text-sm font-bold">Most<input className="min-h-11 rounded-lg border border-wayne-border px-3" inputMode="numeric" onChange={(e) => patchSection(sectionIndex, { max: e.target.value })} value={section.max} /></label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold"><input checked={section.required} className="h-5 w-5 accent-wayne-red" onChange={(e) => patchSection(sectionIndex, { required: e.target.checked })} type="checkbox" />Required</label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold"><input checked={section.allowQuantities} className="h-5 w-5 accent-wayne-red" onChange={(e) => patchSection(sectionIndex, { allowQuantities: e.target.checked })} type="checkbox" />Extra portions allowed</label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-bold"><input checked={section.allowHalves} className="h-5 w-5 accent-wayne-red" onChange={(e) => patchSection(sectionIndex, { allowHalves: e.target.checked })} type="checkbox" />Left / right halves (POS)</label>
           </div>
           <div className="mt-4 rounded-xl border border-wayne-ok/40 bg-wayne-ok-soft/40 p-3">
             <p className="text-sm font-black">Comes with (free) — e.g. a Large comes with 3 sauces, any mix, 2 of the same is fine</p>

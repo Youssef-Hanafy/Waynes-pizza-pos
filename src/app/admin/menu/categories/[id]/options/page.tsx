@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 type ItemRow = { id: string; name: string };
 type VariantRow = { id: string; menu_item_id: string; name: string };
 type LinkRow = { menu_item_id: string; modifier_group_id: string; sort_order: number };
-type GroupRow = { id: string; customer_label: string; min_select: number; max_select: number; required: boolean; allow_quantities: boolean };
+type GroupRow = { id: string; customer_label: string; min_select: number; max_select: number; required: boolean; allow_quantities: boolean; allow_halves: boolean };
 type ChoiceRow = { id: string; modifier_group_id: string; name: string; price_delta_cents: number; sort_order: number };
 type PriceRow = { modifier_choice_id: string; menu_item_variant_id: string; price_delta_cents: number };
 type RuleRow = { modifier_group_id: string; size_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null };
@@ -50,7 +50,7 @@ export default async function CategoryOptionsPage({
   const groupIds = [...new Set(links.map((link) => link.modifier_group_id))];
   const [{ data: groupData }, { data: choiceData }] = groupIds.length
     ? await Promise.all([
-        supabase.from("modifier_groups").select("id,customer_label,min_select,max_select,required,allow_quantities").in("id", groupIds).eq("active", true).is("archived_at", null),
+        supabase.from("modifier_groups").select("id,customer_label,min_select,max_select,required,allow_quantities,allow_halves").in("id", groupIds).eq("active", true).is("archived_at", null),
         supabase.from("modifier_choices").select("id,modifier_group_id,name,price_delta_cents,sort_order").in("modifier_group_id", groupIds).eq("active", true).is("archived_at", null).order("sort_order"),
       ])
     : [{ data: [] }, { data: [] }];
@@ -72,20 +72,20 @@ export default async function CategoryOptionsPage({
   for (const link of links) linksByGroup.set(link.modifier_group_id, [...(linksByGroup.get(link.modifier_group_id) ?? []), link]);
 
   // One section per label, in the order items show them.
-  const sections = new Map<string, OptionSection & { order: number; mins: number[]; maxes: number[]; requireds: boolean[]; quantities: boolean[]; itemSet: Set<string> }>();
+  const sections = new Map<string, OptionSection & { order: number; mins: number[]; maxes: number[]; requireds: boolean[]; quantities: boolean[]; halves: boolean[]; itemSet: Set<string> }>();
   for (const link of links) {
     const group = groups.get(link.modifier_group_id);
     if (!group) continue;
     const key = group.customer_label.trim().toLowerCase();
     let section = sections.get(key);
     if (!section) {
-      section = { key: group.customer_label.trim(), label: group.customer_label.trim(), min_select: 0, max_select: 1, required: false, allow_quantities: false, item_count: 0, choices: [], size_rules: {}, order: link.sort_order, mins: [], maxes: [], requireds: [], quantities: [], itemSet: new Set() };
+      section = { key: group.customer_label.trim(), label: group.customer_label.trim(), min_select: 0, max_select: 1, required: false, allow_quantities: false, allow_halves: false, item_count: 0, choices: [], size_rules: {}, order: link.sort_order, mins: [], maxes: [], requireds: [], quantities: [], halves: [], itemSet: new Set() };
       sections.set(key, section);
     }
     section.order = Math.min(section.order, link.sort_order);
     section.itemSet.add(link.menu_item_id);
     section.mins.push(group.min_select); section.maxes.push(group.max_select);
-    section.requireds.push(group.required); section.quantities.push(group.allow_quantities);
+    section.requireds.push(group.required); section.quantities.push(group.allow_quantities); section.halves.push(Boolean(group.allow_halves));
   }
   for (const section of sections.values()) {
     const sectionGroupIds = new Set(links.filter((link) => groups.get(link.modifier_group_id)?.customer_label.trim().toLowerCase() === section.key.toLowerCase()).map((link) => link.modifier_group_id));
@@ -124,6 +124,7 @@ export default async function CategoryOptionsPage({
     section.max_select = Math.max(...section.maxes);
     section.required = section.requireds.every(Boolean);
     section.allow_quantities = section.quantities.some(Boolean);
+    section.allow_halves = section.halves.some(Boolean);
     // Included portions per size, read from the first group that has any.
     const ruleGroup = [...sectionGroupIds].find((groupId) => rules.some((rule) => rule.modifier_group_id === groupId));
     section.size_rules = Object.fromEntries(rules.filter((rule) => rule.modifier_group_id === ruleGroup).map((rule) => [
@@ -132,7 +133,7 @@ export default async function CategoryOptionsPage({
   }
   const ordered: OptionSection[] = [...sections.values()].sort((a, b) => a.order - b.order).map((section) => ({
     key: section.key, label: section.label, min_select: section.min_select, max_select: section.max_select,
-    required: section.required, allow_quantities: section.allow_quantities, item_count: section.item_count, choices: section.choices,
+    required: section.required, allow_quantities: section.allow_quantities, allow_halves: section.allow_halves, item_count: section.item_count, choices: section.choices,
     size_rules: section.size_rules,
   }));
 

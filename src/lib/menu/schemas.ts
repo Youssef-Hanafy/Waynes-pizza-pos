@@ -36,6 +36,8 @@ export const modifierGroupSchema = z.object({
   max_select: z.number().int().min(1).max(100),
   required: z.boolean(),
   allow_quantities: z.boolean(),
+  /** Left / right halves on a pizza (owner, 2026-10-20). */
+  allow_halves: z.boolean().default(false),
   choices: z.array(modifierChoiceSchema).min(1).max(100)
 }).refine((value) => value.max_select >= value.min_select, {
   message: "Maximum selections must be at least the minimum.",
@@ -92,6 +94,8 @@ export const publicMenuGroupSchema = z.object({
   max_select: z.number().int().min(1).max(100),
   required: z.boolean(),
   allow_quantities: z.boolean(),
+  /** The POS offers Left / Whole / Right for each option (pizza toppings, owner 2026-10-20). */
+  allow_halves: z.boolean().optional(),
   /**
    * Included portions per size (owner, 2026-10-12): "a Large comes with 3
    * sauces, up to 5, each extra $0.75".  variant_name "" = any size.

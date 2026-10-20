@@ -238,6 +238,18 @@ describe("toppings an item comes with", () => {
     expect(describeLineModifiers(meatLovers, { modifiers: [{ choice_id: pepperoni.id, quantity: 1 }, { choice_id: salami.id, quantity: 1 }] })).toEqual([]);
   });
 
+  it("says which half a topping is on, and charges a half the same as a whole (owner, 2026-10-20)", () => {
+    const halves = describeLineModifiers(meatLovers, { modifiers: [
+      { choice_id: pepperoni.id, quantity: 1, placement: "left" },
+      { choice_id: salami.id, quantity: 2, placement: "right" },
+      { choice_id: mushrooms.id, quantity: 1, placement: "left" },
+    ] });
+    expect(halves.map((note) => note.label)).toEqual(["LEFT ½ Pepperoni", "RIGHT ½ Salami", "RIGHT ½ Extra Salami", "LEFT ½ Mushrooms"]);
+    const whole = { ...base, modifiers: [{ choice_id: pepperoni.id, quantity: 1 }, { choice_id: salami.id, quantity: 2 }, { choice_id: mushrooms.id, quantity: 1 }] };
+    const sided = { ...base, modifiers: [{ choice_id: pepperoni.id, quantity: 1, placement: "left" as const }, { choice_id: salami.id, quantity: 2, placement: "right" as const }, { choice_id: mushrooms.id, quantity: 1, placement: "left" as const }] };
+    expect(cartLineUnitCents(pizzaMenu, sided)).toBe(cartLineUnitCents(pizzaMenu, whole));
+  });
+
   it("lets extra portions of a topping it comes with be added (Hawaiian: extra ham and pineapple)", () => {
     const meats = { allow_quantities: true };
     expect(choiceAllowsExtra(meats, { name: "Ham" })).toBe(true);

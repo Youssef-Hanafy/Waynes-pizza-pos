@@ -33,6 +33,8 @@ const editorConfigSchema = z.object({
         max_select: z.number().int(),
         required: z.boolean(),
         allow_quantities: z.boolean(),
+        // Left / right halves on the POS (owner, 2026-10-20). Kept on every save.
+        allow_halves: z.boolean().default(false),
         choices: z
           .array(
             z.object({
@@ -400,6 +402,8 @@ const categoryOptionsSchema = z.object({
         max_select: z.number().int().min(1).max(200),
         required: z.boolean(),
         allow_quantities: z.boolean(),
+        // Left / right halves on the POS; absent = leave as it is.
+        allow_halves: z.boolean().optional(),
         add_to_all_items: z.boolean(),
         choices: z
           .array(

@@ -80,6 +80,11 @@ export function includedSelection(item: ItemLike): Record<string, number> {
 
 export type LineModifierNote = { kind: "removed" | "extra" | "added"; label: string };
 
+/** "LEFT ½ " / "RIGHT ½ " in front of a topping on one half of a pizza (same words as the kitchen slip). */
+export function placementPrefix(placement: "left" | "right" | undefined) {
+  return placement === "left" ? "LEFT ½ " : placement === "right" ? "RIGHT ½ " : "";
+}
+
 /**
  * How a line reads on a ticket or in a cart: only what differs from the
  * recipe.  Kept included toppings are not repeated; a removed one reads
@@ -97,11 +102,14 @@ export function describeLineModifiers(item: ItemLike | undefined, line: Pick<Car
   for (const modifier of line.modifiers) {
     const choice = choices.get(modifier.choice_id);
     if (!choice) continue;
+    const side = placementPrefix(modifier.placement);
     if (isIncludedChoice(choice)) {
+      // Something it comes with, moved to one half, is worth saying even with no extra.
+      if (side) notes.push({ kind: "added", label: `${side}${choice.name}` });
       const extra = modifier.quantity - 1;
-      if (extra > 0) notes.push({ kind: "extra", label: `${extra > 1 ? `${extra}× ` : ""}Extra ${choice.name}` });
+      if (extra > 0) notes.push({ kind: "extra", label: `${side}${extra > 1 ? `${extra}× ` : ""}Extra ${choice.name}` });
     } else {
-      notes.push({ kind: "added", label: `${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}` });
+      notes.push({ kind: "added", label: `${side}${modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}${choice.name}` });
     }
   }
   return notes;

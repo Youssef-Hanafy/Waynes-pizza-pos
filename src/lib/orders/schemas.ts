@@ -1,8 +1,18 @@
 import { z } from "zod";
 
+/**
+ * Which part of a pizza a topping goes on (owner, 2026-10-20): left half,
+ * right half, or — when absent — the whole pizza.  Only option groups with
+ * "halves" switched on in Admin offer it; a half costs the same as a whole
+ * topping, and the order prints it as "LEFT ½ Pepperoni" / "RIGHT ½ …".
+ */
+export const toppingPlacementSchema = z.enum(["left", "right"]);
+export type ToppingPlacement = z.infer<typeof toppingPlacementSchema>;
+
 export const cartModifierSchema = z.object({
   choice_id: z.uuid(),
   quantity: z.number().int().min(1).max(20),
+  placement: toppingPlacementSchema.optional(),
 });
 
 /**

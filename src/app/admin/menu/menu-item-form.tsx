@@ -21,6 +21,8 @@ type DraftGroup = {
   max_select: number;
   required: boolean;
   allow_quantities: boolean;
+  /** Left / Whole / Right buttons on the POS (pizza toppings). */
+  allow_halves?: boolean;
   choices: DraftChoice[];
 };
 type DraftVariant = { name: string; price: string; sku: string };
@@ -63,6 +65,7 @@ const emptyGroup = (): DraftGroup => ({
   max_select: 1,
   required: false,
   allow_quantities: false,
+  allow_halves: false,
   choices: [emptyChoice()],
 });
 
@@ -372,6 +375,15 @@ export function MenuItemForm({
                 onChange={(event) =>
                   changeGroup(groupIndex, {
                     allow_quantities: event.target.checked,
+                  })
+                }
+              />
+              <Check
+                checked={Boolean(group.allow_halves)}
+                label="Left / right halves (POS: pizza toppings)"
+                onChange={(event) =>
+                  changeGroup(groupIndex, {
+                    allow_halves: event.target.checked,
                   })
                 }
               />
