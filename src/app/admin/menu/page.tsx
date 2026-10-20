@@ -70,6 +70,10 @@ export default async function MenuAdminPage({
     ]);
   const categories = (categoryData ?? []) as Category[];
   const items = (itemData ?? []) as Item[];
+  // A special is its own copy with the same name, so it is listed only under ⭐ Specials —
+  // two identical "Cheese Pizza" rows here is how the special and regular prices got
+  // swapped (owner, 2026-10-20).
+  const runningSpecials = items.filter((item) => item.special && !item.archived_at).length;
   // Archived categories (the old menu before the full load) used to show as a
   // faint copy of every category.  They sit in one closed section now.
   const live = categories.filter((category) => !category.archived_at);
@@ -92,7 +96,7 @@ export default async function MenuAdminPage({
             <Link href="/admin/menu/photos">Menu photos</Link>
           </Button>
           <Button asChild variant="secondary">
-            <Link href="/admin/menu/specials">⭐ Specials</Link>
+            <Link href="/admin/menu/specials">⭐ Specials{runningSpecials ? ` (${runningSpecials})` : ""}</Link>
           </Button>
           {categories.some((category) => !category.archived_at) ? (
             <Button asChild>
@@ -117,7 +121,7 @@ export default async function MenuAdminPage({
             {live.map((category) => (
               <CategoryCard
                 category={category}
-                items={items.filter((item) => item.category_id === category.id)}
+                items={items.filter((item) => item.category_id === category.id && !item.special)}
                 key={category.id}
               />
             ))}
@@ -130,7 +134,7 @@ export default async function MenuAdminPage({
                   {archived.map((category) => (
                     <CategoryCard
                       category={category}
-                      items={items.filter((item) => item.category_id === category.id)}
+                      items={items.filter((item) => item.category_id === category.id && !item.special)}
                       key={category.id}
                     />
                   ))}

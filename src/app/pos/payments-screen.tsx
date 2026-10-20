@@ -198,6 +198,9 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   // Once a way to pay is picked the buttons shrink to one row, so the cash
   // keypad and Record cash fit on one screen with no scrolling (owner, 2026-10-19).
   const compact = mode !== "choose";
+  // Once a way to pay is picked, "Add items" joins the same row (saves a whole row on the cash screen).
+  const buttonCount = (onPayLater ? 4 : 3) + (onAddItems && compact ? 1 : 0);
+  const buttonColumns = buttonCount === 5 ? "md:grid-cols-5" : buttonCount === 4 ? "md:grid-cols-4" : "md:grid-cols-3";
   const option = (value: Exclude<Mode, "choose">, icon: string, title: string, note: string, disabled = false) => (
     <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => { setMode(value); setError(""); }} type="button">
       <span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{icon}</span>
@@ -208,14 +211,15 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
 
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</p><p className="mt-1 text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source === "pos" ? "in store" : order.source}</p></div>
-      <div className="text-right"><p className="text-sm font-bold">{paidBefore ? "Still owed" : "Amount due"}</p><p className="text-5xl font-black">{formatCents(due)}</p>{paidBefore ? <p className="text-sm font-bold text-wayne-muted">Order {formatCents(openedOrder.total_cents)} · {formatCents(paidBefore)} already paid</p> : null}</div>
+      <div>{onPayLater && !compact ? <h2 className="mb-1 text-2xl font-black">How are they paying?</h2> : null}<p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted">{ticketLabel(order)} · {order.customer_name || "Walk-in"}</p><p className="mt-1 text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source === "pos" ? "in store" : order.source}</p></div>
+      <div className="text-right"><p className="text-sm font-bold">{paidBefore ? "Still owed" : "Amount due"}</p><p className={`${compact ? "text-4xl" : "text-5xl"} font-black tabular-nums`}>{formatCents(due)}</p>{paidBefore ? <p className="text-sm font-bold text-wayne-muted">Order {formatCents(openedOrder.total_cents)} · {formatCents(paidBefore)} already paid</p> : null}</div>
     </div>
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
       : cardHeld && !paidBefore ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
-      {order.is_test ? <p className="mt-5 rounded-xl bg-wayne-warn-soft p-3 font-bold">🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
-      {onAddItems ? <button className={`flex w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40 ${compact ? "mt-3 min-h-11 text-base" : "mt-4 min-h-14 text-lg"}`} disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
-      <div className={`grid grid-cols-2 ${compact ? "mt-3 gap-2" : "mt-5 gap-3"} ${onPayLater ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+      {order.is_test ? <p className={`rounded-xl bg-wayne-warn-soft font-bold ${compact ? "mt-2 px-3 py-1.5 text-sm" : "mt-5 p-3"}`}>🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
+      {onAddItems && !compact ? <button className={`flex w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40 mt-4 min-h-14 text-lg`} disabled={busy || tipAsked} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
+      <div className={`grid grid-cols-2 ${compact ? "mt-2 gap-2" : "mt-5 gap-3"} ${buttonColumns}`}>
+        {onAddItems && compact ? <button className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-wayne-green bg-white p-2 text-center font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button"><span aria-hidden className="text-xl leading-none">＋</span><strong className="text-lg font-black leading-tight">Add items</strong></button> : null}
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
         {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · tip on slip" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
         {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? `Phone order · tip at cash-out${order.is_test ? " (test)" : ""}` : "Needs Stripe") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
@@ -304,14 +308,14 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
 
   // One screen, no scrolling (owner, 2026-10-19): what was handed over and the
   // change on the left, the keypad and Record cash on the right.
-  return <div className="mt-3 grid gap-3 md:grid-cols-[1fr_17rem]">
+  return <div className="mt-2 grid gap-3 md:grid-cols-[1fr_22rem] lg:grid-cols-[1fr_26rem]">
     <div className="grid content-start gap-2">
-      <div className="rounded-2xl border-2 border-wayne-border px-4 py-3">
+      <div className="rounded-2xl border-2 border-wayne-border px-4 py-2.5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3"><p className="text-sm font-bold">Cash received</p><p aria-live="polite" className="text-4xl font-black tabular-nums">{formatCents(tendered)}</p></div>
         <p aria-live="polite" className={`mt-1 text-3xl font-black ${change === null ? "text-wayne-red" : "text-wayne-ok"}`}>{change === null ? (tendered ? `Still owed ${formatCents(due - tendered)}` : "Enter the cash handed over") : `Change ${formatCents(change)}`}</p>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {quickCashAmounts(due).map((amount) => <Button className="min-h-12 text-lg" key={amount} onClick={() => { onError(""); setDigits(String(amount)); }} variant="secondary">{amount === due ? "Exact" : formatCents(amount)}</Button>)}
+        {quickCashAmounts(due).map((amount) => <Button className="min-h-14 text-xl" key={amount} onClick={() => { onError(""); setDigits(String(amount)); }} variant="secondary">{amount === due ? "Exact" : formatCents(amount)}</Button>)}
       </div>
     </div>
     <div className="grid content-start gap-1.5">

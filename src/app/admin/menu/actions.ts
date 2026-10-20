@@ -537,6 +537,35 @@ export async function saveSpecialAction(formData: FormData) {
   specialsRedirect(message);
 }
 
+/**
+ * The special price for each size (owner, 2026-10-20): set on the Specials page, right
+ * beside the regular price.  The database only lets this change a special, never the
+ * regular item, so the two prices can't be swapped again.
+ */
+export async function saveSpecialPricesAction(formData: FormData) {
+  await requirePermission("menu.manage", "/admin/menu/specials");
+  const id = z.uuid().safeParse(formData.get("id"));
+  if (!id.success) specialsRedirect("That special could not be found.", "error");
+  const prices: { variant_id: string; price_cents: number }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("price_")) continue;
+    const variantId = z.uuid().safeParse(key.slice("price_".length));
+    const typed = String(value).trim().replace(/^\$/, "");
+    if (!variantId.success || !/^\d{1,4}(\.\d{1,2})?$/.test(typed)) specialsRedirect("Type each special price like 7.75.", "error");
+    prices.push({ variant_id: variantId.data!, price_cents: Math.round(Number(typed) * 100) });
+  }
+  if (!prices.length) specialsRedirect("That special has no sizes to price.", "error");
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc("wayne_set_special_prices", { special_item_id: id.data!, prices });
+  if (error) specialsRedirect(error.message, "error");
+  revalidateMenu();
+  revalidatePath("/pos");
+  revalidatePath("/admin/menu");
+  revalidatePath("/admin/menu/specials");
+  const name = (data as { name?: string } | null)?.name ?? "Special";
+  specialsRedirect(`${name} special prices saved. The regular ${name} is unchanged.`);
+}
+
 /** Stop a special: its copy is taken off the POS (kept for past orders); the regular item is untouched. */
 export async function removeSpecialAction(formData: FormData) {
   await requirePermission("menu.manage", "/admin/menu/specials");

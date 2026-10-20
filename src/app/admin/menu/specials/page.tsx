@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/auth/access";
 import { getWorkspaceStoreSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { removeSpecialAction, saveSpecialAction } from "../actions";
+import { removeSpecialAction, saveSpecialAction, saveSpecialPricesAction } from "../actions";
 
 export const metadata: Metadata = { title: "Specials" };
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ type Item = {
   special_ends_on: string | null;
 };
 type Category = { id: string; name: string };
+type Variant = { id: string; menu_item_id: string; name: string; price_cents: number; sort_order: number };
 
 /**
  * Specials (owner, 2026-10-19, evening): "the special section should only be
@@ -50,6 +51,14 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
   const categories = (categoryData ?? []) as Category[];
   const categoryName = new Map(categories.map((category) => [category.id, category.name]));
   const specials = items.filter((item) => item.special);
+  // Each special beside the regular item it was made from (same name, same category), size by size,
+  // so the special price and the regular price can't be mixed up (owner, 2026-10-20).
+  const regularFor = new Map(specials.map((special) => [special.id, items.find((item) => !item.special && item.category_id === special.category_id && item.name === special.name) ?? null]));
+  const variantItemIds = [...specials.map((item) => item.id), ...[...regularFor.values()].flatMap((item) => (item ? [item.id] : []))];
+  const { data: variantData } = variantItemIds.length
+    ? await supabase.from("menu_item_variants").select("id,menu_item_id,name,price_cents,sort_order").in("menu_item_id", variantItemIds).is("archived_at", null).eq("active", true).order("sort_order")
+    : { data: [] };
+  const variants = (variantData ?? []) as Variant[];
   const adding = items.find((item) => item.id === params.add && !item.special) ?? null;
   // The store's own date (an end date means "through that day" where the store is).
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings.timezone || "America/New_York" }).format(new Date());
@@ -61,7 +70,7 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
       <p className="mt-3 max-w-3xl text-wayne-muted">
         Specials are for the POS only: they sit under the <strong>⭐ Specials</strong> button for walk-in, pickup and phone pickup orders — never in the regular menu,
         never on deliveries, never online. Making an item a special makes <strong>its own copy</strong> with its own price, so the regular item doesn&apos;t change.
-        After adding one, set its special price with <strong>Edit price &amp; options</strong>. For a brand-new deal (e.g. “2 Large Cheese + 2-Liter $24.99”), first
+        After adding one, type its <strong>special price</strong> for each size below — the regular price is shown beside it and never changes here. For a brand-new deal (e.g. “2 Large Cheese + 2-Liter $24.99”), first
         {" "}<Link className="font-bold underline" href="/admin/menu/new">create it as a menu item</Link> (untick “show online”), then add it here.
       </p>
       {params.saved ? <p className="mt-5 rounded-xl border border-wayne-ok/30 bg-wayne-ok-soft p-4 font-semibold text-wayne-ok">{params.saved}</p> : null}
@@ -82,7 +91,7 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-wayne-muted">{categoryName.get(item.category_id) ?? "Menu"}</p>
-                    <h3 className="text-xl font-black">{item.name} <span className="font-bold text-wayne-red">{formatCents(item.base_price_cents)}</span></h3>
+                    <h3 className="text-xl font-black">⭐ {item.name} <span className="rounded-lg bg-wayne-red px-2 py-0.5 text-sm font-black uppercase tracking-wide text-white">Special</span></h3>
                     <p className="mt-1 text-sm font-bold">
                       {ended ? <span className="text-wayne-alert">Ended {item.special_ends_on} — not on the POS</span> : item.special_ends_on ? `Runs through ${item.special_ends_on}` : "No end date"}
                       {" · "}POS Specials only · walk-in &amp; pickup
@@ -90,10 +99,11 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit price &amp; options</Link></Button>
+                    <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit the special&apos;s options</Link></Button>
                     <form action={removeSpecialAction}><input name="id" type="hidden" value={item.id} /><Button type="submit" variant="danger">Stop the special</Button></form>
                   </div>
                 </div>
+                <SpecialPrices regular={regularFor.get(item.id) ?? null} special={item} variants={variants} />
                 <form action={saveSpecialAction} className="mt-4 grid gap-3 border-t border-wayne-border pt-4 md:grid-cols-[1fr_12rem_auto] md:items-end">
                   <input name="id" type="hidden" value={item.id} />
                   <Field defaultValue={item.special_note} label="Headline (shown on the POS button)" name="special_note" />
@@ -139,6 +149,43 @@ function SpecialForm({ items, categories, selected, today }: { items: Item[]; ca
       <div className="flex flex-wrap gap-2">
         <Button type="submit">⭐ Make it a special</Button>
         {selected ? <Button asChild variant="secondary"><Link href="/admin/menu/specials">Choose a different item</Link></Button> : null}
+      </div>
+    </form>
+  );
+}
+
+function SpecialPrices({ special, regular, variants }: { special: Item; regular: Item | null; variants: Variant[] }) {
+  const sizes = variants.filter((variant) => variant.menu_item_id === special.id);
+  const regularPrice = new Map(variants.filter((variant) => regular && variant.menu_item_id === regular.id).map((variant) => [variant.name, variant.price_cents]));
+  if (!sizes.length) return null;
+  return (
+    <form action={saveSpecialPricesAction} className="mt-4 border-t border-wayne-border pt-4">
+      <input name="id" type="hidden" value={special.id} />
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[28rem] text-left">
+          <thead><tr className="text-xs font-black uppercase tracking-[0.12em] text-wayne-muted"><th className="py-1 pr-3">Size</th><th className="py-1 pr-3">Regular price{regular ? "" : " (no regular item)"}</th><th className="py-1">⭐ Special price</th></tr></thead>
+          <tbody>
+            {sizes.map((size) => {
+              const normal = regularPrice.get(size.name);
+              return (
+                <tr className="border-t border-wayne-border" key={size.id}>
+                  <td className="py-2 pr-3 font-black">{size.name}</td>
+                  <td className="py-2 pr-3 font-bold text-wayne-muted">{normal === undefined ? "—" : formatCents(normal)}</td>
+                  <td className="py-2">
+                    <label className="flex items-center gap-1 font-black text-wayne-red">$
+                      <input aria-label={`${size.name} special price`} className="min-h-11 w-28 rounded-lg border-2 border-wayne-red/40 px-3 font-black text-wayne-ink" defaultValue={(size.price_cents / 100).toFixed(2)} inputMode="decimal" name={`price_${size.id}`} pattern="[0-9]+(\.[0-9]{1,2})?" required />
+                      {normal !== undefined && size.price_cents < normal ? <span className="ml-2 text-xs font-bold text-wayne-ok">saves {formatCents(normal - size.price_cents)}</span> : null}
+                    </label>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button type="submit">Save special prices</Button>
+        <p className="text-sm text-wayne-muted">Only the special changes. The regular {special.name} keeps its price on the POS and online.</p>
       </div>
     </form>
   );

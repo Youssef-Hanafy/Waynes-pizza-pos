@@ -282,9 +282,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
     const paidAlready = created.order.paid_cents ?? 0;
-    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-3">
-      <section aria-label="Take payment" className="w-full max-w-4xl rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-wayne-ok-soft px-4 py-2">
+    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2">
+      {/* The whole width of the screen (owner, 2026-10-20: "about 2 inches of dead space on either side"), so cash fits with no scrolling. */}
+      <section aria-label="Take payment" className="w-full rounded-3xl border border-wayne-border bg-white px-4 py-3 shadow-xl">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl bg-wayne-ok-soft px-3 py-1.5">
           <p className="font-black text-wayne-ok">✓ {created.added ? `Added to order #${ticketNumber(created.order)} — same ticket, new total ${formatCents(created.order.total_cents)}${paidAlready ? ` · ${formatCents(paidAlready)} already paid, ${formatCents(Math.max(0, created.order.total_cents - paidAlready))} to pay` : ""}` : created.duplicate ? `Already sent · #${ticketNumber(created.order)}` : `Order #${ticketNumber(created.order)} — take payment or Pay later to send it`}</p>
           <div className="flex flex-wrap items-center gap-2">
             {/* Recalled order whose slip is already out: nothing new prints (owner, 2026-10-19). */}
@@ -293,10 +294,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
             <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">{created.added && !created.fresh ? "Reprint full ticket" : "Print kitchen now"}</Button>
           </div>
         </div>
-        {printNote ? <p aria-live="polite" className="-mt-3 mb-3 text-sm font-bold">{printNote}</p> : null}
-        <h1 className="mb-2 text-2xl font-black">How are they paying?</h1>
+        {printNote ? <p aria-live="polite" className="-mt-1 mb-2 text-sm font-bold">{printNote}</p> : null}
+        <h1 className="sr-only">How are they paying?</h1>
         <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
-        {created.fresh ? <p className="mt-3 border-t border-wayne-border pt-2 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
+        {created.fresh ? <p className="mt-2 border-t border-wayne-border pt-1.5 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
       </section>
     </div>;
   }
@@ -385,7 +386,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="flex-1 px-1.5 md:min-h-0 md:overflow-y-auto" ref={ticketListRef}>{cart.length ? <ul className="divide-y divide-wayne-border">{cart.map((line) => {
           const item = findMenuItem(menu, line.menu_item_id);
           const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
-          return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant?.name ?? ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} quantity={line.quantity} title={line.open_item ? line.open_item.name : item?.name ?? "Item no longer on the menu"} />;
+          return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant?.name ?? ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} quantity={line.quantity} title={line.open_item ? line.open_item.name : item ? `${isSpecialItem(item) ? "⭐ " : ""}${item.name}` : "Item no longer on the menu"} />;
         })}</ul> : <p className="m-1.5 rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
         <div className="shrink-0 border-t border-wayne-border px-3 pb-3 pt-2">
           {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes &amp; promo code{draft.orderNote || draft.promoCode ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{draft.manualType ? <p className="mt-1 text-xs font-bold text-wayne-muted">A discount is on this ticket — remove it to use a promotion code.</p> : null}</details>}

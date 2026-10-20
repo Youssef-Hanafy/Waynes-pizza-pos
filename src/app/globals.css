@@ -1,7 +1,10 @@
 @import "tailwindcss";
-@import "./legacy-webview.css";
 
-/* legacy-css-compatibility: 20261007 — creates a fresh asset for older POS WebViews. */
+/*
+ * No separate legacy stylesheet: postcss.config.mjs unwraps Tailwind's cascade
+ * layers on every build, so the counter's older Android WebView reads this same,
+ * current CSS (owner, 2026-10-20 — the POS was flipping between old and new looks).
+ */
 
 /*
  * Wayne's is a green shield with a red pizza slice on cream paper, and has been
@@ -62,9 +65,8 @@
 }
 
 :root {
-  /* Forces a fresh immutable stylesheet for Android POS WebViews after the
-     legacy cascade-layer compatibility transform. */
-  --wayne-css-compatibility-build: 20261007;
+  /* Changing this changes the stylesheet's file name, so no device keeps an old cached copy. */
+  --wayne-css-compatibility-build: 20261020;
   color-scheme: light;
   background: var(--color-wayne-cream);
   color: var(--color-wayne-ink);
