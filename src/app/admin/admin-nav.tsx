@@ -44,6 +44,7 @@ export function AdminNav({ groups }: { groups: Group[] }) {
                   }`}
                   href={href}
                   key={href}
+                  prefetch={false}
                 >
                   {label}
                 </Link>

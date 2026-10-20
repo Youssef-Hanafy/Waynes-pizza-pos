@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { fetchPrintDocument } from "@/hardware/printers/provider";
 import { formatCents } from "@/lib/menu/schemas";
@@ -73,10 +74,9 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: str
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 15_000);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); };
-  }, [load]);
+    return () => { mounted.current = false; };
+  }, []);
+  useVisiblePolling(load, 30_000);
 
   const shownDay = day ?? today;
   const time = (value: string | null) => value ? new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "";

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { heldCardSchema, parseTipInput, tipRoom, type HeldCard } from "@/lib/tips/schemas";
@@ -47,11 +48,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     }
   }, []);
 
-  useEffect(() => {
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 20_000);
-    return () => { window.clearTimeout(first); window.clearInterval(timer); };
-  }, [load]);
+  useVisiblePolling(load, 60_000);
 
   const here = useMemo(() => cards.filter((card) => !card.with_driver), [cards]);
   const drivers = useMemo(() => cards.filter((card) => card.with_driver), [cards]);

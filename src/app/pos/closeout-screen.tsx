@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { brandLabels, closeoutLayout, dayCloseoutSchema, expectedCash, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
 import { deliveryCloseoutLayout, deliveryDayReportSchema } from "@/lib/delivery/day-report";
@@ -51,11 +52,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     }
   }, []);
 
-  useEffect(() => {
-    const first = window.setTimeout(() => { void load(day); }, 0);
-    const timer = window.setInterval(() => { void load(day); }, 30_000);
-    return () => { window.clearTimeout(first); window.clearInterval(timer); };
-  }, [day, load]);
+  const refresh = useCallback(() => load(day), [day, load]);
+  useVisiblePolling(refresh, 60_000);
 
   const typed = typedTotal.trim() ? Math.round(Number(typedTotal.replace(/[$,\s]/g, "")) * 100) : null;
   const counted = typed !== null && Number.isFinite(typed) && typed >= 0 ? typed : null;

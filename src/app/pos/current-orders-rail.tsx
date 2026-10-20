@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { formatCents } from "@/lib/menu/schemas";
 import { draftLabel } from "@/lib/orders/drafts";
 import { ticketLabel } from "@/lib/orders/ticket-number";
@@ -60,12 +61,9 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { void load(); }, 8_000);
-    const onFocus = () => { void load(); };
-    window.addEventListener("focus", onFocus);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
-  }, [load]);
+    return () => { mounted.current = false; };
+  }, []);
+  useVisiblePolling(load, 30_000);
 
   // Paid orders are closed (owner, 2026-10-13): they leave this panel and stay in Today's Orders.
   // A paid delivery stays until it is on the road, so it can be sent out.

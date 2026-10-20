@@ -346,7 +346,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // category — and only for walk-ins, pickups and phone pickups (not deliveries).
   const specials = specialsAllowed ? visibleMenu.flatMap((category) => category.items.filter((item) => item.special)) : [];
   const regularMenu = visibleMenu.map((category) => ({ ...category, items: category.items.filter((item) => !isSpecialItem(item)) })).filter((category) => category.items.length);
-  const selectedCategory = categoryId === SPECIALS && !specials.length ? null : categoryId;
+  const selectedCategory = categoryId === SPECIALS && !specialsAllowed ? null : categoryId;
   const shownItems = itemSearch.trim() ? [...specials, ...regularMenu.flatMap((category) => category.items)]
     : selectedCategory === SPECIALS ? specials
     : regularMenu.filter((category) => category.id === (selectedCategory ?? regularMenu[0]?.id)).flatMap((category) => category.items);
@@ -363,7 +363,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           Compact (owner, 2026-10-20: "the main sections … smaller above so they don't take up so much space"): short buttons, small type, more per row.
         */}
         <div className="grid shrink-0 gap-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5rem, 1fr))" }}>
-          {specials.length ? <button aria-pressed={!itemSearch.trim() && selectedCategory === SPECIALS} className={`flex min-h-9 items-center justify-center rounded-lg px-1.5 py-0.5 text-center text-[0.8rem] font-black leading-[1.1] transition active:scale-95 ${!itemSearch.trim() && selectedCategory === SPECIALS ? "bg-wayne-red text-white shadow-md" : "border-2 border-wayne-gold bg-wayne-gold/25 text-wayne-ink shadow-sm"}`} onClick={() => { setCategoryId(SPECIALS); setItemSearch(""); }} type="button">⭐ Specials</button> : null}
+          {specialsAllowed ? <button aria-pressed={!itemSearch.trim() && selectedCategory === SPECIALS} className={`flex min-h-9 items-center justify-center rounded-lg px-1.5 py-0.5 text-center text-[0.8rem] font-black leading-[1.1] transition active:scale-95 ${!itemSearch.trim() && selectedCategory === SPECIALS ? "bg-wayne-red text-white shadow-md" : "border-2 border-wayne-gold bg-wayne-gold/25 text-wayne-ink shadow-sm"}`} onClick={() => { setCategoryId(SPECIALS); setItemSearch(""); }} type="button">⭐ Specials</button> : null}
           {regularMenu.map((category) => {
             const selected = !itemSearch.trim() && selectedCategory !== SPECIALS && category.id === (selectedCategory ?? regularMenu[0]?.id);
             const color = safeColor(category.pos_color);
@@ -389,7 +389,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
             const color = safeColor(item.pos_color);
             return <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-16 px-2 py-1.5" : roomy ? "px-3 py-2" : "px-2 py-1.5"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} style={color ? { borderColor: color, borderLeftWidth: 6, backgroundColor: `${color}26` } : undefined} type="button"><FitName lines={lines} size={nameSize} text={`${item.special ? "⭐ " : ""}${item.name}`} />{item.special && item.special_note && roomy ? <span className="line-clamp-1 text-xs font-bold text-wayne-muted">{item.special_note}</span> : null}<span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-xs"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>;
           });
-        }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : "Nothing in this category."}</p>}
+        }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : selectedCategory === SPECIALS ? "No active specials. Create specials and set their prices in Admin → Menu → Specials." : "Nothing in this category."}</p>}
       </section>
       </div>
       <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white md:min-h-0 md:border-l md:border-t-0">

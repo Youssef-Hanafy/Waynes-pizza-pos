@@ -89,7 +89,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       ) : null}
       <header className="sticky top-0 z-40 border-b border-wayne-border bg-wayne-surface/95 backdrop-blur-md">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center gap-5 px-5">
-          <Link className="flex items-center gap-2.5" href="/admin">
+          <Link className="flex items-center gap-2.5" href="/admin" prefetch={false}>
             <span aria-hidden className="grid h-9 w-9 place-items-center rounded-lg bg-wayne-green font-display text-sm font-black text-wayne-cream">{workspaceName.trim().charAt(0).toUpperCase() || "H"}</span>
             <span className="grid leading-tight">
               <span className="font-display text-base font-black tracking-tight">{workspaceName}</span>
@@ -97,7 +97,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
             </span>
           </Link>
           {access.workspace_slug ? (
-            <Link className="hidden rounded-lg px-2.5 py-1.5 text-sm font-bold text-wayne-muted transition hover:bg-wayne-cream-deep hover:text-wayne-green md:inline" href={(access.membership_count ?? 1) > 1 ? "/w" : `/w/${access.workspace_slug}`}>
+            <Link className="hidden rounded-lg px-2.5 py-1.5 text-sm font-bold text-wayne-muted transition hover:bg-wayne-cream-deep hover:text-wayne-green md:inline" href={(access.membership_count ?? 1) > 1 ? "/w" : `/w/${access.workspace_slug}`} prefetch={false}>
               {(access.membership_count ?? 1) > 1 ? "Switch business" : "Workspace"}
             </Link>
           ) : null}

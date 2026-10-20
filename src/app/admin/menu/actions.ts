@@ -531,7 +531,7 @@ export async function saveSpecialAction(formData: FormData) {
     // A regular item: the special is its own copy, so the regular item never changes.
     const { error } = await supabase.rpc("wayne_make_special", { source_item_id: item!.id, headline: note, ends_on: endsOn || null });
     if (error) specialsRedirect(error.message, "error");
-    message = `${item!.name} special added — it's only under ⭐ Specials on the POS. Set its special price with “Edit price & options”.`;
+    message = `${item!.name} special added — it's only under ⭐ Specials on the POS. Set its special prices below.`;
   }
   revalidateMenu();
   revalidatePath("/offers");

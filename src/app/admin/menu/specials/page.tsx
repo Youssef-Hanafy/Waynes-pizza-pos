@@ -22,6 +22,7 @@ type Item = {
   special_note: string;
   special_online: boolean;
   special_ends_on: string | null;
+  special_source_item_id: string | null;
 };
 type Category = { id: string; name: string };
 type Variant = { id: string; menu_item_id: string; name: string; price_cents: number; sort_order: number };
@@ -41,7 +42,7 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
   const supabase = await createServerSupabaseClient();
   const [{ data: itemData }, { data: categoryData }, params, settings] = await Promise.all([
     supabase.from("menu_items")
-      .select("id,category_id,name,base_price_cents,customer_visible,sold_out,special,special_note,special_online,special_ends_on")
+      .select("id,category_id,name,base_price_cents,customer_visible,sold_out,special,special_note,special_online,special_ends_on,special_source_item_id")
       .is("archived_at", null).order("sort_order").order("name"),
     supabase.from("menu_categories").select("id,name").is("archived_at", null).order("sort_order").order("name"),
     searchParams,
@@ -53,7 +54,7 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
   const specials = items.filter((item) => item.special);
   // Each special beside the regular item it was made from (same name, same category), size by size,
   // so the special price and the regular price can't be mixed up (owner, 2026-10-20).
-  const regularFor = new Map(specials.map((special) => [special.id, items.find((item) => !item.special && item.category_id === special.category_id && item.name === special.name) ?? null]));
+  const regularFor = new Map(specials.map((special) => [special.id, items.find((item) => !item.special && (special.special_source_item_id ? item.id === special.special_source_item_id : item.category_id === special.category_id && item.name === special.name)) ?? null]));
   const variantItemIds = [...specials.map((item) => item.id), ...[...regularFor.values()].flatMap((item) => (item ? [item.id] : []))];
   const { data: variantData } = variantItemIds.length
     ? await supabase.from("menu_item_variants").select("id,menu_item_id,name,price_cents,sort_order").in("menu_item_id", variantItemIds).is("archived_at", null).eq("active", true).order("sort_order")

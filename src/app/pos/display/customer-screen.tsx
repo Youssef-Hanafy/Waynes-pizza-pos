@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { formatCents } from "@/lib/menu/schemas";
-import { displayReadSchema, displayStateSchema, signatureSvg, tipFromPercent, type DisplayState } from "@/lib/pos/customer-display";
+import { displayStateSchema, signatureSvg, tipFromPercent, type DisplayState } from "@/lib/pos/customer-display";
+import { listCustomerDisplays, readCustomerDisplay, respondToCustomerDisplay } from "@/lib/pos/customer-display-client";
 import { stopCustomerDisplayLink } from "@/stores/customer-display-link";
+import { useAppUpdate } from "@/stores/use-app-update";
 
 const KEY_STORAGE = "wayne-customer-screen-register";
 
@@ -65,6 +67,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   const [answered, setAnswered] = useState("");
   const [problem, setProblem] = useState("");
   const full = useFullscreen();
+  useAppUpdate(() => state.phase !== "tip" && state.phase !== "sign" && state.phase !== "pay");
 
   useEffect(() => {
     const timer = window.setTimeout(() => { const saved = readKey(); setKey(saved); setChoosing(!saved); }, 0);
@@ -74,18 +77,21 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   useEffect(() => {
     if (!key) return;
     let alive = true;
+    let polling = false;
     async function poll() {
+      if (polling || document.visibilityState !== "visible") return;
+      polling = true;
       try {
-        const response = await fetch(`/api/pos/display?key=${encodeURIComponent(key)}`, { cache: "no-store", signal: AbortSignal.timeout(6000) });
-        if (!response.ok) throw new Error();
-        const parsed = displayReadSchema.safeParse(await response.json());
-        if (!parsed.success || !alive) return;
-        const next = displayStateSchema.safeParse(parsed.data.state);
+        const result = await readCustomerDisplay(key);
+        if (!alive) return;
+        const next = displayStateSchema.safeParse(result.state);
         if (next.success) setState(next.data);
-        setRegisterOnline(parsed.data.found && parsed.data.register_online !== false);
+        setRegisterOnline(result.found && result.register_online !== false);
         setProblem("");
       } catch {
         if (alive) setProblem("Reconnecting…");
+      } finally {
+        polling = false;
       }
     }
     void poll();
@@ -96,11 +102,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   const respond = useCallback(async (answer: Record<string, unknown>) => {
     setAnswered(String(answer.request_id ?? ""));
     try {
-      const response = await fetch("/api/pos/display", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "respond", key, answer }), signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error();
+      await respondToCustomerDisplay(key, answer);
     } catch {
       setAnswered("");
       setProblem("That didn't go through. Please tap again.");
@@ -304,10 +306,10 @@ function RegisterPicker({ current, onPick }: { current: string; onPick: (key: st
   useEffect(() => {
     let alive = true;
     async function load() {
+      if (document.visibilityState !== "visible") return;
       try {
-        const response = await fetch("/api/pos/display", { cache: "no-store" });
-        const body: unknown = await response.json();
-        if (alive && Array.isArray(body)) setRegisters(body.map((row) => (row && typeof row === "object" && "display_key" in row ? String((row as { display_key: unknown }).display_key) : "")).filter(Boolean));
+        const registers = await listCustomerDisplays();
+        if (alive) setRegisters(registers);
       } catch { /* keep the list */ }
     }
     void load();

@@ -1,7 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { displayPublishResultSchema, displayStateSchema, type DisplayState } from "@/lib/pos/customer-display";
+import { displayStateSchema, type DisplayState } from "@/lib/pos/customer-display";
+import { publishCustomerDisplay } from "@/lib/pos/customer-display-client";
 import { getTerminalLabel } from "@/stores/phone-store";
 import { uuid } from "@/lib/uuid";
 
@@ -59,22 +60,16 @@ async function send() {
   dirty = false;
   lastSent = Date.now();
   try {
-    const response = await fetch("/api/pos/display", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "publish", key, state: current, publisher: publisherId, changed }),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) { emit({ screenOnline: false, key }); return; }
-    const parsed = displayPublishResultSchema.safeParse(await response.json().catch(() => null));
-    if (!parsed.success) return;
-    emit({ screenOnline: parsed.data.screen_online, key });
-    const answer = parsed.data.response;
+    const result = await publishCustomerDisplay({ kind: "publish", key, state: current, publisher: publisherId, changed });
+    emit({ screenOnline: result.screen_online, key });
+    const answer = result.response;
     if (waiter && typeof answer.request_id === "string" && answer.request_id === waiter.requestId) {
       const done = waiter;
       waiter = null;
       done.resolve(answer);
     }
   } catch {
+    dirty = dirty || changed;
     emit({ screenOnline: false });
   } finally {
     sending = false;
@@ -82,6 +77,7 @@ async function send() {
 }
 
 function tick() {
+  if (document.visibilityState !== "visible") return;
   const interval = waiter ? 1000 : 4000;
   if (dirty || Date.now() - lastSent >= interval) void send();
 }

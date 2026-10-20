@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import {
   cashoutLines, cashoutSummary, maxTipCents, paidByLabel, posCashoutResultSchema, posDeliveryBoardSchema, tipAllowed,
@@ -108,10 +109,9 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
 
   useEffect(() => {
     mounted.current = true;
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 10_000);
-    return () => { mounted.current = false; window.clearTimeout(first); window.clearInterval(timer); };
-  }, [load]);
+    return () => { mounted.current = false; };
+  }, []);
+  useVisiblePolling(load, 30_000);
 
   async function act(key: string, body: Record<string, string>) {
     setBusy(key); setError("");
