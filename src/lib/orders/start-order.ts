@@ -1,5 +1,6 @@
 import type { StoreSettings } from "@/lib/content/schemas";
-import type { PosDraft } from "./drafts";
+import { blankAddress, type PosDraft } from "./drafts";
+import type { PosCustomer } from "@/lib/pos/schemas";
 
 /**
  * The rules behind the POS New Order card (src/app/pos/start-order-card.tsx),
@@ -10,6 +11,7 @@ export type OrderKind = "walkin" | "pickup" | "delivery";
 
 /** The kind a ticket already is, or null while the cashier hasn't chosen yet. */
 export function orderKind(draft: PosDraft): OrderKind {
+  if (draft.orderKind) return draft.orderKind;
   if (draft.customerMode === "walk_in") return "walkin";
   return draft.fulfillment === "delivery" ? "delivery" : "pickup";
 }
@@ -22,7 +24,6 @@ export function phoneDigits(value: string) {
 /** Everything the server will refuse, checked before the cashier reaches the menu. */
 export function startProblem(draft: PosDraft, kind: OrderKind | null, settings: StoreSettings): string {
   if (!kind) return "Choose Walk-in, Pickup or Delivery.";
-  if (kind === "walkin") return "";
   // Nothing about the customer is required — in a rush the cashier can skip
   // it all (owner, 2026-10-11).  A phone that was typed must be a real number.
   const digits = phoneDigits(draft.phone).length;
@@ -32,6 +33,34 @@ export function startProblem(draft: PosDraft, kind: OrderKind | null, settings: 
     if (!draft.addressId && !draft.address.address1.trim()) return "Enter the street address (city, state and ZIP can be left blank).";
   }
   return "";
+}
+
+export function customerDetailsPatch(customer: PosCustomer): Partial<PosDraft> {
+  const preferred = customer.addresses.find((address) => address.is_default) ?? customer.addresses[0];
+  const placeholderName = customer.first_name.trim().toLowerCase() === "customer" && !customer.last_name.trim();
+  return {
+    customerMode: "identified", customer,
+    firstName: placeholderName ? "" : customer.first_name, lastName: customer.last_name,
+    phone: customer.phone, email: customer.email ?? "", addressId: preferred?.id ?? "",
+    address: preferred ? { address1: preferred.address1, address2: preferred.address2, city: preferred.city, state: preferred.state, postal_code: preferred.postal_code, delivery_instructions: preferred.delivery_instructions } : blankAddress(),
+  };
+}
+
+export function editCustomerDetails(draft: PosDraft, patch: Partial<PosDraft>): Partial<PosDraft> {
+  if (draft.customer && patch.phone !== undefined && phoneDigits(patch.phone) !== phoneDigits(draft.customer.phone)
+    && !draft.customer.phones.some((candidate) => phoneDigits(candidate.phone) === phoneDigits(patch.phone!))) {
+    return { ...patch, customer: null, addressId: "" };
+  }
+  return patch;
+}
+
+export function orderTypePatch(draft: PosDraft, kind: OrderKind, source: "pos" | "phone"): Partial<PosDraft> {
+  return {
+    orderKind: kind,
+    source: kind === "walkin" && !draft.phoneCallKey ? "pos" : source,
+    fulfillment: kind === "delivery" ? "delivery" : "pickup",
+    customerMode: kind !== "walkin" || draft.customer || phoneDigits(draft.phone).length > 0 ? "identified" : "walk_in",
+  };
 }
 
 /** ZIP of the address the ticket will deliver to. */

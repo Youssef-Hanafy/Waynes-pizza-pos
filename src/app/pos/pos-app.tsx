@@ -8,6 +8,7 @@ import type { HardwareSettings } from "@/lib/hardware/schemas";
 import type { PublicMenu } from "@/lib/menu/schemas";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { activeDraft, draftFromCall, draftHasContent, isDraftIdle } from "@/lib/orders/drafts";
+import { customerDetailsPatch } from "@/lib/orders/start-order";
 import { ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
@@ -154,10 +155,8 @@ export function PosApp(props: Props) {
   };
 
   function startCustomerOrder(customer: PosCustomer) {
-    const preferred = customer.addresses.find((address) => address.is_default) ?? customer.addresses[0];
     orderActions.start({
-      source: "pos", customerMode: "identified", customer, firstName: customer.first_name, lastName: customer.last_name,
-      phone: customer.phone, email: customer.email ?? "", addressId: preferred?.id ?? "",
+      ...customerDetailsPatch(customer), source: "pos", orderKind: "pickup", started: false,
     });
     setSection("order");
   }

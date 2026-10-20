@@ -62,6 +62,23 @@ describe("Phase 4 front POS database", () => {
     expect(order.rows[0]).toEqual({ customer_id: null, source: "pos", fulfillment_type: "pickup", customer_name_snapshot: "Walk-in" });
   });
 
+  it("keeps a corrected returning customer on one profile and counts their counter visits", async () => {
+    const firstPayload = { ...identifiedPayload("phase4-profile-first-visit"), source: "pos", fulfillment_type: "pickup", first_name: "Customer", last_name: "Unknown", phone: "5085550198" };
+    const firstOrder = await createOrder(database, cashierId, firstPayload);
+    const first = await database.query<{ customer_id: string }>(`select customer_id from public.orders where id='${firstOrder.id}'`);
+    const customerId = first.rows[0]!.customer_id;
+    const nextPayload = { ...firstPayload, idempotency_key: "phase4-profile-repeat-visit", customer_id: customerId, first_name: "Maria", last_name: "Lopez" };
+    const nextOrder = await createOrder(database, cashierId, nextPayload);
+    const duplicate = await createOrder(database, cashierId, nextPayload);
+    expect(duplicate).toMatchObject({ id: nextOrder.id, duplicate: true });
+    const profile = await database.query<{ first_name: string; last_name: string; order_count: number; lifetime_spend_cents: number; first_order_at: string | null; last_order_at: string | null }>(`select first_name,last_name,order_count,lifetime_spend_cents,first_order_at,last_order_at from public.customers where id='${customerId}'`);
+    expect(profile.rows[0]).toMatchObject({ first_name: "Maria", last_name: "Lopez", order_count: 2, lifetime_spend_cents: firstOrder.total_cents + nextOrder.total_cents });
+    expect(profile.rows[0]!.first_order_at).not.toBeNull();
+    expect(profile.rows[0]!.last_order_at).not.toBeNull();
+    const linked = await database.query<{ customer_id: string; customer_name_snapshot: string }>(`select customer_id,customer_name_snapshot from public.orders where id='${nextOrder.id}'`);
+    expect(linked.rows[0]).toEqual({ customer_id: customerId, customer_name_snapshot: "Maria Lopez" });
+  });
+
   it("denies manual discounts to cashiers and audits an owner discount", async () => {
     const discounted = { ...walkInPayload("phase4-discount-key-001"), manual_discount_type: "percent", manual_discount_value: 1000, manual_discount_reason: "Owner service recovery" };
     await expect(createOrder(database, cashierId, discounted)).rejects.toThrow(/Manager discount permission required/);
@@ -79,5 +96,5 @@ describe("Phase 4 front POS database", () => {
 function baseItems() { return [{ menu_item_id: itemId, variant_id: null, quantity: 1, special_instructions: "Well done", modifiers: [] }]; }
 function walkInPayload(idempotency_key: string) { return { idempotency_key, customer_mode: "walk_in", customer_id: "", source: "pos", fulfillment_type: "pickup", payment_method: "test_manual", first_name: "", last_name: "", phone: "", email: "", address_id: "", address: { address1: "", address2: "", city: "", state: "", postal_code: "", delivery_instructions: "" }, promo_code: "", manual_discount_type: "", manual_discount_value: 0, manual_discount_reason: "", tip_cents: 0, special_instructions: "Counter", items: baseItems() }; }
 function identifiedPayload(idempotency_key: string) { return { ...walkInPayload(idempotency_key), customer_mode: "identified", source: "phone", fulfillment_type: "delivery", first_name: "Pat", last_name: "Customer", phone: "508-555-0144", address: { address1: "10 Main St", address2: "", city: "Worcester", state: "MA", postal_code: "01606", delivery_instructions: "Side door" } }; }
-async function createOrder(database: PGlite, userId: string, payload: Record<string, unknown>) { return authenticatedCall<{ id: string; duplicate: boolean }>(database, userId, `public.wayne_create_pos_order('${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb)`, true); }
+async function createOrder(database: PGlite, userId: string, payload: Record<string, unknown>) { return authenticatedCall<{ id: string; duplicate: boolean; total_cents: number }>(database, userId, `public.wayne_create_pos_order('${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb)`, true); }
 async function authenticatedCall<T>(database: PGlite, userId: string, expression: string, commit = false) { await database.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub','${userId}',true);`); try { const result = await database.query<{ result: T }>(`select ${expression} result`); await database.exec(commit ? "commit" : "rollback"); return result.rows[0]!.result; } catch (error) { await database.exec("rollback"); throw error; } }

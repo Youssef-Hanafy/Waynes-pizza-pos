@@ -41,6 +41,7 @@ export const posDraftSchema = z.object({
   callerName: z.string(),
   customerMode: z.enum(["walk_in", "identified"]),
   fulfillment: z.enum(["pickup", "delivery"]),
+  orderKind: z.enum(["walkin", "pickup", "delivery"]).nullable().optional().default(null),
   customer: posCustomerSchema.nullable(),
   firstName: z.string(),
   lastName: z.string(),
@@ -105,6 +106,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     callerName: "",
     customerMode: "walk_in",
     fulfillment: "pickup",
+    orderKind: null,
     customer: null,
     firstName: "",
     lastName: "",
@@ -161,7 +163,7 @@ export function heldDrafts(state: DraftsState): PosDraft[] {
 /** A short name for a draft on the hold tray. */
 export function draftLabel(draft: PosDraft): string {
   if (draft.addTo) return `Add to #${draft.addTo.dailyNumber ?? draft.addTo.orderNumber.replace(/^W0*/, "")}${draft.addTo.customerName ? ` · ${draft.addTo.customerName}` : ""}`;
-  const who = draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}`.trim() : `${draft.firstName} ${draft.lastName}`.trim() || draft.callerName;
+  const who = `${draft.firstName} ${draft.lastName}`.trim() || (draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}`.trim() : draft.callerName);
   const origin = draft.source === "phone" ? (draft.phoneLine ? `Line ${draft.phoneLine}` : "Phone") : "Walk-in";
   return who ? `${origin} · ${who}` : origin;
 }
@@ -290,6 +292,8 @@ export function draftFromCall(input: {
     callerName: input.callerName,
     customerMode: input.withoutProfile ? "walk_in" : "identified",
     fulfillment: "pickup",
+    orderKind: "pickup",
+    started: false,
     customer,
     firstName: customer?.first_name ?? "",
     lastName: customer?.last_name ?? "",
@@ -298,6 +302,7 @@ export function draftFromCall(input: {
     email: customer?.email ?? "",
     // Ready for Delivery the moment the cashier switches to it (§9).
     addressId: preferred?.id ?? "",
+    address: preferred ? { address1: preferred.address1, address2: preferred.address2, city: preferred.city, state: preferred.state, postal_code: preferred.postal_code, delivery_instructions: preferred.delivery_instructions } : blankAddress(),
   };
 }
 

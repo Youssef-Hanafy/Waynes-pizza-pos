@@ -206,7 +206,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     // ticket and resends it, with the same idempotency key, when it is back.
     // Walk-ins without a profile always go out as pickup (see draftToOrderPayload).
     const delivery = draft.fulfillment === "delivery" && !noProfile;
-    const customerName = draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}` : `${draft.firstName} ${draft.lastName}`.trim();
+    const customerName = `${draft.firstName} ${draft.lastName}`.trim();
     const source = draft.source;
     const result = await draftSync.submit(draft.id);
     setSubmitting(false);
@@ -424,7 +424,7 @@ function draftHasWork(draft: PosDraft) {
 
 /** One line saying what this ticket is, for the bar above the menu. */
 function ticketSummary(draft: PosDraft, settings: StoreSettings) {
-  const who = draft.customer ? `${draft.customer.first_name} ${draft.customer.last_name}` : `${draft.firstName} ${draft.lastName}`.trim();
+  const who = `${draft.firstName} ${draft.lastName}`.trim();
   const how = draft.source === "phone" ? `Phone${draft.phoneLine ? ` · Line ${draft.phoneLine}` : ""}` : "In store";
   if (draft.customerMode === "walk_in") {
     return { icon: "🚶", title: `${draft.source === "phone" ? "Pickup (no profile)" : "Walk-in"}${who ? ` · ${who}` : ""}`, detail: `${how}${draft.phone && draft.source === "phone" ? ` · ${formatPhone(draft.phone)}` : ""} · tap to change` };

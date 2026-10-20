@@ -61,5 +61,5 @@ export function useCustomerSearch(query: string, options: { delayMs?: number; en
     return () => { controller.abort(); window.clearTimeout(timer); window.clearTimeout(mark); };
   }, [active, delayMs, text]);
 
-  return active ? state : { results: [], busy: false, error: "", searched: "" };
+  return active ? state.searched === text ? state : { results: [], busy: true, error: "", searched: "" } : { results: [], busy: false, error: "", searched: "" };
 }
