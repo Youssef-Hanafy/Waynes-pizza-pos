@@ -71,8 +71,8 @@ export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): 
     if (line.kind === "rule") { align(); style(); bytes.push(...latin1("-".repeat(columns)), 0x0a); continue; }
     if (line.kind === "pair") {
       align(); style(line.bold, line.large, false, line.tall);
-      const text = layoutToText({ title: "", lines: [size === "xlarge" ? { ...line, large: false } : line] }, columns)[0] ?? "";
-      bytes.push(...latin1(text), 0x0a);
+      const chunks = layoutToText({ title: "", lines: [size === "xlarge" ? { ...line, large: false } : line] }, columns);
+      for (const chunk of chunks) bytes.push(...latin1(chunk), 0x0a);
       continue;
     }
     align(line.align); style(line.bold, line.large, line.highlight, line.tall);

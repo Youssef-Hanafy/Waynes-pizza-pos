@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PrintLayout, PrintLine } from "@/lib/printing/document";
+import { readableSlipLines, type PrintLayout, type PrintLine } from "@/lib/printing/document";
 import type { PosCashoutResult } from "./pos-board";
 
 /**
@@ -99,7 +99,7 @@ export function deliveryCloseoutLayout(report: DeliveryDayReport, storeName: str
   );
   if (totals.pending) lines.push({ kind: "text", text: `!! ${totals.pending} ${totals.pending === 1 ? "delivery" : "deliveries"} not cashed out yet`, bold: true, highlight: true, tall: true });
   lines.push({ kind: "feed", lines: 3 });
-  return { title: `Delivery close out ${report.day}`, lines };
+  return { title: `Delivery close out ${report.day}`, lines: readableSlipLines(lines) };
 }
 
 /**
@@ -141,5 +141,5 @@ export function driverTipsLayout(options: { storeName: string; day: string; driv
     if (today.pending_count) lines.push({ kind: "text", text: `${today.pending_count} more not cashed out yet`, bold: true, tall: true });
   }
   lines.push({ kind: "feed", lines: 2 }, { kind: "text", text: "X______________________________", tall: true }, { kind: "text", text: "Driver", align: "center" }, { kind: "feed", lines: 3 });
-  return { title: `Driver tips ${options.driverName}`, lines };
+  return { title: `Driver tips ${options.driverName}`, lines: readableSlipLines(lines) };
 }

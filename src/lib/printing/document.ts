@@ -172,17 +172,11 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
   if (order.taken_by) lines.push({ kind: "text", text: `Taken by ${order.taken_by}`, align: "center" });
   lines.push({ kind: "text", text: `Ref ${order.order_number}${order.add_on_to ? ` (add-on to ${order.add_on_to})` : ""}`, align: "center" });
   lines.push({ kind: "text", text: "Thank you!", align: "center", bold: true }, { kind: "feed", lines: 3 });
-  return { title: `Receipt ${order.order_number}`, lines: order.fulfillment_type === "delivery" ? driverSized(lines) : lines };
+  return { title: `Receipt ${order.order_number}`, lines: readableSlipLines(lines) };
 }
 
-/**
- * The driver's slips (delivery receipt, tip & signature slip): every line
- * twice as tall, so the address, phone, items and tip lines read as easily as
- * the total (owner, 2026-10-19: "driver slip overall text is very tiny, price
- * is a good size").  Same width, so nothing is cut off; lines already big stay.
- */
-export function driverSized(lines: PrintLine[]): PrintLine[] {
-  return lines.map((line) => (line.kind === "text" || line.kind === "pair") && !line.large ? { ...line, tall: true } : line);
+export function readableSlipLines(lines: PrintLine[]): PrintLine[] {
+  return lines.map((line) => line.kind === "pair" ? { ...line, large: true } : line.kind === "text" && !line.large ? { ...line, tall: true } : line);
 }
 
 /**
@@ -238,7 +232,7 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
     { kind: "text", text: "I agree to pay the above total amount.", align: "center" },
     { kind: "feed", lines: 3 },
   );
-  return { title: `Tip & signature ${order.order_number}`, lines: order.fulfillment_type === "delivery" ? driverSized(lines) : lines };
+  return { title: `Tip & signature ${order.order_number}`, lines: readableSlipLines(lines) };
 }
 
 function paymentLine(method: string, status: string, fulfillment: string) {
@@ -302,7 +296,7 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
   totals.push({ kind: "pair", left: "TOTAL", right: money(order.total_cents), bold: true, large: true });
   return {
     title: `Kitchen ${order.order_number}`,
-    lines: [
+    lines: readableSlipLines([
       ...banner,
       ...heading(doc, true),
       { kind: "text", text: countLine, align: "center", bold: true },
@@ -311,7 +305,7 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
       ...(order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${order.special_instructions}`, bold: true, highlight: true }] : []),
       ...totals,
       { kind: "feed", lines: 3 },
-    ],
+    ]),
   };
 }
 
@@ -355,9 +349,12 @@ export function layoutToText(layout: PrintLayout, columns = 42): string[] {
     else if (line.kind === "feed") for (let index = 0; index < line.lines; index += 1) out.push("");
     else if (line.kind === "pair") {
       const width = line.large ? Math.floor(columns / 2) : columns;
-      const room = Math.max(1, width - line.right.length - 1);
-      const left = line.left.length > room ? line.left.slice(0, room) : line.left;
-      out.push(`${left}${" ".repeat(width - left.length - line.right.length)}${line.right}`);
+      if (line.left.length + line.right.length + 1 <= width) {
+        out.push(`${line.left}${" ".repeat(width - line.left.length - line.right.length)}${line.right}`);
+      } else {
+        out.push(...wrap(line.left, width));
+        for (const chunk of wrap(line.right, width)) out.push(`${" ".repeat(width - chunk.length)}${chunk}`);
+      }
     } else {
       const width = line.large ? Math.floor(columns / 2) : columns;
       for (const chunk of wrap(line.text, width)) {

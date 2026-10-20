@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PrintLayout, PrintLine } from "@/lib/printing/document";
+import { readableSlipLines, type PrintLayout, type PrintLine } from "@/lib/printing/document";
 
 /** The day's close out (database: wayne_day_closeout). Counts arrive as numbers or numeric strings. */
 const n = z.coerce.number().int().catch(0);
@@ -127,7 +127,7 @@ export function closeoutLayout(report: DayCloseout, storeName: string, counted: 
     pair("STORE INCOME (NO TIPS)", tips.income, true),
     { kind: "rule" },
     { kind: "text", text: "TIPS - NOT STORE INCOME", bold: true },
-    pair(`Card tips to pay ${payoutName}`.slice(0, 30), tips.ownerCardTips, true),
+    pair(`Card tips to pay ${payoutName}`, tips.ownerCardTips, true),
     ...(tips.ownerCashTips ? [pair("Cash tips (in store)", tips.ownerCashTips)] : []),
     ...(tips.driverTips ? [pair("Delivery tips (drivers)", tips.driverTips)] : []),
     { kind: "rule" },
@@ -154,5 +154,5 @@ export function closeoutLayout(report: DayCloseout, storeName: string, counted: 
     ...(report.unpaid.count ? [pair(`STILL NOT PAID (${report.unpaid.count})`, report.unpaid.total_cents, true)] : []),
     { kind: "feed", lines: 3 },
   ];
-  return { title: `Close out ${report.day}`, lines };
+  return { title: `Close out ${report.day}`, lines: readableSlipLines(lines) };
 }

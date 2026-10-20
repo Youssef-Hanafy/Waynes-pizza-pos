@@ -21,6 +21,35 @@ const doc: PrintDocument = {
 };
 
 describe("receipts and kitchen tickets (build sheet §23)", () => {
+  it("uses readable body text and large figures across every order slip, even with a Normal printer setting", () => {
+    const pickup = { ...doc, order: { ...doc.order, fulfillment_type: "pickup" as const } };
+    for (const layout of [buildReceipt(doc), buildReceipt(pickup), buildOnlineOrderSlip(pickup), buildTipSignatureSlip(doc), buildTipSignatureSlip(pickup), buildKitchenTicket(doc)!]) {
+      for (const line of layout.lines) {
+        if (line.kind === "text") expect(line.large || line.tall, `${layout.title}: ${line.text}`).toBe(true);
+        if (line.kind === "pair") expect(line.large, `${layout.title}: ${line.left}`).toBe(true);
+      }
+      const totals = { ...layout, lines: layout.lines.filter((line) => line.kind === "pair" && line.right === "$33.99") };
+      const output = String.fromCharCode(...encodeEscPos(totals, { columns: 48, textSize: "normal", cut: "none" }));
+      const amount = output.indexOf("$33.99");
+      expect(amount).toBeGreaterThan(0);
+      const sizeCommand = output.lastIndexOf("\x1d\x21", amount);
+      expect(output.charCodeAt(sizeCommand + 2)).toBe(0x11);
+    }
+  });
+
+  it("wraps long financial labels and preserves the whole amount at large sizes", () => {
+    const layout = { title: "Close out", lines: [{ kind: "pair" as const, left: "STORE INCOME (NO TIPS)", right: "$12345.67", large: true }] };
+    const text = layoutToText(layout, 32);
+    expect(text.map((line) => line.trim()).join(" ")).toBe("STORE INCOME (NO TIPS) $12345.67");
+    expect(text.every((line) => line.length <= 16)).toBe(true);
+    for (const textSize of ["normal", "large", "xlarge"] as const) {
+      const encoded = String.fromCharCode(...encodeEscPos(layout, { columns: 32, textSize, cut: "none" }));
+      expect(encoded).toContain("$12345.67");
+      expect(encoded).toMatch(/\(NO\s+TIPS\)/);
+    }
+    expect(() => layoutToText({ title: "Narrow", lines: [{ kind: "pair", left: "Cash", right: "-$1234567890.99", large: true }] }, 16)).not.toThrow();
+  });
+
   it("prints the line, customer, address, items and totals on the receipt", () => {
     const text = layoutToText(buildReceipt(doc)).join("\n");
     expect(text).toContain("DELIVERY · PHONE · LINE 1");
