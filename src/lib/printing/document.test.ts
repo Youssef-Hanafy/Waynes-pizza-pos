@@ -50,6 +50,19 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(() => layoutToText({ title: "Narrow", lines: [{ kind: "pair", left: "Cash", right: "-$1234567890.99", large: true }] }, 16)).not.toThrow();
   });
 
+  it("keeps signature lines on one line at every paper and text size", () => {
+    const layout = { title: "Signature", lines: [{ kind: "text" as const, text: `X${"_".repeat(30)}`, tall: true }] };
+    for (const columns of [32, 40, 48]) {
+      for (const textSize of ["normal", "large", "xlarge"] as const) {
+        const width = textSize === "xlarge" ? columns / 2 : columns;
+        const encoded = String.fromCharCode(...encodeEscPos(layout, { columns, textSize, cut: "none" }));
+        expect(encoded.match(/X_+/g)).toEqual([`X${"_".repeat(width - 1)}`]);
+        expect(encoded).not.toMatch(/\n_+/);
+      }
+    }
+    expect(renderLayoutHtml(layout, 58, "normal")).toContain('class="t signature">X<span></span>');
+  });
+
   it("prints the line, customer, address, items and totals on the receipt", () => {
     const text = layoutToText(buildReceipt(doc)).join("\n");
     expect(text).toContain("DELIVERY · PHONE · LINE 1");

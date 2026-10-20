@@ -76,7 +76,9 @@ export function encodeEscPos(layout: PrintLayout, options: EscPosOptions = {}): 
       continue;
     }
     align(line.align); style(line.bold, line.large, line.highlight, line.tall);
-    for (const chunk of wrap(line.text, line.large && size !== "xlarge" ? Math.floor(columns / 2) : columns)) bytes.push(...latin1(chunk), 0x0a);
+    const width = line.large && size !== "xlarge" ? Math.floor(columns / 2) : columns;
+    const text = /^X_+$/.test(line.text) ? `X${"_".repeat(width - 1)}` : line.text;
+    for (const chunk of wrap(text, width)) bytes.push(...latin1(chunk), 0x0a);
   }
   style();
   const cut: CutStyle = options.cut === false ? "none" : options.cut === true || options.cut === undefined ? "feed_and_cut" : options.cut;

@@ -17,6 +17,7 @@ export function renderLayoutHtml(layout: PrintLayout, paperWidthMm = 80, textSiz
     if (line.kind === "feed") return '<div class="feed"></div>'.repeat(line.lines);
     const classes = [line.bold ? "b" : "", line.large ? "l" : line.tall ? "t" : "", line.kind === "text" && line.highlight ? "h" : ""].filter(Boolean).join(" ");
     if (line.kind === "pair") return `<div class="pair ${classes}"><span>${escape(line.left)}</span><span>${escape(line.right)}</span></div>`;
+    if (/^X_+$/.test(line.text)) return `<div class="${classes} signature">X<span></span></div>`;
     return `<div class="${classes}" style="text-align:${line.align ?? "left"}">${escape(line.text)}</div>`;
   }).join("\n");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(layout.title)}</title><style>
@@ -26,6 +27,7 @@ body { font: ${base}px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #00
 body > div { overflow-wrap: anywhere; }
 .pair { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 8px; }
 .pair span { max-width: 100%; } .pair span:last-child { margin-left: auto; text-align: right; }
+.signature { display: flex; align-items: baseline; gap: 4px; } .signature span { flex: 1; border-bottom: 1px solid #000; }
 .feed { height: 1.35em; }
 </style></head><body>${body}</body></html>`;
 }
