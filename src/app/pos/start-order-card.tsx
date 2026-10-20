@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { GoogleAddressInput } from "@/components/checkout/google-address-input";
+import { PosAddressInput } from "@/components/checkout/google-address-input";
 import type { StoreSettings } from "@/lib/content/schemas";
 import { formatCents } from "@/lib/menu/schemas";
 import type { DraftAddress, PosDraft } from "@/lib/orders/drafts";
@@ -195,7 +195,7 @@ function AddressPicker({ address, addressId, customer, onAddress, onAddressId, o
     </div> : null}
     {!addressId ? <div className="grid min-w-0 gap-3">
       {/* Wrapped: the address field spans two columns when it sits in a form grid, which here would split this list into two columns. */}
-      <div className="pos-address min-w-0"><GoogleAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onPicked({ address: { ...address, ...selected }, addressId: "" })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} /></div>
+      <div className="pos-address min-w-0"><PosAddressInput id="start-address1" label="Street address" name="start-address1" onAddressSelect={(selected) => onPicked({ address: { ...address, ...selected }, addressId: "" })} onChange={(address1) => onAddress({ ...address, address1 })} placeholder="Start typing the address" value={address.address1} /></div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem_7rem]">
         <Input id="start-address2" label="Apt / unit" onChange={(event) => onAddress({ ...address, address2: event.target.value })} value={address.address2} />
         <Input id="start-city" label="City (optional)" onChange={(event) => onAddress({ ...address, city: event.target.value })} value={address.city} />
