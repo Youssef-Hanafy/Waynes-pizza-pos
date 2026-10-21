@@ -65,9 +65,9 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   const editing = draft.cart.length > 0;
 
   const tile = (value: OrderKind, icon: string, title: string, note: string, disabled = false) => (
-    <button aria-pressed={kind === value} className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 p-3 text-center transition active:scale-[0.98] disabled:opacity-40 ${kind === value ? "border-wayne-green bg-wayne-green text-white shadow-md" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled} key={value} onClick={() => choose(value)} type="button">
-      <span aria-hidden className="text-3xl leading-none">{icon}</span>
-      <strong className="mt-1.5 text-xl font-black">{title}</strong>
+    <button aria-pressed={kind === value} className={`flex min-h-[4.5rem] flex-col items-center justify-center rounded-2xl border-2 p-2 text-center transition active:scale-[0.98] disabled:opacity-40 ${kind === value ? "border-wayne-green bg-wayne-green text-white shadow-md" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled} key={value} onClick={() => choose(value)} type="button">
+      <span aria-hidden className="text-2xl leading-none">{icon}</span>
+      <strong className="mt-1 text-xl font-black">{title}</strong>
       <span className={`text-xs font-bold ${kind === value ? "text-white/80" : "text-wayne-muted"}`}>{note}</span>
     </button>
   );
@@ -81,13 +81,11 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
    */
   const needsStreet = kind === "delivery" && !draft.started && settings.delivery_enabled;
 
-  return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2 sm:p-3">
-    <section aria-labelledby="start-order-title" className={`w-full min-w-0 rounded-3xl border border-wayne-border bg-white p-4 shadow-xl sm:p-5 ${needsStreet ? "max-w-6xl" : "max-w-4xl"}`}>
+  return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2">
+    <section aria-labelledby="start-order-title" className={`w-full min-w-0 rounded-3xl border border-wayne-border bg-white p-3 shadow-xl sm:px-5 sm:py-3 ${needsStreet ? "max-w-6xl" : "max-w-4xl"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black" id="start-order-title">{editing ? "Order details" : "New order"}</h1>
-          {/* Delivery needs the room for the address. */}
-          {needsStreet ? null : <p className="text-sm font-bold text-wayne-muted">{editing ? "Update the details, then return to the order. The items stay on the ticket." : "Find or add the customer, choose the order type, then continue when you're ready."}</p>}
         </div>
         <Button onClick={() => start(true)} size="sm" variant="ghost">Jump to take order →</Button>
         {fromCall ? <div className="rounded-2xl border-2 border-wayne-green bg-wayne-green/5 px-4 py-2 text-right">
@@ -110,12 +108,11 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
           <Button onClick={() => { update({ customer: null, addressId: "" }); setSearchField("phone"); }} size="sm" variant="secondary">Find someone else</Button>
         </div> : null}
         <>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          {/* Phone, names and email on one row (two rows beside a delivery address) so the card fits the screen with no scrolling (owner, 2026-10-21). */}
+          <div className={`grid gap-2 sm:gap-3 ${needsStreet ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]"}`}>
             <Input autoComplete="off" id="start-phone" inputMode="tel" label="Phone" onChange={(event) => editIdentity({ phone: event.target.value })} placeholder="(508) 555-0123" type="tel" value={draft.phone} />
             <Input autoComplete="off" id="start-first" label="First name" onChange={(event) => editIdentity({ firstName: event.target.value })} value={draft.firstName} />
             <Input autoComplete="off" id="start-last" label="Last name" onChange={(event) => editIdentity({ lastName: event.target.value })} value={draft.lastName} />
-          </div>
-          <div className="mt-3">
             <Input autoComplete="off" id="start-email" inputMode="email" label="Email (optional)" onChange={(event) => editIdentity({ email: event.target.value })} value={draft.email} />
           </div>
           <div aria-live="polite" className="mt-1 min-h-5">
@@ -160,9 +157,9 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
       </Step> : null}
       </div>
 
-      {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-wayne-border pt-4">
-        <p className="max-w-md text-sm text-wayne-muted">Customer details are saved with the order. A phone number links their orders and visit history.</p>
+      {error ? <p className="mt-3 rounded-xl bg-wayne-alert-soft p-2.5 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-wayne-border pt-3">
+        <p className="max-w-md text-xs text-wayne-muted">Customer details are saved with the order. A phone number links their orders and visit history.</p>
         <Button onClick={() => start()} size="lg">{editing ? "Back to the order →" : "Continue to take order →"}</Button>
       </div>
     </section>
@@ -170,8 +167,8 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
-  return <div className="mt-4 min-w-0">
-    <h2 className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-wayne-muted"><span className="grid size-6 place-items-center rounded-full bg-wayne-green text-xs text-white">{n}</span>{title}</h2>
+  return <div className="mt-3 min-w-0">
+    <h2 className="mb-1.5 flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-wayne-muted"><span className="grid size-6 place-items-center rounded-full bg-wayne-green text-xs text-white">{n}</span>{title}</h2>
     {children}
   </div>;
 }
