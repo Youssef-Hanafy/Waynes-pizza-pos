@@ -228,14 +228,15 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         </div>
         {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
         {result.detail.length ? <table className="mt-3 w-full text-left text-sm">
-          <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-4 text-right">Tip</th><th>Driver</th></tr></thead>
+          <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
           <tbody>{result.detail.map((line) => {
             const tipFromDrawer = line.paid_by === "card_held" || line.paid_by === "card" || line.paid_by === "paid";
             return <tr className="border-b border-wayne-border last:border-0" key={line.order_id}>
               <td className="py-1 pr-2 font-black">{line.order_number.replace(/^W0*/, "")}</td>
               <td className="pr-2">{paidByShort[line.paid_by] ?? line.paid_by}</td>
               <td className="pr-2 text-right">{formatCents(line.total_cents - line.tip_cents)}</td>
-              <td className="pr-4 text-right font-bold">{formatCents(line.tip_cents)}</td>
+              <td className="pr-2 text-right">{formatCents(line.tip_cents)}</td>
+              <td className="pr-4 text-right font-black">{formatCents(line.total_cents)}</td>
               <td className="text-xs">{rundownNote(line.paid_by, line.cash_cents, tipFromDrawer ? line.tip_cents : 0, tipFromDrawer ? 0 : line.tip_cents)}</td>
             </tr>;
           })}</tbody>
@@ -297,7 +298,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                     <td className="py-2 pr-2 font-black">{order.order_number.replace(/^W0*/, "")}</td>
                     <td className="py-2 pr-2"><strong className="block">{order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</strong><span className="block text-xs text-wayne-muted">{order.address}{order.city ? `, ${order.city}` : ""}</span>{staleHold ? <span className="block text-xs font-bold text-wayne-alert">Card approval expires soon — cash out today</span> : null}</td>
                     <td className="py-2 pr-2 text-xs font-bold">{paidByLabel(order)}</td>
-                    <td className="py-2 pr-4 text-right font-bold">{formatCents(order.total_cents)}</td>
+                    <td className="py-2 pr-4 text-right font-bold">{allowed && cents && !over ? <>{formatCents(order.total_cents + cents)}<span className="block text-xs font-normal text-wayne-muted">{formatCents(order.total_cents)} + {formatCents(cents)} tip</span></> : formatCents(order.total_cents)}</td>
                     <td className="py-2 pr-2">{noCardTip ? <span className="text-xs font-bold text-wayne-alert">This card can&apos;t take a tip after the order (Stripe). The order is charged as is.</span> : allowed ? <>
                       <input aria-label={`Tip for order ${order.order_number}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
@@ -311,12 +312,14 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
             {orders.length ? confirming ? <div className="mt-4 rounded-2xl border-2 border-wayne-green bg-wayne-green/5 p-4">
               <p className="text-sm font-black uppercase tracking-[0.16em] text-wayne-muted">Run down · {orders.length} {orders.length === 1 ? "delivery" : "deliveries"}</p>
               <table className="mt-2 w-full text-left text-sm">
-                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-4 text-right">Tip</th><th>Driver</th></tr></thead>
+                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
                 <tbody>{cashoutLines(orders, tipCents).map((line) => <tr className="border-b border-wayne-border last:border-0" key={line.order.order_id}>
                   <td className="py-1 pr-2 font-black">{line.order.order_number.replace(/^W0*/, "")}</td>
                   <td className="pr-2">{paidByShort[line.order.paid_by] ?? line.order.paid_by}</td>
                   <td className="pr-2 text-right">{formatCents(line.order.total_cents - (line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.tip_cents : 0))}</td>
-                  <td className="pr-4 text-right font-bold">{formatCents(line.tip)}</td>
+                  <td className="pr-2 text-right">{formatCents(line.tip)}</td>
+                  {/* Order + tip: what the card is charged / the order comes to with its tip (owner, 2026-10-20). */}
+                  <td className="pr-4 text-right font-black">{formatCents(line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.total_cents : line.order.total_cents + line.tip)}</td>
                   <td className="text-xs">{rundownNote(line.order.paid_by, line.collected, line.storePays, line.keeps)}</td>
                 </tr>)}</tbody>
               </table>
