@@ -44,6 +44,8 @@ export const dayCloseoutSchema = z.object({
   tip_payout: z.object({
     owner_card_tips_cents: n, owner_card_tip_count: n, owner_cash_tips_cents: n, driver_tips_cents: n, income_cents: n,
   }).nullable().optional().catch(null),
+  /** Owner tips earlier close outs already took out of the drawer for this day (owner, 2026-10-20). */
+  owner_tips_paid_out_cents: z.number().int().optional().default(0).catch(0),
   saved: z.object({
     business_date: z.string(), counted_cash_cents: n, expected_cash_cents: n, variance_cents: n, note: z.string(),
     closed_at: z.string(), closed_by_name: z.string().nullable().optional(), denominations: z.record(z.string(), n).catch({}),
@@ -74,14 +76,34 @@ export function countedFromDenominations(counts: Record<string, number>) {
  * What should be in the drawer: the open drawer's own expectation when one
  * is open (float + cash taken + paid in + driver cash − paid out − drops);
  * otherwise what today's closed drawers expected; otherwise the day's cash
- * takings less cash refunds.
+ * takings less cash refunds.  Then less the owner's tips, which are paid out
+ * of the drawer at close out (owner, 2026-10-20: "should be deducted from the
+ * cash in the cash drawer because now he was short") — only the part earlier
+ * close outs haven't already taken out.  Same math as wayne_save_day_closeout.
  */
 export function expectedCash(report: DayCloseout, isToday = true) {
+  return drawerExpected(report, isToday) - ownerTipsToPayOut(report);
+}
+
+function drawerExpected(report: DayCloseout, isToday: boolean) {
   // A drawer still open belongs to today; an earlier day compares with its closed drawers.
   if (isToday && report.drawer.open_shifts.length) return report.drawer.open_shifts.reduce((sum, shift) => sum + shift.expected_cash_cents, 0);
   const closed = report.drawer.closed_today.reduce((sum, shift) => sum + shift.expected_cash_cents, 0);
   if (closed) return closed;
   return report.tenders.cash_cents - report.refunds.cash_cents;
+}
+
+/** All of the owner's tips for the day (card + cash, every order that isn't a delivery). */
+export function ownerTips(report: DayCloseout) {
+  const tips = tipPayout(report);
+  return tips.ownerCardTips + tips.ownerCashTips;
+}
+
+/** The owner's tips still to come out of the drawer at this close out. */
+export function ownerTipsToPayOut(report: DayCloseout) {
+  // A database from before tip_payout: nothing to take out (the old math).
+  if (!report.tip_payout) return 0;
+  return ownerTips(report) - report.owner_tips_paid_out_cents;
 }
 
 export const brandLabels: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", discover: "Discover", other_card: "Other cards" };
@@ -146,6 +168,7 @@ export function closeoutLayout(report: DayCloseout, storeName: string, counted: 
     ...(report.online.unpaid_count ? [pair(`Not paid (${report.online.unpaid_count})`, report.online.unpaid_cents)] : []),
     { kind: "rule" },
     { kind: "text", text: "CASH DRAWER", bold: true },
+    ...(report.tip_payout && ownerTips(report) ? [pair(`Tips paid to ${payoutName}`, -ownerTips(report))] : []),
     pair("Expected", expected),
     ...(counted === null ? [] : [pair("Counted", counted), pair(counted - expected >= 0 ? "Over" : "Short", counted - expected, true)]),
     { kind: "rule" },

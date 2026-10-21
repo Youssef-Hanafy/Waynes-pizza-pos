@@ -26,7 +26,10 @@ export async function GET(request: Request) {
     const missing = error.code === "PGRST202" || error.code === "42883";
     return Response.json({ error: missing ? "The close out isn't set up in the database yet (migration 20261030090000_day_closeout)." : "The close out is unavailable. Try again." }, { status: 503 });
   }
-  const parsed = dayCloseoutSchema.safeParse(data);
+  // Owner tips already taken out of the drawer by an earlier close out today (owner, 2026-10-20).
+  const reportDay = typeof (data as { day?: unknown } | null)?.day === "string" ? (data as { day: string }).day : null;
+  const paidOut = reportDay ? await supabase.rpc("wayne_owner_tips_paid_out", { target_day: reportDay }) : null;
+  const parsed = dayCloseoutSchema.safeParse({ ...(data as object), owner_tips_paid_out_cents: typeof paidOut?.data === "number" ? paidOut.data : 0 });
   if (!parsed.success) return Response.json({ error: "The close out could not be read." }, { status: 500 });
   return Response.json(parsed.data, { headers: { "Cache-Control": "no-store" } });
 }

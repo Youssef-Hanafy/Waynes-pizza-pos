@@ -3,7 +3,7 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
-import { brandLabels, closeoutLayout, dayCloseoutSchema, expectedCash, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
+import { brandLabels, closeoutLayout, dayCloseoutSchema, expectedCash, ownerTipsToPayOut, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
 import { deliveryCloseoutLayout, deliveryDayReportSchema } from "@/lib/delivery/day-report";
 import { formatCents } from "@/lib/menu/schemas";
 import { getHardwareRuntime } from "@/stores/hardware-store";
@@ -220,6 +220,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
           <div className="grid content-start gap-2 rounded-2xl bg-wayne-cream p-4">
             <Row big label="Expected in the drawer" value={formatCents(expected)} />
             {(isToday ? report.drawer.open_shifts : []).map((shift) => <p className="text-xs text-wayne-muted" key={shift.id}>{shift.register_label}: float {formatCents(shift.opening_cash_cents)} + cash {formatCents(shift.cash_sales_cents)}{shift.driver_cash_cents ? ` + drivers ${formatCents(shift.driver_cash_cents)}` : ""}{shift.paid_in_cents ? ` + paid in ${formatCents(shift.paid_in_cents)}` : ""}{shift.paid_out_cents ? ` − paid out ${formatCents(shift.paid_out_cents)}` : ""}{shift.drop_cents ? ` − drops ${formatCents(shift.drop_cents)}` : ""}{shift.cash_refunds_cents ? ` − refunds ${formatCents(shift.cash_refunds_cents)}` : ""}</p>)}
+            {/* Owner tips come out of the drawer at close out (owner, 2026-10-20). */}
+            {ownerTipsToPayOut(report) ? <p className="text-sm font-bold">{ownerTipsToPayOut(report) > 0 ? `− ${formatCents(ownerTipsToPayOut(report))} tips paid to ${tipPayoutName} from the drawer` : `+ ${formatCents(-ownerTipsToPayOut(report))} tips back in the drawer`}</p> : report.owner_tips_paid_out_cents ? <p className="text-xs text-wayne-muted">{formatCents(report.owner_tips_paid_out_cents)} tips already paid to {tipPayoutName} from the drawer</p> : null}
             {!isToday || !report.drawer.open_shifts.length ? <p className="text-xs text-wayne-muted">{report.drawer.closed_today.length ? "No drawer open — compared with the drawers closed today." : "No drawer was opened — compared with the day's cash takings."}</p> : null}
             <Row big label="Counted (real)" value={counted === null ? "—" : formatCents(counted)} />
             <p className={`rounded-xl p-3 text-center text-2xl font-black ${variance === null ? "bg-white text-wayne-muted" : variance === 0 ? "bg-wayne-ok-soft text-wayne-ok" : variance > 0 ? "bg-wayne-gold/30" : "bg-wayne-alert-soft text-wayne-alert"}`}>{variance === null ? "Count the cash" : varianceText(variance)}</p>
