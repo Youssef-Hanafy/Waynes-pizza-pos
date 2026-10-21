@@ -274,39 +274,79 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
   const order = doc.order;
   const count = itemCount(items);
   const wholeOrder = itemCount(doc.items);
-  const countLine = only
-    ? `${count} ITEM${count === 1 ? "" : "S"} ADDED (${wholeOrder} ON ORDER)`
-    : `${count} ITEM${count === 1 ? "" : "S"}${count !== wholeOrder ? ` (OF ${wholeOrder} ON ORDER)` : ""}`;
   const banner: PrintLine[] = only
     ? [{ kind: "text", text: `ADDED TO #${ticketNumber(order)}`, align: "center", bold: true, large: true, highlight: true }, { kind: "text", text: "Same order - add these items", align: "center", bold: true }, { kind: "rule" }]
     : order.add_on_to
       ? [{ kind: "text", text: `ADD-ON TO #${ticketNumber(order)}`, align: "center", bold: true, large: true, highlight: true }, { kind: "rule" }]
       : [];
+  // Compact (owner, 2026-10-20: "make them more compact so they don't use as much
+  // paper"): the item count prints once (at the bottom, big), no blank line between
+  // items, and the small money lines share lines two to a line.  Text sizes are
+  // unchanged — only empty space and repeated lines are gone.
+  const moneyLines: [string, string][] = [];
+  const extras: string[] = [`Subtotal ${money(order.subtotal_cents)}`];
+  if (order.discount_cents) extras.push(`Discount ${money(-order.discount_cents)}`);
+  if (order.delivery_fee_cents) extras.push(`Delivery ${money(order.delivery_fee_cents)}`);
+  extras.push(`Tax ${money(order.tax_cents)}`);
+  if (order.tip_cents) extras.push(`Tip ${money(order.tip_cents)}`);
+  for (let index = 0; index < extras.length; index += 2) moneyLines.push([extras[index], extras[index + 1] ?? ""]);
   const totals: PrintLine[] = [
     { kind: "rule" },
     // Big letters fit half a line: an added-items ticket says just how many were added.
-    { kind: "text", text: only ? `${count} ITEM${count === 1 ? "" : "S"} ADDED` : countLine, align: "center", bold: true, large: true },
-    { kind: "rule" },
-    { kind: "pair", left: "Subtotal", right: money(order.subtotal_cents) },
+    { kind: "text", text: `${count} ITEM${count === 1 ? "" : "S"}${only ? " ADDED" : ""}`, align: "center", bold: true, large: true },
+    // Only when this printer got part of the order (or just the added items).
+    ...(only || count !== wholeOrder ? [{ kind: "text" as const, text: `(${only ? "" : "OF "}${wholeOrder} ON ORDER)`, align: "center" as const, bold: true }] : []),
+    ...moneyLines.map(([left, right]): PrintLine => ({ kind: "pair", left, right })),
+    { kind: "pair", left: "TOTAL", right: money(order.total_cents), bold: true, large: true },
   ];
-  if (order.discount_cents) totals.push({ kind: "pair", left: "Discount", right: money(-order.discount_cents) });
-  if (order.delivery_fee_cents) totals.push({ kind: "pair", left: "Delivery", right: money(order.delivery_fee_cents) });
-  totals.push({ kind: "pair", left: "Tax", right: money(order.tax_cents) });
-  if (order.tip_cents) totals.push({ kind: "pair", left: "Tip", right: money(order.tip_cents) });
-  totals.push({ kind: "pair", left: "TOTAL", right: money(order.total_cents), bold: true, large: true });
   return {
     title: `Kitchen ${order.order_number}`,
     lines: readableSlipLines([
       ...banner,
-      ...heading(doc, true),
-      { kind: "text", text: countLine, align: "center", bold: true },
+      ...kitchenHeading(doc),
       { kind: "rule" },
-      ...items.flatMap((item) => [...itemLines(item, false), { kind: "feed" as const, lines: 1 }]),
+      ...items.flatMap((item) => itemLines(item, false)),
       ...(order.special_instructions ? [{ kind: "rule" as const }, { kind: "text" as const, text: `ORDER NOTE: ${order.special_instructions}`, bold: true, highlight: true }] : []),
       ...totals,
       { kind: "feed", lines: 3 },
     ]),
   };
+}
+
+/** Time only (7:51 PM) — the kitchen slip prints the same day it's made. */
+function clock(iso: string | null, timeZone: string) {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+/**
+ * The kitchen slip's top: the same facts as the receipt's heading in fewer
+ * lines — times without the date (fits one line instead of wrapping to two),
+ * and the customer's name and phone on one line.  The receipt keeps heading().
+ */
+function kitchenHeading(doc: PrintDocument): PrintLine[] {
+  const order = doc.order;
+  const origin = order.source === "phone" ? `PHONE${order.phone_line ? ` · LINE ${order.phone_line}` : ""}` : order.source === "online" ? "ONLINE" : "COUNTER";
+  const placed = clock(order.placed_at, doc.store.timezone);
+  const ready = clock(order.promised_at, doc.store.timezone);
+  const lines: PrintLine[] = [
+    ...paymentBanner(order, true),
+    { kind: "rule" },
+    { kind: "text", text: `${order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP"} · ${origin}`, align: "center", bold: true },
+    { kind: "text", text: `${order.add_on_to ? "ADD-ON TO " : "ORDER "}#${ticketNumber(order)}`, align: "center", bold: true, tall: true },
+  ];
+  if (placed || ready) lines.push({ kind: "text", text: [placed && `Placed ${placed}`, ready && `Ready ${ready}`].filter(Boolean).join(" · "), align: "center" });
+  const name = order.customer_name;
+  const tel = order.customer_phone ? phone(order.customer_phone) : "";
+  if (name && tel) lines.push({ kind: "pair", left: name, right: tel, bold: true });
+  else if (name || tel) lines.push({ kind: "text", text: name || tel, bold: true });
+  const address = order.delivery_address;
+  if (order.fulfillment_type === "delivery" && address) {
+    lines.push({ kind: "text", text: `${address.address1}${address.address2 ? `, ${address.address2}` : ""}`, bold: true });
+    lines.push({ kind: "text", text: `${address.city}, ${address.state} ${address.postal_code}` });
+    if (address.delivery_instructions) lines.push({ kind: "text", text: `Driver: ${address.delivery_instructions}` });
+  }
+  return lines;
 }
 
 /** A fixed test page for Admin → Hardware → Test print. */

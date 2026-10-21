@@ -91,7 +91,8 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     // Item lines carry no prices; the order totals and the item count are printed (owner, 2026-10-13).
     expect(ticket).not.toMatch(/Cheese Pizza\s+\$/);
     expect(ticket).toMatch(/TOTAL\s+\$33\.99/);
-    expect(ticket).toContain("1 ITEM (OF 2 ON ORDER)");
+    expect(ticket).toContain("1 ITEM");
+    expect(ticket).toContain("(OF 2 ON ORDER)");
     expect(layoutToText(buildKitchenTicket(doc)!).join("\n")).toContain("2 ITEMS");
     expect(buildKitchenTicket(doc, ["Desserts"])).toBeNull();
   });
@@ -202,10 +203,29 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(added).toContain("ADDED TO #12");
     expect(added).toContain("Coke");
     expect(added).not.toContain("Cheese Pizza");
-    expect(added).toContain("1 ITEM ADDED (2 ON ORDER)");
+    expect(added).toContain("1 ITEM ADDED");
+    expect(added).toContain("(2 ON ORDER)");
     expect(buildKitchenTicket(numbered, [], { onlyItemIds: [] })).toBeNull();
     const addOn = layoutToText(buildKitchenTicket({ ...numbered, order: { ...numbered.order, add_on_to: "W000100" } })!, 40).join("\n");
     expect(addOn).toContain("ADD-ON TO #12");
+  });
+
+  it("keeps the kitchen slip compact: one item count, no blank lines between items, one-line times and customer (owner, 2026-10-20)", () => {
+    const lines = layoutToText(buildKitchenTicket(doc)!, 40);
+    const text = lines.join("\n");
+    expect(text.match(/2 ITEMS/g)).toHaveLength(1);
+    expect(text).not.toContain("(OF 2 ON ORDER)");
+    expect(text).toMatch(/Placed \d{1,2}:\d\d [AP]M · Ready \d{1,2}:\d\d [AP]M/);
+    expect(text).toMatch(/John Smith\s+\(508\) 555-1234/);
+    // The only blank lines are the feed at the very end (past the TM-U220B's cutter).
+    const lastText = lines.findLastIndex((line) => line.trim() !== "");
+    expect(lines.slice(0, lastText).some((line) => line.trim() === "")).toBe(false);
+    expect(text).toMatch(/Subtotal \$28\.99\s+Delivery \$3\.00/);
+    expect(text).toMatch(/TOTAL\s+\$33\.99/);
+    // The receipt is untouched: dated times, name and phone on their own lines.
+    const receipt = layoutToText(buildReceipt(doc), 48).join("\n");
+    expect(receipt).toMatch(/Placed \d+\/\d+, /);
+    expect(receipt).toMatch(/^John Smith$/m);
   });
 
   it("keeps kitchen item lines full width (tall, not wide) and picks the TM-U220B's 40-column font", () => {
