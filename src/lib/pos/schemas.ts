@@ -116,6 +116,36 @@ export const posAddItemsInputSchema = z.object({
 export type PosAddItemsInput = z.infer<typeof posAddItemsInputSchema>;
 
 /**
+ * Edit an order (owner, 2026-10-24: tap the order card, the original items come
+ * up, edit them or add new ones — same order, no new slip).  Lines taken off
+ * (or replaced by an edited copy), quantities changed, and new lines.
+ */
+export const posEditItemsInputSchema = z.object({
+  idempotency_key: z.string().min(16).max(160),
+  special_instructions: z.string().max(500).default(""),
+  remove_item_ids: z.array(z.uuid()).max(100).default([]),
+  quantities: z.array(z.object({ id: z.uuid(), quantity: z.number().int().min(1).max(20) })).max(100).default([]),
+  items: z.array(orderLineSchema).max(50).default([]),
+}).refine((value) => value.remove_item_ids.length || value.quantities.length || value.items.length || value.special_instructions.trim(), { message: "Nothing was changed." });
+export type PosEditItemsInput = z.infer<typeof posEditItemsInputSchema>;
+
+/** An order's lines, as the POS editor opens them (wayne_pos_order_lines). */
+export const posOrderLinesSchema = z.object({
+  order: z.object({
+    id: z.uuid(), order_number: z.string(), daily_number: z.number().int().nullable(), customer_name: z.string().nullable().transform((value) => value ?? ""),
+    fulfillment_type: z.string(), status: z.string(), payment_status: z.string(), total_cents: z.number().int(), paid_cents: z.number().int(),
+    discount_cents: z.number().int(), source: z.string(), placed_at: z.string().nullable(),
+  }),
+  lines: z.array(z.object({
+    id: z.uuid(), menu_item_id: z.uuid().nullable(), variant_id: z.uuid().nullable(), name: z.string(), variant: z.string().nullable(),
+    quantity: z.number().int(), unit_price_cents: z.number().int(), modifier_unit_total_cents: z.number().int(), line_total_cents: z.number().int(),
+    instructions: z.string().nullable().transform((value) => value ?? ""), pos_line: z.record(z.string(), z.unknown()).nullable(),
+    modifiers: z.array(z.object({ choice_id: z.uuid().nullable(), name: z.string(), quantity: z.number().int(), placement: z.string().nullable() })),
+  })),
+});
+export type PosOrderLines = z.infer<typeof posOrderLinesSchema>;
+
+/**
  * The items are always on the same order (owner, 2026-10-19).  paid_cents is
  * what was already paid; the rest is taken on the payment screen.  ("add_on"
  * only comes back from add-ons made before then.)

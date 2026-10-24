@@ -115,6 +115,20 @@ export const posDraftSchema = z.object({
     fulfillment: z.enum(["pickup", "delivery"]),
     /** Already paid: the items still go on the same order; what is still owed is paid after (owner, 2026-10-19). */
     paid: z.boolean(),
+    /**
+     * Editing the whole order (owner, 2026-10-24: tap the order card): its
+     * original lines, which of them were taken off, and changed quantities.
+     * Without it the ticket only adds new items (the older Add items).
+     */
+    editing: z.boolean().optional().default(false),
+    existing: z.array(z.object({
+      id: z.uuid(), name: z.string(), variant: z.string().nullable(), quantity: z.number().int(), unitCents: z.number().int(),
+      modifiers: z.array(z.string()), instructions: z.string(), line: cartLineSchema.nullable(),
+    })).optional().default([]),
+    removed: z.array(z.string()).optional().default([]),
+    quantities: z.record(z.string(), z.number().int()).optional().default({}),
+    /** The order's discount when it was opened, so the new total on screen is close to what the server works out. */
+    discountCents: z.number().int().optional().default(0),
   }).nullable().optional().default(null),
   /** Taken while offline (owner, 2026-10-24); null for every normal ticket. */
   offline: offlineOrderSchema.nullable().optional().default(null),
@@ -303,6 +317,22 @@ export function draftToOrderPayload(draft: PosDraft) {
     })),
     // Taken offline: the counter handled the kitchen ticket, so the server never prints it (owner, 2026-10-24).
     ...(draft.offline ? { offline_printed: true, offline_taken_at: draft.offline.takenAt, offline_local_number: draft.offline.localNumber } : {}),
+  };
+}
+
+/** Everything changed on an order being edited, for /api/pos/orders/[id]/edit (owner, 2026-10-24). */
+export function draftToEditPayload(draft: PosDraft) {
+  const addTo = draft.addTo;
+  const removed = new Set(addTo?.removed ?? []);
+  return {
+    idempotency_key: draft.idempotencyKey,
+    special_instructions: draft.orderNote.slice(0, 500),
+    remove_item_ids: [...removed],
+    quantities: (addTo?.existing ?? []).flatMap((line) => {
+      const quantity = addTo?.quantities[line.id];
+      return !removed.has(line.id) && quantity !== undefined && quantity !== line.quantity ? [{ id: line.id, quantity }] : [];
+    }),
+    items: draftToOrderPayload(draft).items,
   };
 }
 

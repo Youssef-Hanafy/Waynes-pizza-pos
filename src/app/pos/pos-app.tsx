@@ -21,7 +21,9 @@ import { connectStripeReader, describeNativeApp, keepStripeReaderConnected, star
 import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
 import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
-import { dismissNotice, useSyncState } from "@/stores/draft-sync";
+import { dismissNotice, notify, useSyncState } from "@/stores/draft-sync";
+import { posOrderLinesSchema } from "@/lib/pos/schemas";
+import { existingLinesFrom } from "@/lib/orders/edit-order";
 import { useDraftSync } from "@/stores/use-draft-sync";
 import { closeOutUnsentTickets, keepUnsettledOrder, unsettledOrder } from "@/stores/ticket-closeout";
 import { CustomersScreen } from "./customers-screen";
@@ -92,6 +94,33 @@ export function PosApp(props: Props) {
     keepUnsettledOrder(orderId);
     setPayFocus((current) => ({ orderId, n: (current?.n ?? 0) + 1 }));
     setSection("pay");
+  }
+  /**
+   * Tap an order card (Today's Orders, Orders): the order opens on the order
+   * screen with its original items to change, take off or add to — same order,
+   * no new slip (owner, 2026-10-24).
+   */
+  const [opening, setOpening] = useState(false);
+  async function editOrder(orderId: string) {
+    if (opening) return;
+    setOpening(true);
+    try {
+      const response = await fetch(`/api/pos/orders/${orderId}/lines`, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
+      const body: unknown = await response.json().catch(() => null);
+      const parsed = posOrderLinesSchema.safeParse(body);
+      if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "The order could not be opened.");
+      const { order, lines } = parsed.data;
+      if (["cancelled", "draft", "payment_pending"].includes(order.status) || ["refunded", "partially_refunded"].includes(order.payment_status)) throw new Error("That order can't be changed.");
+      orderActions.editOrder({
+        id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name,
+        fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0, discount_cents: order.discount_cents,
+      }, existingLinesFrom(menu, lines));
+      setPayFocus(null); setSection("order");
+    } catch (cause) {
+      notify(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "The order could not be opened. Try again.", "warn");
+    } finally {
+      setOpening(false);
+    }
   }
   const sectionRef = useRef<Section>(section);
   useEffect(() => {
@@ -271,8 +300,8 @@ export function PosApp(props: Props) {
       // and they go on that same order even if it was paid (owner, 2026-10-19).
       orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 || order.payment_status === "paid" || order.payment_status === "authorized" });
       setPayFocus(null); setSection("order");
-    }} onPay={takePayment} timeZone={settings.timezone} /> : null}
-    {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onPay={takePayment} timeZone={settings.timezone} /></div> : null}
+    }} onEdit={(order) => { void editOrder(order.id); }} onPay={takePayment} timeZone={settings.timezone} /> : null}
+    {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onEdit={(orderId) => { void editOrder(orderId); }} onPay={takePayment} timeZone={settings.timezone} /></div> : null}
     {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen storeName={settings.store_name || workspaceName} timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "tips" && canCloseOut ? <TipsScreen onOpenDeliveries={canManageOrders && deliveryEnabled && settings.delivery_enabled ? () => setSection("delivery") : undefined} /> : null}

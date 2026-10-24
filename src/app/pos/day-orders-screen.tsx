@@ -30,6 +30,11 @@ function stateLabel(order: DayOrder) {
   return orderStatusLabels[order.status] ?? order.status;
 }
 
+/** An order that can still be changed: not cancelled, not refunded, not an online order still being paid. */
+function editable(order: DayOrder) {
+  return !["cancelled", "payment_pending", "draft"].includes(order.status) && !["refunded", "partially_refunded"].includes(order.payment_status);
+}
+
 function phone(value: string) {
   const digits = value.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
   return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value;
@@ -47,7 +52,7 @@ function shiftDay(day: string, by: number) {
  * customer comes back or calls: who ordered, paid or not and how, the items,
  * reprint the slips, take the payment, or add items they want on top.
  */
-export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: string; onPay?: (orderId: string) => void; onAddItems?: (order: DayOrder) => void }) {
+export function DayOrdersScreen({ timeZone, onPay, onAddItems, onEdit }: { timeZone: string; onPay?: (orderId: string) => void; onAddItems?: (order: DayOrder) => void; /** Tap the card: the order opens on the order screen to edit (owner, 2026-10-24). */ onEdit?: (order: DayOrder) => void }) {
   const [day, setDay] = useState<string | null>(null);
   const [today, setToday] = useState("");
   const [orders, setOrders] = useState<DayOrder[]>([]);
@@ -121,8 +126,10 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: str
           const extrasDue = extras.some((addOn) => !isPaid(addOn));
           const total = order.total_cents + extras.reduce((sum, addOn) => sum + addOn.total_cents, 0);
           const closed = isClosed(order) && !extras.some((addOn) => !isClosed(addOn));
-          return <li key={order.id}>
-            <button aria-current={order.id === selectedId ? "true" : undefined} className={`flex min-h-20 w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition active:scale-[0.99] ${order.id === selectedId ? "border-wayne-green bg-wayne-ok-soft" : "border-wayne-border bg-white hover:border-wayne-border-strong"} ${order.status === "cancelled" ? "opacity-60" : ""}`} onClick={() => setSelectedId(order.id)} type="button">
+          // Tap the card to edit the order; ⓘ shows its details, payment and slips (owner, 2026-10-24).
+          const canEdit = Boolean(onEdit) && editable(order);
+          return <li className="flex items-stretch gap-1.5" key={order.id}>
+            <button aria-current={order.id === selectedId ? "true" : undefined} aria-label={canEdit ? `Edit order #${ticketNumber(order)}` : undefined} className={`flex min-h-20 min-w-0 flex-1 items-center gap-3 rounded-2xl border-2 p-3 text-left transition active:scale-[0.99] ${order.id === selectedId ? "border-wayne-green bg-wayne-ok-soft" : "border-wayne-border bg-white hover:border-wayne-border-strong"} ${order.status === "cancelled" ? "opacity-60" : ""}`} onClick={() => { if (canEdit) onEdit!(order); else setSelectedId(order.id); }} type="button">
               <span className={`grid h-14 min-w-14 shrink-0 place-items-center rounded-xl px-2 text-2xl font-black ${closed ? "bg-wayne-cream text-wayne-muted" : "bg-wayne-green text-white"}`}>#{ticketNumber(order)}</span>
               <span className="min-w-0 flex-1">
                 <strong className="block truncate text-xl">{order.customer_name || "Walk-in"}</strong>
@@ -133,6 +140,7 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: str
                 <span className={`text-sm font-black uppercase ${order.status === "cancelled" ? "text-wayne-muted" : paid && !extrasDue ? "text-wayne-ok" : "text-wayne-red"}`}>{order.status === "cancelled" ? "Cancelled" : paid && !extrasDue ? "Paid" : paid ? "Add-on due" : order.paid_cents > 0 ? "Balance due" : "Not paid"}</span>
               </span>
             </button>
+            {canEdit ? <button aria-label={`Details for order #${ticketNumber(order)}`} className={`flex w-14 shrink-0 flex-col items-center justify-center rounded-2xl border-2 text-xs font-black ${order.id === selectedId ? "border-wayne-green bg-wayne-ok-soft" : "border-wayne-border bg-white"}`} onClick={() => setSelectedId(order.id)} type="button"><span aria-hidden className="text-xl">ⓘ</span>Details</button> : null}
           </li>;
         })}
         {loaded && !visible.length && !error ? <li className="rounded-xl border border-dashed border-wayne-border p-6 text-center text-lg text-wayne-muted">{orders.length ? "No orders match." : "No orders yet."}</li> : null}
@@ -142,8 +150,8 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems }: { timeZone: str
     <section aria-label="Order details" className={`flex-1 rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:basis-1/2 lg:overflow-y-auto ${selected ? "block" : "hidden lg:block"}`}>
       {selected ? <>
         <Button className="mb-3 lg:hidden" onClick={() => setSelectedId(null)} size="lg" variant="secondary">‹ All orders</Button>
-        <OrderDetail addOns={addOns(selected.id)} key={selected.id} onAddItems={onAddItems} onPay={onPay} onSelect={setSelectedId} order={selected} time={time} />
-      </> : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Choose an order to see who ordered, how it was paid, and the items — or add items to it.</p></div>}
+        <OrderDetail addOns={addOns(selected.id)} key={selected.id} onAddItems={onEdit ?? onAddItems} onPay={onPay} onSelect={setSelectedId} order={selected} time={time} />
+      </> : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Tap an order to change its items or add to it. Tap ⓘ Details to see who ordered, how it was paid, and to take payment or reprint.</p></div>}
     </section>
   </div>;
 }
@@ -255,7 +263,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
     </div> : null}
 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
-      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">＋ Add items · same order</Button> : null}
+      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">✏️ Edit items / add items · same order</Button> : null}
       {unpaidOpen && onPay ? <Button className="sm:col-span-2" onClick={() => onPay(order.id)} size="lg" variant="brand">Take payment · {formatCents(Math.max(0, order.total_cents - order.paid_cents))}</Button> : null}
       <Button disabled={busy} onClick={() => { void printReceipt(); }} size="lg" variant="secondary">Print receipt</Button>
       <Button disabled={busy} onClick={() => { void printKitchen(); }} size="lg" variant="secondary">Print kitchen ticket</Button>

@@ -56,6 +56,12 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
   const [shiftId, setShiftId] = useState("");
   const [showPaid, setShowPaid] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
+  /**
+   * Opened on one order (Today's Orders / Orders → Take payment): just that
+   * order's payment, across the whole screen in one box, so nothing has to be
+   * scrolled (owner, 2026-10-24).  "All payments" goes back to the list.
+   */
+  const [focused, setFocused] = useState(Boolean(initialOrderId));
   const mounted = useRef(true);
 
   const load = useCallback(async () => {
@@ -108,6 +114,17 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
       <span className="text-right"><strong className="block text-xl">{formatCents(order.payment_status === "paid" ? order.total_cents : Math.max(0, order.total_cents - order.paid_cents))}</strong><span className={`text-xs font-black uppercase ${order.payment_status === "paid" ? "text-wayne-ok" : "text-wayne-red"}`}>{order.payment_status === "paid" ? `Paid · ${order.payment_method}` : order.paid_cents > 0 ? `Still owed · ${formatCents(order.paid_cents)} paid` : "Unpaid"}</span></span>
     </button>
   </li>;
+
+  if (focused && (done || selected || !loaded)) {
+    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2">
+      <section aria-label="Take payment" className="w-full rounded-3xl border border-wayne-border bg-white px-4 py-3 shadow-xl">
+        <div className="mb-2 flex justify-end"><Button onClick={() => { setFocused(false); setDone(null); }} size="sm" variant="secondary">‹ All payments</Button></div>
+        {done ? <PaidSummary done={done} onNext={() => { setDone(null); setFocused(false); }} />
+          : selected ? <PaymentPage keyedCardConfig={keyedCardConfig} key={selected.id} onAddItems={onAddItems ? () => onAddItems(selected) : undefined} stripeReader={stripeReader} onDrawerChanged={loadDrawer} onPaid={finished} order={selected} shiftId={shiftId} terminals={terminals} />
+          : <p className="p-6 text-center font-bold text-wayne-muted">Loading the order…</p>}
+      </section>
+    </div>;
+  }
 
   return <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[minmax(20rem,28rem)_1fr] lg:overflow-hidden">
     <section aria-label="Orders to pay" className="flex flex-col rounded-2xl bg-white p-3 shadow-sm lg:min-h-0">

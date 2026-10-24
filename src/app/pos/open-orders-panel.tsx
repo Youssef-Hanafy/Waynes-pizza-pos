@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { parseCashCountInput, posDrawerSchema } from "@/lib/cash/schemas";
 import { requestReceipt } from "@/lib/printing/request-receipt";
+import { ticketLabel } from "@/lib/orders/ticket-number";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -19,7 +20,7 @@ const labels: Record<string, string> = { placed: "New", accepted: "Accepted", in
  * `inline` draws the list straight into a POS section (Orders, Delivery) instead
  * of behind the header button; `fulfillment` narrows it to pickup or delivery.
  */
-export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery"; onPay?: (orderId: string) => void }) {
+export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, onEdit }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery"; onPay?: (orderId: string) => void; /** Tap the order to edit it on the order screen (owner, 2026-10-24). */ onEdit?: (orderId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [error, setError] = useState("");
@@ -183,7 +184,8 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay }
         <ul className={`mt-5 grid gap-3 ${inline ? "xl:grid-cols-2" : ""}`}>{shown.map((order) => {
           const handOff = nextHandOff(order.status, order.fulfillment_type);
           return <li className={`rounded-xl border p-4 ${order.status === "ready" ? "border-wayne-ok/40 bg-wayne-ok-soft" : "border-wayne-border"}`} key={order.id}>
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-xl">{order.order_number}</strong><p className="font-bold">{order.customer_name}</p><p className="text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · placed {time(order.placed_at)}{order.promised_at ? ` · promised ${time(order.promised_at)}` : ""}</p></div><div className="text-right"><span className="rounded-full bg-white px-3 py-1 text-sm font-black">{labels[order.status] ?? order.status}</span><p className="mt-2 font-black">{formatCents(order.total_cents)}</p><p className="text-xs capitalize text-wayne-muted">{order.payment_status === "unpaid" ? (order.payment_method === "cash" ? "cash · not paid yet" : "not paid yet") : `${order.payment_method === "test_manual" ? "paid" : order.payment_method} · ${order.payment_status}`}</p></div></div>
+            {/* The same number as the slips in the store (#12), and tapping the order opens it to edit (owner, 2026-10-24). */}
+            <div className={`flex flex-wrap items-start justify-between gap-3 ${onEdit ? "-m-2 cursor-pointer rounded-lg p-2 hover:bg-wayne-cream" : ""}`} onClick={onEdit ? () => onEdit(order.id) : undefined} onKeyDown={onEdit ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(order.id); } } : undefined} role={onEdit ? "button" : undefined} tabIndex={onEdit ? 0 : undefined}><div><strong className="text-xl">{ticketLabel(order)}{onEdit ? <span className="ml-2 text-sm font-bold text-wayne-muted">✏️ tap to edit</span> : null}</strong><p className="font-bold">{order.customer_name}</p><p className="text-sm capitalize text-wayne-muted">{order.fulfillment_type} · {order.source} · placed {time(order.placed_at)}{order.promised_at ? ` · promised ${time(order.promised_at)}` : ""}</p></div><div className="text-right"><span className="rounded-full bg-white px-3 py-1 text-sm font-black">{labels[order.status] ?? order.status}</span><p className="mt-2 font-black">{formatCents(order.total_cents)}</p><p className="text-xs capitalize text-wayne-muted">{order.payment_status === "unpaid" ? (order.payment_method === "cash" ? "cash · not paid yet" : "not paid yet") : `${order.payment_method === "test_manual" ? "paid" : order.payment_method} · ${order.payment_status}`}</p></div></div>
             <div className="mt-3 flex flex-wrap items-center gap-2">{handOff ? <Button disabled={pending !== null} onClick={() => { void move(order, handOff.status); }}>{pending === order.id ? "Saving…" : handOff.label}</Button> : <Button disabled={pending !== null} onClick={() => { void move(order, "completed"); }} variant="secondary">{pending === order.id ? "Saving…" : "Complete now (skip kitchen)"}</Button>}
               {onPay && order.payment_status === "unpaid" ? <Button onClick={() => onPay(order.id)}>Take payment</Button> : null}
               {!onPay && terminals.length && order.payment_status === "unpaid" ? (charging === order.id
