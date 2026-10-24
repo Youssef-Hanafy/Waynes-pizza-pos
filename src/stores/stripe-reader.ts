@@ -1,8 +1,9 @@
 "use client";
 
-import { installNativeBridge, type NativeError, type NativeStripeBridge, type NativeStripeStatus } from "@/hardware/native/bridge";
+import { installNativeBridge, type NativeError, type NativeForwardedCard, type NativeStripeBridge, type NativeStripeStatus } from "@/hardware/native/bridge";
 import { createStore, useStore } from "./create-store";
 import { logDevice } from "@/lib/pos/device-log";
+import { isNoAnswer } from "./connectivity";
 
 /**
  * The Stripe Reader M2 on this register, as the POS page sees it.
@@ -71,6 +72,12 @@ export function describeNativeApp() {
 }
 
 let started = false;
+const forwardedListeners = new Set<(card: NativeForwardedCard) => void>();
+const LOCATION_KEY = "wayne.stripe.location";
+
+function savedLocation() {
+  try { return window.localStorage.getItem(LOCATION_KEY) ?? ""; } catch { return ""; }
+}
 
 /** Wire the app's reader to this page once. Safe to call on every render path. */
 export function startStripeReader(): boolean {
@@ -83,6 +90,12 @@ export function startStripeReader(): boolean {
   logDevice("reader.start", initial.detail ?? "", { state: initial.state, serial: initial.serial ?? null, ...describeNativeApp() });
   bridge.onEvent((event) => {
     lastNativeActivity = Date.now();
+    // A card stored offline reached Stripe (owner, 2026-10-24): the offline orders sync records it.
+    if (event.type === "forwarded") {
+      logDevice("reader.offline_forwarded", event.card.error ?? "", { status: event.card.status, intent: event.card.intent_id });
+      for (const listener of [...forwardedListeners]) listener(event.card);
+      return;
+    }
     if (event.type === "prompt") logDevice("reader.prompt", event.text);
     else logDevice("reader.status", event.status.detail ?? "", { state: event.status.state, serial: event.status.serial ?? null, battery: event.status.battery ?? null, update: event.status.updateProgress ?? null });
     if (event.type === "prompt") stripeReaderStore.set((state) => ({ ...state, prompt: event.text }));
@@ -108,11 +121,22 @@ export function connectStripeReader(options: { simulated?: boolean } = {}): Prom
     stripeReaderStore.set((state) => ({ ...state, error: "" }));
     try {
       logDevice("reader.connect_begin", "", { state: bridge.status().state, simulated: Boolean(options.simulated) });
-      const response = await post("/api/pos/stripe-terminal/location");
-      if (!response.ok) throw new Error(await readError(response, "The card reader's store location could not be set up."));
-      const { location_id: locationId } = await response.json() as { location_id?: string };
-      if (!locationId) throw new Error("The card reader's store location could not be set up.");
-      logDevice("reader.location_ok", locationId);
+      // Offline (owner, 2026-10-24): the reader reconnects with the store location it used last.
+      let locationId = "";
+      try {
+        const response = await post("/api/pos/stripe-terminal/location");
+        if (!response.ok) throw new Error(await readError(response, "The card reader's store location could not be set up."));
+        const body = await response.json() as { location_id?: string; offline_mode?: boolean };
+        locationId = body.location_id ?? "";
+        if (!locationId) throw new Error("The card reader's store location could not be set up.");
+        try { window.localStorage.setItem(LOCATION_KEY, locationId); } catch { /* reconnects online only */ }
+        logDevice("reader.location_ok", locationId, { offline_mode: body.offline_mode ?? null });
+      } catch (cause) {
+        const saved = savedLocation();
+        if (!isNoAnswer(cause) || !saved) throw cause;
+        locationId = saved;
+        logDevice("reader.location_saved", locationId);
+      }
       const startedAt = Date.now();
       // The app answers a connect within seconds (a permission prompt, "Looking for the reader…").
       // If it says nothing at all for a minute, it never received the request: say so instead of
@@ -170,10 +194,13 @@ export function keepStripeReaderConnected(): boolean {
     const state = bridge.status().state;
     if (state === "connected") { failures = 0; nextTryAt = Date.now() + 5_000; return; }
     if (state !== "disconnected" || connecting || Date.now() < nextTryAt) return;
+    // Offline: the reader stays paired over Bluetooth and Stripe's SDK reconnects it by itself; the store location is remembered.
     logDevice("reader.auto_reconnect", "", { attempt: failures + 1 });
     void connectStripeReader().then((ok) => {
       failures = ok ? 0 : failures + 1;
-      nextTryAt = Date.now() + (ok ? 5_000 : [15_000, 30_000, 60_000][Math.min(failures - 1, 2)]!);
+      // A reader left asleep all night (owner, 2026-10-24: less Vercel compute): after 20 tries in a row, every 3 minutes.
+      // Pressing Charge, Connect reader, or the screen coming back still connects straight away.
+      nextTryAt = Date.now() + (ok ? 5_000 : failures >= 20 ? 180_000 : [15_000, 30_000, 60_000][Math.min(failures - 1, 2)]!);
     });
   };
   window.setInterval(tick, 5_000);
@@ -206,6 +233,52 @@ export async function collectWithStripeReader(clientSecret: string): Promise<Col
   } finally {
     stripeReaderStore.set((state) => ({ ...state, prompt: "" }));
   }
+}
+
+/** This app can take M2 cards with no connection to the server (app 1.5+). */
+export function stripeOfflineAvailable() {
+  const bridge = native();
+  return Boolean(bridge?.collectOffline) && bridge?.status().state === "connected";
+}
+
+export type OfflineCollectOutcome =
+  | { ok: true; offlineKey: string; intentId: string | null; stored: boolean; brand: string; last4: string }
+  | { ok: false; code: "DECLINED" | "CANCELED" | "NOT_CONNECTED" | "UNKNOWN"; message: string };
+
+/**
+ * Take a card while offline (owner, 2026-10-24): the reader stores it and
+ * forwards it to Stripe when the connection is back.  orderKey is the
+ * ticket's idempotency key; the server checks it before recording the card.
+ */
+export async function collectOfflineWithStripeReader(input: { amountCents: number; offlineKey: string; orderKey: string; workspaceId: string; description: string }): Promise<OfflineCollectOutcome> {
+  const bridge = native();
+  if (!bridge?.collectOffline) return { ok: false, code: "NOT_CONNECTED", message: "Update the Wayne's POS app to take cards while offline." };
+  stripeReaderStore.set((state) => ({ ...state, prompt: "" }));
+  logDevice("reader.offline_collect_begin", "", { amount: input.amountCents });
+  try {
+    const result = await bridge.collectOffline(input);
+    logDevice("reader.offline_collect_ok", result.intent_id ?? "stored", { stored: result.stored });
+    return { ok: true, offlineKey: result.offline_key, intentId: result.intent_id, stored: result.stored, brand: result.brand, last4: result.last4 };
+  } catch (cause) {
+    const error = cause as NativeError;
+    logDevice("reader.offline_collect_failed", error.message ?? "", { code: error.code ?? null });
+    const code = error.code === "DECLINED" || error.code === "CANCELED" || error.code === "NOT_CONNECTED" ? error.code : "UNKNOWN";
+    return { ok: false, code, message: error.message || "The card reader did not finish." };
+  } finally {
+    stripeReaderStore.set((state) => ({ ...state, prompt: "" }));
+  }
+}
+
+/** Stored cards that have reached Stripe but are not recorded yet, and a way to hear about new ones. */
+export function forwardedOfflineCards(): NativeForwardedCard[] {
+  return native()?.forwarded?.() ?? [];
+}
+export function onForwardedOfflineCard(listener: (card: NativeForwardedCard) => void) {
+  forwardedListeners.add(listener);
+  return () => { forwardedListeners.delete(listener); };
+}
+export function acknowledgeForwardedCard(offlineKey: string) {
+  native()?.ackForwarded?.(offlineKey);
 }
 
 export async function cancelStripeReaderCollect() {

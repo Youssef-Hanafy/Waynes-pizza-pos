@@ -43,6 +43,9 @@ import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 import { useAppUpdate } from "@/stores/use-app-update";
+import { configureOfflineOrders, startOfflineOrders } from "@/stores/offline-orders";
+import { useConnectivity, watchConnectivity } from "@/stores/connectivity";
+import { OfflineOrdersBar } from "./offline-orders-bar";
 
 type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "tips" | "closeout" | "more";
 
@@ -123,6 +126,15 @@ export function PosApp(props: Props) {
   }, [stripeReaderOn, runtimeReady]);
   const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
+  // Offline orders (owner, 2026-10-24): what printing and totals need, kept current with the menu.
+  useEffect(() => { configureOfflineOrders({ hardware, settings, menu, staffName }); }, [hardware, settings, menu, staffName]);
+  useEffect(() => {
+    watchConnectivity();
+    startOfflineOrders();
+    // The register screen itself opens with no connection (public/pos-sw.js keeps the last good copy).
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/pos-sw.js", { scope: "/pos" }).catch(() => undefined);
+  }, []);
+  const connectivity = useConnectivity();
   // Tickets held before 2026-10-19 (and their phone lines) are closed out when the register opens; the one on screen stays.
   useEffect(() => {
     const timer = window.setTimeout(() => closeOutUnsentTickets({ keepActive: true }), 0);
@@ -191,8 +203,8 @@ export function PosApp(props: Props) {
 
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
-  const warning = !hardwareState.online
-    ? `No internet — tickets are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : ""}`
+  const warning = !hardwareState.online || !connectivity.reachable
+    ? `No connection — keep taking orders: they are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : " and sent when it is back"}`
     : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
     : callerStatus && callerStatus.state === "error" ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
     : syncStatus && syncStatus.state === "disconnected" && runtimeReady ? "Live phone updates reconnecting"
@@ -233,6 +245,7 @@ export function PosApp(props: Props) {
       <Button onClick={() => { const delivery = onlineAlerts.alerts.every((order) => order.fulfillment_type === "delivery") && deliveryEnabled && settings.delivery_enabled; onlineAlerts.acknowledge(); setPhoneFocus(null); setPayFocus(null); setSection(delivery ? "delivery" : "orders"); }} size="sm" variant="brand">View</Button>
       <Button onClick={onlineAlerts.acknowledge} size="sm" variant="secondary">Got it</Button>
     </div> : null}
+    <OfflineOrdersBar />
     {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
       {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}

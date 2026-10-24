@@ -54,6 +54,7 @@ export async function POST(request: Request) {
           payload: {
             shift_id: input.shift_id, order_id: input.order_id,
             tendered_cents: input.tendered_cents, idempotency_key: input.idempotency_key,
+            ...(input.offline ? { offline: true, offline_taken_at: input.offline_taken_at } : {}),
           },
         });
     }

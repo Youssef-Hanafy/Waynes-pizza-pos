@@ -42,10 +42,32 @@ export type NativeStripeStatus = {
   updateProgress?: number | null;
 };
 
+/** A card the reader stored while offline, once Stripe has it (app 1.5+, owner 2026-10-24). */
+export type NativeForwardedCard = {
+  /** The page's own key for the stored card (wayne_offline_key). */
+  offline_key: string;
+  /** Stripe's PaymentIntent id, or null when forwarding failed. */
+  intent_id: string | null;
+  /** Stripe's status for it ("succeeded", "requires_payment_method" = declined, …). */
+  status: string;
+  error: string | null;
+};
+
+/** What the reader answers for a card taken with offline allowed. */
+export type NativeOfflineCollect = {
+  offline_key: string;
+  /** Known at once when Stripe could be reached after all; otherwise when it is forwarded. */
+  intent_id: string | null;
+  stored: boolean;
+  brand: string;
+  last4: string;
+};
+
 /** Messages the reader wants shown while a card is being taken ("Insert, tap or swipe", "Remove card"…). */
 export type NativeStripeEvent =
   | { type: "status"; status: NativeStripeStatus }
-  | { type: "prompt"; text: string };
+  | { type: "prompt"; text: string }
+  | { type: "forwarded"; card: NativeForwardedCard };
 
 export type NativeStripeBridge = {
   status(): NativeStripeStatus;
@@ -59,6 +81,12 @@ export type NativeStripeBridge = {
   onEvent(listener: (event: NativeStripeEvent) => void): () => void;
   /** The app asks the page for a connection token; the page fetches it with the signed-in session. */
   setTokenSource(fetchToken: () => Promise<string>): void;
+  /** App 1.5+: take a card with no connection to the server (Stripe offline mode). Absent in older apps. */
+  collectOffline?(options: { amountCents: number; offlineKey: string; orderKey: string; workspaceId: string; description: string }): Promise<NativeOfflineCollect>;
+  /** Stored cards Stripe has received but the page has not recorded yet. */
+  forwarded?(): NativeForwardedCard[];
+  /** The page recorded it: the app can forget it. */
+  ackForwarded?(offlineKey: string): void;
 };
 
 export type NativeError = Error & { code?: string };
@@ -77,6 +105,10 @@ export type WaynesAndroidInterface = {
   stripeCancel?(callId: string): void;
   stripeDisconnect?(callId: string): void;
   stripeTokenResult?(requestId: string, ok: boolean, value: string): void;
+  /** Offline card payments (app 1.5+). */
+  stripeCollectOffline?(callId: string, amountCents: number, offlineKey: string, orderKey: string, workspaceId: string, description: string): void;
+  stripeForwarded?(): string;
+  stripeAckForwarded?(offlineKey: string): void;
 };
 
 declare global {
@@ -212,6 +244,7 @@ function createStripeBridge(android: WaynesAndroidInterface, target: Window, cal
       const body = JSON.parse(json) as Record<string, unknown>;
       if (type === "prompt" && typeof body.text === "string") emit({ type: "prompt", text: body.text });
       if (type === "status") emit({ type: "status", status: body as NativeStripeStatus });
+      if (type === "forwarded" && typeof body.offline_key === "string") emit({ type: "forwarded", card: readForwarded(body) });
     } catch { /* a malformed event is dropped; the next status poll corrects the screen */ }
   };
   target.__waynesStripeToken = (requestId) => {
@@ -230,6 +263,34 @@ function createStripeBridge(android: WaynesAndroidInterface, target: Window, cal
     disconnect: async () => { await callFor((id) => android.stripeDisconnect!(id), 20_000); },
     onEvent(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     setTokenSource(source) { fetchToken = source; },
+    ...(android.stripeCollectOffline ? {
+      collectOffline: async ({ amountCents, offlineKey, orderKey, workspaceId, description }: { amountCents: number; offlineKey: string; orderKey: string; workspaceId: string; description: string }) => {
+        const answer = await callFor((id) => android.stripeCollectOffline!(id, amountCents, offlineKey, orderKey, workspaceId, description), 6 * 60_000);
+        const body = JSON.parse(answer) as Record<string, unknown>;
+        return {
+          offline_key: String(body.offline_key ?? offlineKey), intent_id: typeof body.intent_id === "string" && body.intent_id ? body.intent_id : null,
+          stored: body.stored === true, brand: typeof body.brand === "string" ? body.brand : "", last4: typeof body.last4 === "string" ? body.last4 : "",
+        };
+      },
+      forwarded: () => {
+        try {
+          const list = JSON.parse(android.stripeForwarded?.() ?? "[]") as unknown;
+          return Array.isArray(list) ? list.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && typeof (entry as { offline_key?: unknown }).offline_key === "string").map(readForwarded) : [];
+        } catch {
+          return [];
+        }
+      },
+      ackForwarded: (offlineKey: string) => { try { android.stripeAckForwarded?.(offlineKey); } catch { /* app gone */ } },
+    } : {}),
+  };
+}
+
+function readForwarded(body: Record<string, unknown>): NativeForwardedCard {
+  return {
+    offline_key: String(body.offline_key),
+    intent_id: typeof body.intent_id === "string" && body.intent_id ? body.intent_id : null,
+    status: typeof body.status === "string" ? body.status : "",
+    error: typeof body.error === "string" && body.error ? body.error : null,
   };
 }
 

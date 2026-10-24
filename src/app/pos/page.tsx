@@ -31,7 +31,8 @@ export default async function PosPage() {
     ...(envProvider.success ? { caller_id_provider: envProvider.data } : {}),
     ...(Number.isInteger(envLines) && envLines >= 1 && envLines <= 8 ? { caller_line_count: envLines } : {}),
   };
-  // The menu (sold-out items, prices) refreshes in the background; open tickets live in the draft store and are kept.
+  // The menu (sold-out items, prices) refreshes in the background — every 3 minutes and whenever the screen comes back
+  // (owner, 2026-10-24: less Vercel compute; the server still refuses a sold-out item on submit). Open tickets are kept.
   return <>
     <WorkspaceScope defaultCity={settings.city} defaultState={settings.state} legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} />
     <OneTab><PosApp
@@ -51,6 +52,6 @@ export default async function PosPage() {
       staffName={access.display_name}
     /></OneTab>
     <SupportPill access={access} />
-    <div className="sr-only"><AutoRefresh intervalMs={60_000} label="Menu refreshes every minute" /></div>
+    <div className="sr-only"><AutoRefresh intervalMs={180_000} label="Menu refreshes every 3 minutes" /></div>
   </>;
 }

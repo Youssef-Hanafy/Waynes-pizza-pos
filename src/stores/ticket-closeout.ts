@@ -39,7 +39,8 @@ function closeCall(draft: PosDraft) {
 export function closeOutUnsentTickets(options: { keepActive?: boolean } = {}) {
   const state = orderStore.get();
   const current = activeDraft(state);
-  const closing = state.drafts.filter((draft) => !draft.submitPending && !(options.keepActive && draft.id === current.id));
+  // An order taken offline is never closed out: it is a real order waiting to be sent (owner, 2026-10-24).
+  const closing = state.drafts.filter((draft) => !draft.submitPending && !draft.offline && !(options.keepActive && draft.id === current.id));
   if (!closing.length) return;
   const worthKeeping = closing.find((draft) => draft.id === current.id && draft.cart.length > 0)
     ?? closing.filter((draft) => draft.cart.length > 0).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
@@ -66,7 +67,7 @@ export function restoreLastClosed() {
   // call was closed with it; the order still remembers the line it came in on.
   const fresh: PosDraft = {
     ...closed.draft, id: base.id, idempotencyKey: base.idempotencyKey, createdAt: base.createdAt, updatedAt: base.updatedAt,
-    held: false, syncedVersion: null, syncedAt: null, submitPending: false, phoneCallKey: null,
+    held: false, syncedVersion: null, syncedAt: null, submitPending: false, phoneCallKey: null, offline: null,
   };
   orderStore.set((state) => {
     const current = activeDraft(state);

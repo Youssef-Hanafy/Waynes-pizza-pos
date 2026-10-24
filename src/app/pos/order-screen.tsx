@@ -14,7 +14,7 @@ import { formatPhone } from "@/lib/phone/normalize";
 import { draftSync, useSyncState } from "@/stores/draft-sync";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { getHardwareRuntime } from "@/stores/hardware-store";
-import { orderActions, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
+import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { ticketNumber } from "@/lib/orders/ticket-number";
@@ -25,6 +25,8 @@ import { StartOrderCard } from "./start-order-card";
 import { OpenItemDialog } from "./open-item-dialog";
 import { DiscountDialog, type AppliedDiscount } from "./discount-dialog";
 import { closeOutUnsentTickets, restoreLastClosed, unsettledOrder, useLastClosed } from "@/stores/ticket-closeout";
+import { beginOfflineOrder, offlineProblem } from "@/stores/offline-orders";
+import { OfflinePayment } from "./offline-payment";
 
 type MenuItem = PublicMenu[number]["items"][number];
 
@@ -48,7 +50,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
   // Tickets are never held (owner, 2026-10-19); only ones already sent and waiting for the connection stay.
-  const held = drafts.filter((candidate) => candidate.id !== activeId && candidate.submitPending);
+  // Orders taken offline are listed in the bar above (owner, 2026-10-24), never reopened for editing.
+  const held = drafts.filter((candidate) => candidate.id !== activeId && candidate.submitPending && !candidate.offline);
   const { remote } = useSyncState();
   const update = orderActions.update;
 
@@ -87,7 +90,9 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     void fetch(`/api/pos/orders/${orderId}/abandon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", keepalive: true }).catch(() => undefined);
   }, []);
   const ticketListRef = useRef<HTMLDivElement>(null);
-  const paying = created !== null;
+  // Taking payment for an order saved offline (owner, 2026-10-24).
+  const offlinePaying = Boolean(draft.offline && !draft.offline.payment);
+  const paying = created !== null || offlinePaying;
   useEffect(() => {
     paymentPromptStore.set(paying);
     return () => paymentPromptStore.set(false);
@@ -210,6 +215,14 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     const source = draft.source;
     const result = await draftSync.submit(draft.id);
     setSubmitting(false);
+    // No connection (owner, 2026-10-24): the order is kept on this register and paid here; it is sent when the connection is back.
+    if (!result.ok && result.pending) {
+      const current = orderStore.get().drafts.find((candidate) => candidate.id === draft.id);
+      const problem = current ? offlineProblem(current) : "";
+      if (current && !problem && beginOfflineOrder(current.id)) { setError(""); return; }
+      setError(`${result.message}${problem ? ` ${problem}` : ""}`);
+      return;
+    }
     if (result.ok) {
       setPrintNote("");
       const now = new Date().toISOString();
@@ -278,6 +291,9 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         : `${label} paid ${formatCents(done.order.total_cents)} on card`);
     }
   }
+
+  // Saved offline: take payment here, with no connection (owner, 2026-10-24).
+  if (offlinePaying) return <OfflinePayment draft={draft} key={draft.id} onDone={(message) => { if (message) setPaidFlash(message); }} stripeReader={stripeReader} />;
 
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {

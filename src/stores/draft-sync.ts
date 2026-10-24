@@ -10,6 +10,7 @@ import { createStore, useStore } from "./create-store";
 import { orderStore } from "./order-store";
 import { getTerminalLabel, phoneActions } from "./phone-store";
 import { uuid } from "@/lib/uuid";
+import { isNoAnswer, reportNetworkFailure, reportServerOk } from "./connectivity";
 
 /**
  * Phase 6 — tickets that survive the register (build sheet §22, §30, §36).
@@ -86,9 +87,17 @@ export function getDeviceId(): string {
 }
 
 async function post(url: string, body: unknown) {
-  const response = await fetch(url, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000),
+    });
+  } catch (error) {
+    // No answer at all: the register is offline (owner, 2026-10-24).
+    if (isNoAnswer(error)) reportNetworkFailure();
+    throw error;
+  }
+  reportServerOk();
   const data: unknown = await response.json().catch(() => null);
   return { response, data };
 }
@@ -229,7 +238,8 @@ export const draftSync = {
 
   /** Resend every ticket that failed for lack of a connection (§30: retry failed cloud writes). */
   async retryPending() {
-    for (const draft of orderStore.get().drafts.filter((candidate) => candidate.submitPending)) {
+    // Orders taken offline are sent by offline-orders.ts (order, then its payment).
+    for (const draft of orderStore.get().drafts.filter((candidate) => candidate.submitPending && !candidate.offline)) {
       const result = await draftSync.submit(draft.id);
       if (result.ok) notify(`Order ${result.order.order_number} sent now that the connection is back${result.order.duplicate ? " (it had already gone through)" : ""}.`);
       else if (!result.pending) notify(`${draftLabel(draft)} could not be sent: ${result.message}`, "warn");

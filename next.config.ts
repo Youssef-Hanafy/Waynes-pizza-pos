@@ -33,6 +33,10 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "6mb" }
   },
+  // The POS offline worker (public/pos-sw.js) must never be served stale, so a fix to it reaches the register at once.
+  async headers() {
+    return [{ source: "/pos-sw.js", headers: [{ key: "Cache-Control", value: "no-cache, max-age=0, must-revalidate" }] }];
+  },
   poweredByHeader: false,
   reactStrictMode: true
 };

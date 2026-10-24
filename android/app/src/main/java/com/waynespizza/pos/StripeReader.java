@@ -17,10 +17,18 @@ import com.stripe.stripeterminal.external.callable.ConnectionTokenCallback;
 import com.stripe.stripeterminal.external.callable.ConnectionTokenProvider;
 import com.stripe.stripeterminal.external.callable.DiscoveryListener;
 import com.stripe.stripeterminal.external.callable.MobileReaderListener;
+import com.stripe.stripeterminal.external.callable.OfflineListener;
 import com.stripe.stripeterminal.external.callable.PaymentIntentCallback;
 import com.stripe.stripeterminal.external.callable.ReaderCallback;
 import com.stripe.stripeterminal.external.callable.TerminalListener;
 import com.stripe.stripeterminal.external.models.BatteryStatus;
+import com.stripe.stripeterminal.external.models.CaptureMethod;
+import com.stripe.stripeterminal.external.models.CreateConfiguration;
+import com.stripe.stripeterminal.external.models.OfflineBehavior;
+import com.stripe.stripeterminal.external.models.OfflineCardPresentDetails;
+import com.stripe.stripeterminal.external.models.OfflineDetails;
+import com.stripe.stripeterminal.external.models.OfflineStatus;
+import com.stripe.stripeterminal.external.models.PaymentIntentParameters;
 import com.stripe.stripeterminal.external.models.CollectPaymentIntentConfiguration;
 import com.stripe.stripeterminal.external.models.ConfirmPaymentIntentConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionConfiguration;
@@ -38,10 +46,13 @@ import com.stripe.stripeterminal.external.models.TerminalErrorCode;
 import com.stripe.stripeterminal.external.models.TerminalException;
 import com.stripe.stripeterminal.log.LogLevel;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -66,7 +77,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   PERMISSION_DENIED  Bluetooth / Location permission refused
  *   ERROR          anything else (the page then asks Stripe what happened)
  */
-final class StripeReader implements ConnectionTokenProvider, TerminalListener, MobileReaderListener, DiscoveryListener {
+final class StripeReader implements ConnectionTokenProvider, TerminalListener, MobileReaderListener, DiscoveryListener, OfflineListener {
     interface Page {
         void reply(String callId, boolean ok, String code, String message);
         void event(String type, JSONObject body);
@@ -75,6 +86,8 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
 
     private static final String PREFS = "stripe_reader";
     private static final String SAVED_SERIAL = "serial";
+    /** Cards stored offline that Stripe has received, until the page records them (owner, 2026-10-24). */
+    private static final String FORWARDED = "forwarded_offline";
     /** How long a Bluetooth scan runs before giving up (seconds). */
     private static final int SCAN_SECONDS = 30;
 
@@ -122,6 +135,7 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
             body.put("battery", battery == null ? JSONObject.NULL : (double) battery);
             body.put("charging", charging == null ? JSONObject.NULL : charging);
             body.put("updateProgress", updateProgress == null ? JSONObject.NULL : (double) updateProgress);
+            body.put("offlineStored", storedOfflineCount());
         } catch (JSONException ignored) {
             // Constant keys: cannot happen.
         }
@@ -182,7 +196,8 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
     private boolean initialize() {
         if (Terminal.isInitialized()) return true;
         try {
-            Terminal.init(activity.getApplicationContext(), LogLevel.NONE, this, this, null);
+            // The offline listener: cards stored without a connection are forwarded to Stripe by the SDK when it is back.
+            Terminal.init(activity.getApplicationContext(), LogLevel.NONE, this, this, this);
             return true;
         } catch (TerminalException failed) {
             setState("not_ready", "The card reader software could not start: " + failed.getErrorMessage());
@@ -403,6 +418,180 @@ final class StripeReader implements ConnectionTokenProvider, TerminalListener, M
                         });
                     }
                 });
+    }
+
+    // ---- Taking a card with no connection (owner, 2026-10-24) ----
+
+    /**
+     * Take a card for an order the POS saved offline.  The SDK creates the
+     * payment itself (no server needed) and, with no internet, the reader
+     * stores the card; it is sent to Stripe as soon as the tablet is online
+     * (onPaymentIntentForwarded).  With internet it simply goes through now.
+     * Replies with JSON {offline_key, intent_id, stored, brand, last4}.
+     */
+    void collectOffline(final String callId, final long amountCents, final String offlineKey, final String orderKey, final String workspaceId, final String description) {
+        if (!Terminal.isInitialized() || Terminal.getInstance().getConnectedReader() == null) {
+            page.reply(callId, false, "NOT_CONNECTED", "The card reader isn't connected. Press its button once, then Connect reader.");
+            return;
+        }
+        if (collecting != null && !collecting.isCompleted()) {
+            page.reply(callId, false, "BUSY", "The reader is already taking a card.");
+            return;
+        }
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("wayne_offline_key", offlineKey);
+        metadata.put("wayne_order_key", orderKey);
+        metadata.put("wayne_entry", "terminal");
+        metadata.put("wayne_offline", "true");
+        if (workspaceId != null && !workspaceId.isEmpty()) metadata.put("hanafy_workspace_id", workspaceId);
+        PaymentIntentParameters params = new PaymentIntentParameters.Builder()
+                .setAmount(amountCents)
+                .setCurrency("usd")
+                .setCaptureMethod(CaptureMethod.Automatic)
+                .setDescription(description == null ? "" : description)
+                .setMetadata(metadata)
+                .build();
+        setState("collecting", null);
+        prompt("Tap, insert or swipe the card");
+        Terminal.getInstance().createPaymentIntent(params, new PaymentIntentCallback() {
+            @Override
+            public void onSuccess(PaymentIntent intent) {
+                main.post(() -> processOffline(callId, offlineKey, intent));
+            }
+
+            @Override
+            public void onFailure(TerminalException failed) {
+                main.post(() -> {
+                    setState(restingState(), null);
+                    page.reply(callId, false, collectCodeFor(failed), offlineWordsFor(failed));
+                });
+            }
+        }, new CreateConfiguration(OfflineBehavior.PREFER_ONLINE));
+    }
+
+    private void processOffline(final String callId, final String offlineKey, PaymentIntent intent) {
+        collecting = Terminal.getInstance().processPaymentIntent(
+                intent,
+                new CollectPaymentIntentConfiguration.Builder().build(),
+                new ConfirmPaymentIntentConfiguration.Builder().build(),
+                new PaymentIntentCallback() {
+                    @Override
+                    public void onSuccess(PaymentIntent done) {
+                        main.post(() -> {
+                            collecting = null;
+                            setState(restingState(), null);
+                            JSONObject body = new JSONObject();
+                            try {
+                                OfflineDetails offline = done.getOfflineDetails();
+                                OfflineCardPresentDetails card = offline == null ? null : offline.getCardPresentDetails();
+                                body.put("offline_key", offlineKey);
+                                body.put("intent_id", done.getId() == null ? JSONObject.NULL : done.getId());
+                                body.put("stored", done.getId() == null);
+                                body.put("brand", card == null || card.getBrand() == null ? "" : card.getBrand());
+                                body.put("last4", card == null || card.getLast4() == null ? "" : card.getLast4());
+                            } catch (JSONException ignored) {
+                                // Constant keys.
+                            }
+                            page.reply(callId, true, "", body.toString());
+                        });
+                    }
+
+                    @Override
+                    public void onFailure(TerminalException failed) {
+                        main.post(() -> {
+                            collecting = null;
+                            setState(restingState(), null);
+                            page.reply(callId, false, collectCodeFor(failed), offlineWordsFor(failed));
+                        });
+                    }
+                });
+    }
+
+    private static String offlineWordsFor(TerminalException failed) {
+        TerminalErrorCode code = failed.getErrorCode();
+        String name = code == null ? "" : code.name();
+        if (name.contains("OFFLINE") && name.contains("LIMIT")) return "The card reader's offline limit was reached. Take cash, or wait for the connection.";
+        if (name.contains("OFFLINE")) return "The card reader can't take cards offline yet (it must connect online once first). Take cash, or wait for the connection.";
+        return collectWordsFor(failed);
+    }
+
+    // ---- OfflineListener ----
+
+    @Override
+    public void onOfflineStatusChange(OfflineStatus status) {
+        main.post(() -> page.event("status", statusObject()));
+    }
+
+    @Override
+    public void onPaymentIntentForwarded(PaymentIntent intent, TerminalException failed) {
+        Map<String, String> metadata = intent == null ? null : intent.getMetadata();
+        final String key = metadata == null ? null : metadata.get("wayne_offline_key");
+        if (key == null) return;
+        JSONObject body = new JSONObject();
+        try {
+            body.put("offline_key", key);
+            body.put("intent_id", intent.getId() == null ? JSONObject.NULL : intent.getId());
+            body.put("status", intent.getStatus() == null ? "" : intent.getStatus().name().toLowerCase());
+            body.put("error", failed == null ? JSONObject.NULL : failed.getErrorMessage());
+        } catch (JSONException ignored) {
+            // Constant keys.
+        }
+        main.post(() -> {
+            saveForwarded(key, body);
+            page.event("forwarded", body);
+        });
+    }
+
+    @Override
+    public void onForwardingFailure(TerminalException failed) {
+        // The SDK keeps the cards and tries again by itself; the page sees the count in the status.
+        main.post(() -> page.event("status", statusObject()));
+    }
+
+    private int storedOfflineCount() {
+        try {
+            if (!Terminal.isInitialized()) return 0;
+            OfflineStatus status = Terminal.getInstance().getOfflineStatus();
+            return status == null || status.getSdk() == null ? 0 : status.getSdk().getOfflinePaymentsCount();
+        } catch (RuntimeException unavailable) {
+            return 0;
+        }
+    }
+
+    private JSONObject forwardedMap() {
+        try {
+            return new JSONObject(prefs.getString(FORWARDED, "{}"));
+        } catch (JSONException unreadable) {
+            return new JSONObject();
+        }
+    }
+
+    private void saveForwarded(String key, JSONObject body) {
+        JSONObject all = forwardedMap();
+        try {
+            all.put(key, body);
+        } catch (JSONException ignored) {
+            return;
+        }
+        prefs.edit().putString(FORWARDED, all.toString()).apply();
+    }
+
+    /** Cards Stripe has received that the page has not recorded yet (survives the app closing). */
+    String forwardedJson() {
+        JSONObject all = forwardedMap();
+        JSONArray list = new JSONArray();
+        Iterator<String> keys = all.keys();
+        while (keys.hasNext()) {
+            JSONObject entry = all.optJSONObject(keys.next());
+            if (entry != null) list.put(entry);
+        }
+        return list.toString();
+    }
+
+    void ackForwarded(String key) {
+        JSONObject all = forwardedMap();
+        all.remove(key);
+        prefs.edit().putString(FORWARDED, all.toString()).apply();
     }
 
     /** Stop taking a card (or stop looking for the reader). */

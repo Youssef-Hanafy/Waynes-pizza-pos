@@ -30,7 +30,8 @@ function flush() {
 
 function schedule() {
   if (timer !== null || typeof window === "undefined") return;
-  timer = window.setTimeout(flush, 800);
+  // A few seconds' worth of steps go in one request (owner, 2026-10-24: less Vercel compute).
+  timer = window.setTimeout(flush, 5000);
 }
 
 export function logDevice(kind: string, message = "", detail: Record<string, unknown> = {}) {

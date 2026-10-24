@@ -20,3 +20,6 @@ menu-load.sql
 Claude outputs/
 .vercel
 .env*
+
+# Built Android apps are delivered, not committed (they made every push 14 MB heavier)
+*.apk

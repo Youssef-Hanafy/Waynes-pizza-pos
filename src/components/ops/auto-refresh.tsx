@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
+import { isServerReachable } from "@/stores/connectivity";
 
 type Props = {
   /** Fallback polling interval. Realtime (when the viewer can receive it) refreshes sooner. */
@@ -27,6 +28,8 @@ export function AutoRefresh({ intervalMs = 30_000, live = false, label = "Update
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
       if (pending.current !== null) return;
+      // Offline (owner, 2026-10-24): a refresh that can't reach the server would reload the whole page; the screen stays as it is.
+      if (!isServerReachable()) return;
       // Coalesce bursts (an order insert touches several rows) into one refresh.
       pending.current = window.setTimeout(() => { pending.current = null; router.refresh(); }, 750);
     };

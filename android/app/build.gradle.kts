@@ -30,8 +30,8 @@ android {
         applicationId = "com.waynespizza.pos"
         minSdk = 26
         targetSdk = 37
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
         // The POS the app opens (see livePosUrl / debugPosUrl above).
         buildConfigField("String", "POS_URL", "\"$livePosUrl\"")
     }

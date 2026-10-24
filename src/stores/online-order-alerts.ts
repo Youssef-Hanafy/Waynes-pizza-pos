@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 
 /**
  * New online orders on the POS (owner, 2026-09-30): a chime and a banner the
@@ -14,7 +16,9 @@ import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
  */
 
 const CHIME_KEY = "pos.online-order-chime.v1";
-const POLL_MS = 8_000;
+// Realtime (a new kitchen ticket / print job) asks at once; this is only the safety net
+// (owner, 2026-10-24: 8 s polling all day and night was most of the Vercel compute).
+const POLL_MS = 20_000;
 const REPEAT_MS = 30_000;
 
 export function getOnlineChimeEnabled() {
@@ -100,9 +104,21 @@ export function useOnlineOrderAlerts(enabled: boolean) {
     }
     void poll();
     const pollTimer = window.setInterval(() => { void poll(); }, POLL_MS);
+    // A new order makes a kitchen ticket and (online orders) a print job: look straight away.
+    let soon: number | null = null;
+    const lookSoon = () => { if (soon === null) soon = window.setTimeout(() => { soon = null; void poll(); }, 1500); };
+    const client = createBrowserSupabaseClient();
+    const channel = client?.channel(`hanafy-online-alerts-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, lookSoon)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "print_jobs", ...workspaceRealtimeFilter() }, lookSoon)
+      .subscribe();
     // Keep chiming until someone acknowledges it (like the old system's printer beep).
     const repeatTimer = window.setInterval(() => { if (pending.current.length && getOnlineChimeEnabled()) playOrderChime(); }, REPEAT_MS);
-    return () => { stopped = true; window.clearInterval(pollTimer); window.clearInterval(repeatTimer); };
+    return () => {
+      stopped = true; window.clearInterval(pollTimer); window.clearInterval(repeatTimer);
+      if (soon !== null) window.clearTimeout(soon);
+      if (client && channel) void client.removeChannel(channel);
+    };
   }, [enabled]);
 
   return { alerts, acknowledge: () => setAlerts([]) };

@@ -8,6 +8,11 @@
  * is behind, reloads itself the next time the register is idle
  * (src/stores/use-app-update.ts).  Nothing secret: just the build id.
  */
+// Built once per deploy and served as a static file (owner, 2026-10-24: "optimize
+// the Vercel compute"): every register asks this every minute, and a static
+// answer costs no function time at all.  A new deploy brings its own copy.
+export const dynamic = "force-static";
+
 export function GET() {
   return Response.json({ build: process.env.WAYNE_BUILD_ID ?? "" }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }

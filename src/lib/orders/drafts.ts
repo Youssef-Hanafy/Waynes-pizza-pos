@@ -27,6 +27,39 @@ export function blankAddress(): DraftAddress {
   return { address1: "", address2: "", city: defaultCity, state: defaultState, postal_code: "", delivery_instructions: "" };
 }
 
+/** How an order taken offline was paid at the counter (owner, 2026-10-24). */
+export const offlinePaymentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("cash"), amountCents: z.number().int(), tenderedCents: z.number().int(), changeCents: z.number().int(), at: z.string() }),
+  /** Stripe M2 card stored by the reader; intentId arrives when the reader forwards it to Stripe. */
+  z.object({ kind: z.literal("card"), amountCents: z.number().int(), offlineKey: z.string(), intentId: z.string().nullable(), brand: z.string(), last4: z.string(), at: z.string() }),
+  /** Pay later at pickup, or cash at the door for a delivery. */
+  z.object({ kind: z.literal("later"), at: z.string() }),
+]);
+export type OfflinePayment = z.infer<typeof offlinePaymentSchema>;
+
+/**
+ * An order taken while the register could not reach the server (owner,
+ * 2026-10-24).  It is kept on this register, its kitchen ticket printed here,
+ * and it is sent — then its payment — when the connection is back.
+ */
+export const offlineOrderSchema = z.object({
+  takenAt: z.string(),
+  /** What the slip and the screen call it until the server gives it a number: "O1", "O2" … */
+  localNumber: z.string(),
+  totalCents: z.number().int(),
+  /** The kitchen ticket printed at the counter (the server never prints it again). */
+  printed: z.boolean(),
+  payment: offlinePaymentSchema.nullable(),
+  /** Filled in as it syncs. */
+  orderId: z.string().nullable(),
+  orderNumber: z.string().nullable(),
+  dailyNumber: z.number().int().nullable(),
+  paymentRecorded: z.boolean(),
+  /** Something the server refused when it was sent: shown until someone dismisses it. */
+  problem: z.string(),
+});
+export type OfflineOrder = z.infer<typeof offlineOrderSchema>;
+
 export const posDraftSchema = z.object({
   id: z.string().min(1),
   idempotencyKey: z.string().min(16),
@@ -83,6 +116,8 @@ export const posDraftSchema = z.object({
     /** Already paid: the items still go on the same order; what is still owed is paid after (owner, 2026-10-19). */
     paid: z.boolean(),
   }).nullable().optional().default(null),
+  /** Taken while offline (owner, 2026-10-24); null for every normal ticket. */
+  offline: offlineOrderSchema.nullable().optional().default(null),
 });
 export type PosDraft = z.infer<typeof posDraftSchema>;
 
@@ -128,6 +163,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     submitPending: false,
     started: false,
     addTo: null,
+    offline: null,
     ...patch,
   };
 }
@@ -265,6 +301,8 @@ export function draftToOrderPayload(draft: PosDraft) {
       special_instructions: line.special_instructions, modifiers: line.open_item ? [] : line.modifiers, lists_included: !line.open_item,
       ...(line.open_item ? { open_item: line.open_item } : {}),
     })),
+    // Taken offline: the counter handled the kitchen ticket, so the server never prints it (owner, 2026-10-24).
+    ...(draft.offline ? { offline_printed: true, offline_taken_at: draft.offline.takenAt, offline_local_number: draft.offline.localNumber } : {}),
   };
 }
 

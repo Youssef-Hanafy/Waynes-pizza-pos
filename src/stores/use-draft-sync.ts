@@ -29,12 +29,15 @@ export function useDraftSync() {
       if (draftSync.pendingCount() > 0) { event.preventDefault(); event.returnValue = ""; }
     };
     window.addEventListener("online", back);
+    // The server answering again (the internet came back with the Wi-Fi still up) counts too.
+    window.addEventListener("wayne:reconnected", back);
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("beforeunload", leaving);
     back();
     return () => {
       offStore();
       window.removeEventListener("online", back);
+      window.removeEventListener("wayne:reconnected", back);
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("beforeunload", leaving);
       if (client && channel) void client.removeChannel(channel);

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { logDevice } from "@/lib/pos/device-log";
+import { reportNetworkFailure, reportServerOk } from "./connectivity";
 
 /**
  * Keeps a register on the newest build (owner, 2026-10-20).
@@ -58,11 +59,13 @@ export function useAppUpdate(isSafe: () => boolean) {
       if (stopped) return;
       try {
         const response = await fetch("/api/version", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+        reportServerOk();
         const body = (await response.json().catch(() => null)) as { build?: unknown } | null;
         const live = typeof body?.build === "string" ? body.build : "";
         if (response.ok && live && live !== CURRENT) waitingFor = live;
       } catch {
-        // Offline: try again next time.
+        // Offline: try again next time (and the POS knows it is offline).
+        reportNetworkFailure();
       }
       reloadIfSafe();
     };

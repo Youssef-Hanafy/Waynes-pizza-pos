@@ -109,6 +109,9 @@ export const drawerActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("cash_payment"), shift_id: z.union([z.literal(""), z.uuid()]).optional().default(""), order_id: z.uuid(),
     tendered_cents: z.number().int().min(0).max(10_000_000), idempotency_key: z.string().min(16).max(160),
+    /** Cash taken while the register was offline, recorded now: the drawer already opened at the sale (owner, 2026-10-24). */
+    offline: z.boolean().optional().default(false),
+    offline_taken_at: z.union([z.literal(""), z.iso.datetime({ offset: true })]).optional().default(""),
   }),
   /** Pop the drawer open with no sale (making change, a forgotten bill). */
   z.object({ action: z.literal("no_sale"), reason: z.string().trim().max(200).default("") }),

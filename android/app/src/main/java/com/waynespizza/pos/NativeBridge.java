@@ -189,6 +189,30 @@ final class NativeBridge {
         activity.runOnUiThread(() -> stripe.collect(callId, clientSecret));
     }
 
+    /** A card for an order saved offline (owner, 2026-10-24): stored by the reader, sent to Stripe when online. */
+    @JavascriptInterface
+    public void stripeCollectOffline(final String callId, final double amountCents, final String offlineKey, final String orderKey, final String workspaceId, final String description) {
+        if (!trusted()) return;
+        long amount = Math.round(amountCents);
+        if (amount < 50 || amount > 99_999_999 || offlineKey == null || offlineKey.length() < 8 || orderKey == null || orderKey.length() < 16) {
+            reply(callId, false, "ERROR", "The payment to send to the reader is invalid.");
+            return;
+        }
+        activity.runOnUiThread(() -> stripe.collectOffline(callId, amount, offlineKey, orderKey, workspaceId, description));
+    }
+
+    @JavascriptInterface
+    public String stripeForwarded() {
+        if (!trusted()) return "[]";
+        return stripe.forwardedJson();
+    }
+
+    @JavascriptInterface
+    public void stripeAckForwarded(final String offlineKey) {
+        if (!trusted() || offlineKey == null) return;
+        activity.runOnUiThread(() -> stripe.ackForwarded(offlineKey));
+    }
+
     @JavascriptInterface
     public void stripeCancel(final String callId) {
         if (!trusted()) return;

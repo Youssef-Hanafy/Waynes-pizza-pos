@@ -68,6 +68,14 @@ export const posOrderInputSchema = z.object({
   tip_cents: z.number().int().min(0).max(1_000_000),
   special_instructions: z.string().trim().max(1500),
   items: z.array(orderLineSchema).min(1).max(50),
+  /**
+   * Taken while the register was offline (owner, 2026-10-24) and sent when the
+   * connection came back: the counter already printed its kitchen ticket, so
+   * the server never prints it again.  Only an offline order sends these.
+   */
+  offline_printed: z.boolean().optional().default(false),
+  offline_taken_at: z.union([z.literal(""), z.iso.datetime({ offset: true })]).optional().default(""),
+  offline_local_number: z.string().trim().max(20).optional().default(""),
 }).superRefine((value, context) => {
   // A phone caller who does not want a profile is still a phone order, but
   // without an address on file it can only be picked up.

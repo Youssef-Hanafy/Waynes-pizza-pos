@@ -158,6 +158,38 @@ export async function ensureTerminalLocation(account: StripeTerminalAccount) {
   return created.id;
 }
 
+type StripeConfiguration = { id: string; offline?: { enabled?: boolean | null } | null };
+const offlineReady = new Set<string>();
+
+/**
+ * Lets the M2 keep taking cards when the internet drops (owner, 2026-10-24):
+ * Stripe's offline mode, switched on for this store's Terminal Location only.
+ * The reader learns it the next time it connects online, and from then on
+ * stores cards while offline and forwards them when the connection is back.
+ * Never blocks the reader from connecting if Stripe refuses.
+ */
+export async function ensureOfflineMode(account: StripeTerminalAccount, locationId: string) {
+  const cacheKey = `${account.environment}:${locationId}`;
+  if (offlineReady.has(cacheKey)) return true;
+  const location = await stripe<{ id: string; configuration_overrides?: string | null }>(account, `/v1/terminal/locations/${encodeURIComponent(locationId)}`, { method: "GET" }, "The card reader's store location could not be read from Stripe.");
+  const overrideId = typeof location.configuration_overrides === "string" && location.configuration_overrides ? location.configuration_overrides : null;
+  if (overrideId) {
+    const current = await stripe<StripeConfiguration>(account, `/v1/terminal/configurations/${encodeURIComponent(overrideId)}`, { method: "GET" }, "The card reader settings could not be read from Stripe.");
+    if (current.offline?.enabled !== true) {
+      await stripe<StripeConfiguration>(account, `/v1/terminal/configurations/${encodeURIComponent(overrideId)}`, { method: "POST", body: form({ "offline[enabled]": true }) }, "Stripe could not switch on offline card payments.");
+    }
+  } else {
+    const created = await stripe<StripeConfiguration>(account, "/v1/terminal/configurations", {
+      method: "POST",
+      idempotencyKey: `hanafy-terminal-offline-${locationId}`,
+      body: form({ name: "Store reader (offline on)", "offline[enabled]": true }),
+    }, "Stripe could not switch on offline card payments.");
+    await stripe<{ id: string }>(account, `/v1/terminal/locations/${encodeURIComponent(locationId)}`, { method: "POST", body: form({ configuration_overrides: created.id }) }, "Stripe could not switch on offline card payments.");
+  }
+  offlineReady.add(cacheKey);
+  return true;
+}
+
 /** One card-present PaymentIntent per order payment; retries reuse it (never a second authorisation). */
 export async function createTerminalIntent(account: StripeTerminalAccount, input: { amountCents: number; idempotencyKey: string; orderNumber: string; paymentId: string; description: string;
   /** Delivery only: approve now, charge order + driver's tip at the cash-out.  Everything else is charged on the spot. */
