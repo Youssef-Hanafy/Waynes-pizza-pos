@@ -286,7 +286,6 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
   const payment = order.payment_status === "paid" || order.payment_status === "authorized" ? "PAID"
     : order.payment_status === "refunded" ? "REFUNDED" : order.payment_status === "partially_refunded" ? "PART REFUNDED" : "NOT PAID";
   const number = `#${ticketNumber(order)}`;
-  const header = [order.add_on_to ? `ADD-ON TO ${number}` : number, order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP", payment].join(" · ");
   const banner: PrintLine[] = only
     ? [{ kind: "text", text: `ADDED TO ${number} - SAME ORDER`, align: "center", bold: true, highlight: true }]
     : options.updated
@@ -294,7 +293,10 @@ export function buildKitchenTicket(doc: PrintDocument, routingCategories: readon
       : [];
   const lines: PrintLine[] = [
     ...banner,
-    { kind: "text", text: header, align: "center", bold: true, highlight: payment === "NOT PAID" },
+    // Order, delivery or pickup, and paid or not — each on its own line, easy to spot (owner, 2026-10-26).
+    { kind: "text", text: order.add_on_to ? `ADD-ON TO ${number}` : `Ticket ${number}`, align: "center", bold: true },
+    { kind: "text", text: order.fulfillment_type === "delivery" ? "DELIVERY" : "PICKUP", align: "center", bold: true },
+    { kind: "text", text: payment, align: "center", bold: true, highlight: payment === "NOT PAID" },
     { kind: "rule" },
     ...items.flatMap((item) => kitchenItemLines(item)),
     ...(order.special_instructions ? [{ kind: "text" as const, text: `ORDER NOTE: ${order.special_instructions}`, bold: true, highlight: true }] : []),

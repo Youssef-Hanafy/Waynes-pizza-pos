@@ -161,17 +161,17 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("says PAID or NOT PAID in big letters at the top of every slip (owner, 2026-10-12)", () => {
     // The kitchen ticket says it in its first line (owner, 2026-10-26: essentials only); the receipt keeps the big banner.
     const unpaid = layoutToText(buildKitchenTicket(doc)!, 40);
-    expect(unpaid[0]).toContain("#123 · DELIVERY · NOT PAID");
+    expect(unpaid.slice(0, 3).map((line) => line.trim())).toEqual(["Ticket #123", "DELIVERY", "NOT PAID"]);
     expect(layoutToText(buildReceipt(doc), 48).join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
     const paid = { ...doc, order: { ...doc.order, fulfillment_type: "pickup", payment_status: "paid", payment_method: "card" } };
     const paidTicket = layoutToText(buildKitchenTicket(paid)!, 40).join("\n");
-    expect(paidTicket).toContain("PICKUP · PAID");
+    expect(paidTicket).toMatch(/PICKUP\s*\n\s*PAID/);
     expect(paidTicket).not.toContain("NOT PAID");
     expect(layoutToText(buildReceipt(paid), 48).join("\n")).toContain("** PAID - CARD **");
     const held = { ...doc, order: { ...doc.order, payment_status: "authorized", payment_method: "card" } };
     // A card held for the tip on the slip (owner, 2026-10-13): paid by card, driver gets the slip signed.
     const heldTicket = layoutToText(buildKitchenTicket(held)!, 40).join("\n");
-    expect(heldTicket).toContain("DELIVERY · PAID");
+    expect(heldTicket).toMatch(/DELIVERY\s*\n\s*PAID/);
     expect(layoutToText(buildReceipt(held), 48).join("\n")).toContain("get the slip signed");
     const heldPickup = { ...held, order: { ...held.order, fulfillment_type: "pickup" } };
     expect(layoutToText(buildTipSignatureSlip(heldPickup), 48).join("\n")).toContain("CARD APPROVED — ADD TIP BELOW");
@@ -214,8 +214,8 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const lines = layoutToText(buildKitchenTicket(doc)!, 40);
     const text = lines.join("\n");
     // Which order, then straight to the food.
-    expect(lines[0]).toContain("#123 · DELIVERY · NOT PAID");
-    expect(lines[2]).toContain("1 Large Cheese Pizza");
+    expect(lines.slice(0, 3).map((line) => line.trim())).toEqual(["Ticket #123", "DELIVERY", "NOT PAID"]);
+    expect(lines[4]).toContain("1 Large Cheese Pizza");
     expect(text).toMatch(/John Smith\s+\(508\) 555-1234/);
     expect(text).toContain("123 Main Street, Apt 2, Worcester");
     expect(text).toMatch(/\d{1,2}:\d\d [ap]m · 2 items\s+\$33\.99/);
@@ -224,7 +224,7 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     // No blank lines except the feed past the TM-U220B's cutter.
     const lastText = lines.findLastIndex((line) => line.trim() !== "");
     expect(lines.slice(0, lastText).some((line) => line.trim() === "")).toBe(false);
-    expect(lastText).toBeLessThan(14);
+    expect(lastText).toBeLessThan(16);
     // The receipt keeps everything.
     const receipt = layoutToText(buildReceipt(doc), 48).join("\n");
     expect(receipt).toMatch(/Placed \d+\/\d+, /);
