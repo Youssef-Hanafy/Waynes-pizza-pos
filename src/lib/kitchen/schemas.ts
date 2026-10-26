@@ -7,7 +7,7 @@ export const kitchenItemSchema = z.object({
   modifiers: z.array(z.object({ name: z.string(), group: z.string(), quantity: z.number().int() })),
 });
 export const kitchenPayloadSchema = z.object({
-  order_number: z.string(), customer_name: z.string(), source: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null), customer_name: z.string(), source: z.string(),
   fulfillment_type: z.enum(["pickup", "delivery"]), instructions: z.string(),
   items: z.array(kitchenItemSchema),
 });

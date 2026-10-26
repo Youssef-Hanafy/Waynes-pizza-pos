@@ -201,7 +201,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted"><span className="mr-1 rounded-lg bg-wayne-green px-2 py-0.5 text-lg tracking-normal text-white">#{ticketNumber(order)}{order.parent_order_id ? " add-on" : ""}</span> {order.order_number} · {order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · {order.source === "online" ? "Online" : order.source === "phone" ? `Phone${order.phone_line ? ` line ${order.phone_line}` : ""}` : "Counter"}{order.is_test ? " · TEST" : ""}</p>
+        <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-muted"><span className="mr-1 rounded-lg bg-wayne-green px-2 py-0.5 text-lg tracking-normal text-white">#{ticketNumber(order)}{order.parent_order_id ? " add-on" : ""}</span> {order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · {order.source === "online" ? "Online" : order.source === "phone" ? `Phone${order.phone_line ? ` line ${order.phone_line}` : ""}` : "Counter"}{order.is_test ? " · TEST" : ""}</p>
         <h2 className="mt-1 text-3xl font-black">{order.customer_name || "Walk-in"}</h2>
         {order.customer_phone ? <a className="mt-1 inline-block text-xl font-bold text-wayne-green underline" href={`tel:${order.customer_phone}`}>{phone(order.customer_phone)}</a> : <p className="mt-1 text-wayne-muted">No phone number</p>}
       </div>
@@ -254,7 +254,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
       <p className="text-sm font-black uppercase tracking-[0.14em] text-wayne-muted">Added after it was paid</p>
       <ul className="mt-2 grid gap-2">{liveAddOns.map((addOn) => <li key={addOn.id}>
         <button className="flex w-full items-center justify-between gap-3 rounded-xl bg-wayne-cream p-3 text-left" onClick={() => onSelect(addOn.id)} type="button">
-          <span><strong>Add-on · {addOn.item_count} item{addOn.item_count === 1 ? "" : "s"}</strong><span className="block text-sm text-wayne-muted">{time(addOn.placed_at)} · {addOn.order_number}</span></span>
+          <span><strong>Add-on · {addOn.item_count} item{addOn.item_count === 1 ? "" : "s"}</strong><span className="block text-sm text-wayne-muted">{time(addOn.placed_at)} · #{ticketNumber(addOn)}</span></span>
           <span className="text-right"><strong className="block text-xl">{formatCents(addOn.total_cents)}</strong><span className={`text-xs font-black uppercase ${isPaid(addOn) ? "text-wayne-ok" : "text-wayne-red"}`}>{isPaid(addOn) ? "Paid" : "Not paid"}</span></span>
         </button>
         {!isPaid(addOn) && onPay ? <Button className="mt-1 w-full" onClick={() => onPay(addOn.id)} variant="brand">Take payment for the add-on · {formatCents(addOn.total_cents)}</Button> : null}

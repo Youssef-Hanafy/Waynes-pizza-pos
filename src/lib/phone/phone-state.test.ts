@@ -20,7 +20,7 @@ function serverCall(overrides: Partial<PhoneCall> = {}): PhoneCall {
   return {
     id: "63000000-0000-4000-8000-0000000000aa", event_key: "a", line_number: 1, device_id: "", caller_number: "+15085551234", caller_number_raw: "5085551234",
     caller_name: "RITA", started_at: at(0), surfaced_at: at(0), ended_at: null, status: "incoming", simulated: true, customer_id: rita.id,
-    claimed_by_id: null, claimed_by_name: null, claimed_terminal: "", claimed_at: null, order_id: null, order_number: null, matches: [rita],
+    claimed_by_id: null, claimed_by_name: null, claimed_terminal: "", claimed_at: null, order_id: null, order_number: null, daily_number: null, matches: [rita],
     ...overrides,
   };
 }

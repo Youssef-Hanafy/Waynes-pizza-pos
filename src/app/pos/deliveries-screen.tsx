@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import {
@@ -157,7 +158,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
 
   async function cashOut(driverId: string, orders: PosDeliveryOrder[]) {
     const bad = orders.find((order) => tips[order.order_id] && dollarsToCents(tips[order.order_id]!) === null);
-    if (bad) { setError(`Check the tip on order ${bad.order_number} (e.g. 5.00).`); return; }
+    if (bad) { setError(`Check the tip on order #${ticketNumber(bad)} (e.g. 5.00).`); return; }
     setBusy(`cashout-${driverId}`); setError("");
     try {
       const response = await fetch("/api/pos/delivery/cashout", {
@@ -232,7 +233,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
           <tbody>{result.detail.map((line) => {
             const tipFromDrawer = line.paid_by === "card_held" || line.paid_by === "card" || line.paid_by === "paid";
             return <tr className="border-b border-wayne-border last:border-0" key={line.order_id}>
-              <td className="py-1 pr-2 font-black">{line.order_number.replace(/^W0*/, "")}</td>
+              <td className="py-1 pr-2 font-black">{ticketNumber(line)}</td>
               <td className="pr-2">{paidByShort[line.paid_by] ?? line.paid_by}</td>
               <td className="pr-2 text-right">{formatCents(line.total_cents - line.tip_cents)}</td>
               <td className="pr-2 text-right">{formatCents(line.tip_cents)}</td>
@@ -256,9 +257,9 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         <ul className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {waiting.map((order) => { const isTicked = ticked.includes(order.order_id); return <li className={`rounded-2xl border-2 p-3 ${isTicked ? "border-wayne-green bg-wayne-green/5" : "border-wayne-border"}`} key={order.order_id}>
             <div className="flex items-start gap-3">
-              <input aria-label={`Select order ${order.order_number}`} checked={isTicked} className="mt-1 h-7 w-7 shrink-0 accent-wayne-green" onChange={() => setSelected((current) => current.includes(order.order_id) ? current.filter((id) => id !== order.order_id) : [...current, order.order_id])} type="checkbox" />
+              <input aria-label={`Select order #${ticketNumber(order)}`} checked={isTicked} className="mt-1 h-7 w-7 shrink-0 accent-wayne-green" onChange={() => setSelected((current) => current.includes(order.order_id) ? current.filter((id) => id !== order.order_id) : [...current, order.order_id])} type="checkbox" />
               <div className="min-w-0">
-                <p className="text-lg font-black">#{order.order_number.replace(/^W0*/, "")} · {order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</p>
+                <p className="text-lg font-black">#{ticketNumber(order)} · {order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</p>
                 <p className="truncate text-sm">{order.address || "No address"}{order.city ? `, ${order.city}` : ""}</p>
                 <p className="text-xs font-bold text-wayne-muted">{paidByLabel(order)} · {formatCents(order.total_cents)} · placed {time(order.placed_at)} ({minutesAgo(order.placed_at)} ago)</p>
               </div>
@@ -295,12 +296,12 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                   const staleHold = order.paid_by === "card_held" && order.held_at && Date.now() - Date.parse(order.held_at) > 5 * 86_400_000;
                   const noCardTip = order.paid_by === "card_held" && cap === 0;
                   return <tr className="border-b border-wayne-border align-top last:border-0" key={order.order_id}>
-                    <td className="py-2 pr-2 font-black">{order.order_number.replace(/^W0*/, "")}</td>
+                    <td className="py-2 pr-2 font-black">{ticketNumber(order)}</td>
                     <td className="py-2 pr-2"><strong className="block">{order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</strong><span className="block text-xs text-wayne-muted">{order.address}{order.city ? `, ${order.city}` : ""}</span>{staleHold ? <span className="block text-xs font-bold text-wayne-alert">Card approval expires soon — cash out today</span> : null}</td>
                     <td className="py-2 pr-2 text-xs font-bold">{paidByLabel(order)}</td>
                     <td className="py-2 pr-4 text-right font-bold">{allowed && cents && !over ? <>{formatCents(order.total_cents + cents)}<span className="block text-xs font-normal text-wayne-muted">{formatCents(order.total_cents)} + {formatCents(cents)} tip</span></> : formatCents(order.total_cents)}</td>
                     <td className="py-2 pr-2">{noCardTip ? <span className="text-xs font-bold text-wayne-alert">This card can&apos;t take a tip after the order (Stripe). The order is charged as is.</span> : allowed ? <>
-                      <input aria-label={`Tip for order ${order.order_number}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
+                      <input aria-label={`Tip for order #${ticketNumber(order)}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
                     </> : <span className="text-sm font-bold">{formatCents(order.tip_cents)}<span className="block text-xs font-normal text-wayne-muted">{order.paid_by === "paid" ? "tip paid online" : "charged at the counter"} · drawer pays it</span></span>}</td>
                     <td className="py-2 text-right">{order.status === "out_for_delivery" ? <button className="min-h-9 text-xs font-bold underline" disabled={busy !== null} onClick={() => { void act(`back-${order.order_id}`, { action: "unassign", order_id: order.order_id }); }} type="button">Take back</button> : null}</td>
@@ -314,7 +315,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
               <table className="mt-2 w-full text-left text-sm">
                 <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
                 <tbody>{cashoutLines(orders, tipCents).map((line) => <tr className="border-b border-wayne-border last:border-0" key={line.order.order_id}>
-                  <td className="py-1 pr-2 font-black">{line.order.order_number.replace(/^W0*/, "")}</td>
+                  <td className="py-1 pr-2 font-black">{ticketNumber(line.order)}</td>
                   <td className="pr-2">{paidByShort[line.order.paid_by] ?? line.order.paid_by}</td>
                   <td className="pr-2 text-right">{formatCents(line.order.total_cents - (line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.tip_cents : 0))}</td>
                   <td className="pr-2 text-right">{formatCents(line.tip)}</td>

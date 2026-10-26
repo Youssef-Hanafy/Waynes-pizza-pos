@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -145,7 +146,7 @@ export function KitchenBoard({ initialTickets, initialError, staffName, business
         const accent = ticket.status === "ready" ? "border-l-wayne-ok" : ticket.payload.fulfillment_type === "delivery" ? "border-l-wayne-info" : "border-l-wayne-warn";
         return <article key={ticket.order_id} className={`overflow-hidden rounded-2xl border border-l-8 border-wayne-border bg-white shadow-card ${accent}`}>
           <div className={`p-5 ${ticket.status === "ready" ? "bg-wayne-ok-soft" : ticket.payload.fulfillment_type === "delivery" ? "bg-wayne-info-soft" : "bg-wayne-warn-soft"}`}>
-            <div className="flex items-center justify-between gap-3"><h2 className="font-display text-4xl font-black tracking-tight">{ticket.payload.order_number}</h2><strong className="rounded-full bg-white px-3 py-2 text-sm capitalize">{ticket.payload.fulfillment_type}</strong></div>
+            <div className="flex items-center justify-between gap-3"><h2 className="font-display text-4xl font-black tracking-tight">#{ticketNumber(ticket.payload)}</h2><strong className="rounded-full bg-white px-3 py-2 text-sm capitalize">{ticket.payload.fulfillment_type}</strong></div>
             <p className="mt-2 font-bold">{ticket.payload.customer_name} · <span className="capitalize">{ticket.payload.source}</span></p>
             <p className="mt-2 font-black capitalize">{ticket.status.replaceAll("_", " ")}</p>
             <p className="mt-1 font-mono text-sm">Placed {now ? elapsedLabel(ticket.placed_at, now) : "—"} ago{ticket.accepted_at && now ? ` · accepted ${elapsedLabel(ticket.accepted_at, now)} ago` : ""}</p>

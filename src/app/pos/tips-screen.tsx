@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
@@ -104,7 +105,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
           return <li className="grid gap-2 rounded-2xl border border-wayne-border bg-white p-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-center" key={card.payment_id}>
             <div className="min-w-0">
               <p className="flex flex-wrap items-baseline gap-x-2 text-lg font-black">
-                <span>#{card.order_number.replace(/^W0*/, "")}</span>
+                <span>#{ticketNumber(card)}</span>
                 <span className="truncate">{card.customer_name || "Customer"}</span>
                 {card.is_test ? <span className="rounded bg-wayne-gold/30 px-1.5 text-xs">TEST</span> : null}
               </p>
@@ -127,7 +128,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
 
       {drivers.length ? <section className="rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-3">
         <h2 className="font-black">On a driver&apos;s run ({drivers.length})</h2>
-        <p className="text-sm text-wayne-muted">These delivery cards get their tip at the driver&apos;s cash-out, so the driver is paid the tip from the drawer: {drivers.map((card) => `#${card.order_number.replace(/^W0*/, "")} ${card.customer_name}`).join(" · ")}</p>
+        <p className="text-sm text-wayne-muted">These delivery cards get their tip at the driver&apos;s cash-out, so the driver is paid the tip from the drawer: {drivers.map((card) => `#${ticketNumber(card)} ${card.customer_name}`).join(" · ")}</p>
         {onOpenDeliveries ? <Button className="mt-2" onClick={onOpenDeliveries} size="sm" variant="secondary">Go to Deliveries → cash-out</Button> : null}
       </section> : null}
 

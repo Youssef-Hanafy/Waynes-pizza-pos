@@ -163,7 +163,7 @@ export const phoneCallSchema = z.object({
   claimed_terminal: z.string(),
   claimed_at: z.string().nullable(),
   order_id: z.uuid().nullable(),
-  order_number: z.string().nullable(),
+  order_number: z.string().nullable(), daily_number: z.number().int().nullable().optional().default(null),
   matches: z.array(posCustomerSchema),
 });
 export type PhoneCall = z.infer<typeof phoneCallSchema>;
@@ -180,7 +180,7 @@ export const recentCallSchema = z.object({
   simulated: z.boolean(),
   customer_name: z.string().nullable(),
   order_id: z.uuid().nullable(),
-  order_number: z.string().nullable(),
+  order_number: z.string().nullable(), daily_number: z.number().int().nullable().optional().default(null),
 });
 export type RecentCall = z.infer<typeof recentCallSchema>;
 

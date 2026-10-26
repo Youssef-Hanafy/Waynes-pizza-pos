@@ -10,7 +10,7 @@ export type PaidBy = z.infer<typeof paidBySchema>;
 
 export const posDeliveryOrderSchema = z.object({
   order_id: z.uuid(),
-  order_number: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null),
   customer_name: z.string().default(""),
   customer_phone: z.string().default(""),
   address: z.string().default(""),
@@ -68,7 +68,7 @@ export const posCashoutResultSchema = z.object({
   card_tips_cents: z.number().int(),
   hand_in_cents: z.number().int(),
   detail: z.array(z.object({
-    order_id: z.uuid(), order_number: z.string(), paid_by: z.string(),
+    order_id: z.uuid(), order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null), paid_by: z.string(),
     total_cents: z.number().int(), tip_cents: z.number().int(), cash_cents: z.number().int(),
   })).default([]),
 });

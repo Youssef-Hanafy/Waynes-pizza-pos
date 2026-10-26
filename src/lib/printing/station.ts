@@ -91,7 +91,9 @@ export function createKitchenStationAdapter(options: {
       const added = job.job_type === "kitchen_addition" && Array.isArray(job.payload.item_ids)
         ? job.payload.item_ids.filter((id): id is string => typeof id === "string")
         : undefined;
-      const ticket = buildKitchenTicket(doc, options.routingCategories, added ? { onlyItemIds: added } : {});
+      // An order changed after its ticket printed (owner, 2026-10-26): the whole order again, marked UPDATED.
+      const updated = job.job_type === "kitchen_addition" && job.payload.mode === "updated";
+      const ticket = buildKitchenTicket(doc, options.routingCategories, updated ? { updated: true } : added ? { onlyItemIds: added } : {});
       // Nothing on this order goes to the kitchen printer (e.g. drinks only): done.
       if (!ticket) return { receiptId: "nothing-for-this-printer" };
       return settle(await options.printer.printLayout(ticket));

@@ -1,6 +1,7 @@
 "use client";
 
 import { z } from "zod";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import {
   activeDraft, adoptDraft, draftBody, draftLabel, draftNeedsSync, draftToOrderPayload, markSynced, posDraftSchema, removeDraft, updateDraft,
   type PosDraft,
@@ -241,7 +242,7 @@ export const draftSync = {
     // Orders taken offline are sent by offline-orders.ts (order, then its payment).
     for (const draft of orderStore.get().drafts.filter((candidate) => candidate.submitPending && !candidate.offline)) {
       const result = await draftSync.submit(draft.id);
-      if (result.ok) notify(`Order ${result.order.order_number} sent now that the connection is back${result.order.duplicate ? " (it had already gone through)" : ""}.`);
+      if (result.ok) notify(`Order #${ticketNumber(result.order)} sent now that the connection is back${result.order.duplicate ? " (it had already gone through)" : ""}.`);
       else if (!result.pending) notify(`${draftLabel(draft)} could not be sent: ${result.message}`, "warn");
       else return; // Still offline.
     }

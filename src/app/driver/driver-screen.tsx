@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
@@ -93,7 +94,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
       if (!parsed.ok) { setError(parsed.error); return; }
       cents = parsed.cents;
     }
-    const saved = await send(assignment.order_id, { action: "delivered", cash_collected_cents: cents, note }, `${assignment.order_number} delivered.`);
+    const saved = await send(assignment.order_id, { action: "delivered", cash_collected_cents: cents, note }, `#${ticketNumber(assignment)} delivered.`);
     if (saved) { setCashOpen(null); setCash(""); setNote(""); }
   }
 
@@ -133,7 +134,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
           return <article className="overflow-hidden rounded-2xl border border-wayne-border bg-white shadow-sm" key={assignment.order_id}>
             <div className={`p-5 ${assignment.assignment_status === "picked_up" ? "bg-wayne-info-soft" : "bg-wayne-warn-soft"}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-3xl font-black">{assignment.order_number}</h3>
+                <h3 className="text-3xl font-black">#{ticketNumber(assignment)}</h3>
                 <strong className="rounded-full bg-white px-3 py-2 text-sm">{driverStepLabels[assignment.assignment_status]}</strong>
               </div>
               <p className="mt-2 text-xl font-black">{assignment.customer_name}</p>
@@ -156,12 +157,12 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
               {step && !showCash ? <Button
                 className="mt-3 min-h-14 w-full text-lg"
                 disabled={pending !== null || !step.ready || Boolean(error)}
-                onClick={() => { if (step.action === "delivered") { setCashOpen(assignment.order_id); setCash(assignment.amount_due_cents > 0 ? (assignment.amount_due_cents / 100).toFixed(2) : "0"); setNote(""); } else { void send(assignment.order_id, { action: step.action }, `${assignment.order_number} ${step.action === "accept" ? "accepted" : "picked up"}.`); } }}
+                onClick={() => { if (step.action === "delivered") { setCashOpen(assignment.order_id); setCash(assignment.amount_due_cents > 0 ? (assignment.amount_due_cents / 100).toFixed(2) : "0"); setNote(""); } else { void send(assignment.order_id, { action: step.action }, `#${ticketNumber(assignment)} ${step.action === "accept" ? "accepted" : "picked up"}.`); } }}
               >{pending === assignment.order_id ? "Saving…" : step.label}</Button> : null}
               {step && !step.ready ? <p className="mt-2 text-sm font-bold text-wayne-muted">Waiting for the kitchen to mark this order ready.</p> : null}
 
               {showCash ? <div className="mt-4 rounded-xl border border-wayne-border bg-wayne-cream p-4">
-                <h4 className="text-lg font-black">Close out {assignment.order_number}</h4>
+                <h4 className="text-lg font-black">Close out #{ticketNumber(assignment)}</h4>
                 <p className="mt-1 text-sm text-wayne-muted">{assignment.amount_due_cents > 0 ? `Cash owed at the door: ${formatCents(assignment.amount_due_cents)}. Card payment at the door is not available yet.` : "This order is already paid. Do not collect cash."}</p>
                 {assignment.amount_due_cents > 0 ? <label className="mt-3 grid gap-2 text-sm font-bold">Cash collected
                   <input className="min-h-14 rounded-lg border border-wayne-border bg-white px-4 text-xl font-black" inputMode="decimal" onChange={(event) => setCash(event.target.value)} value={cash} />
@@ -185,8 +186,8 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
         <p className="mt-1 text-sm text-wayne-muted">Take one and the full address and phone number appear above.</p>
         <div className="mt-4 grid gap-3">
           {board.available.map((order) => <article className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-wayne-border bg-white p-5 shadow-sm" key={order.order_id}>
-            <div><h3 className="text-2xl font-black">{order.order_number}</h3><p className="font-bold">{order.customer_name}</p><p className="text-sm text-wayne-muted">{[order.city, order.postal_code].filter(Boolean).join(" ")} · {order.amount_due_cents > 0 ? `${formatCents(order.amount_due_cents)} cash due` : "Already paid"}</p></div>
-            <Button className="min-h-14" disabled={pending !== null || Boolean(error)} onClick={() => { void send(order.order_id, { action: "claim" }, `${order.order_number} is yours.`); }}>{pending === order.order_id ? "Saving…" : "Take this delivery"}</Button>
+            <div><h3 className="text-2xl font-black">#{ticketNumber(order)}</h3><p className="font-bold">{order.customer_name}</p><p className="text-sm text-wayne-muted">{[order.city, order.postal_code].filter(Boolean).join(" ")} · {order.amount_due_cents > 0 ? `${formatCents(order.amount_due_cents)} cash due` : "Already paid"}</p></div>
+            <Button className="min-h-14" disabled={pending !== null || Boolean(error)} onClick={() => { void send(order.order_id, { action: "claim" }, `#${ticketNumber(order)} is yours.`); }}>{pending === order.order_id ? "Saving…" : "Take this delivery"}</Button>
           </article>)}
         </div>
       </section> : null}
@@ -195,7 +196,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
         <h2 className="text-2xl font-black">Delivered in the last few hours</h2>
         <div className="mt-4 grid gap-3">
           {finished.map((assignment) => <article className="rounded-2xl border border-wayne-border bg-white p-5" key={assignment.order_id}>
-            <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-black">{assignment.order_number}</h3><strong className="text-wayne-ok">Delivered</strong></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-black">#{ticketNumber(assignment)}</h3><strong className="text-wayne-ok">Delivered</strong></div>
             <p className="mt-1 text-sm text-wayne-muted">{assignment.customer_name} · cash collected {formatCents(assignment.cash_collected_cents)} of {formatCents(assignment.amount_due_cents)}{assignment.delivery_note ? ` · ${assignment.delivery_note}` : ""}</p>
           </article>)}
         </div>

@@ -17,7 +17,7 @@ export type AssignmentStatus = z.infer<typeof assignmentStatusSchema>;
 
 const orderPartSchema = z.object({
   order_id: z.uuid(),
-  order_number: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null),
   customer_name: z.string(),
   customer_phone: z.string(),
   address: deliveryAddressSchema.partial().default({}),
@@ -58,7 +58,7 @@ export type DriverAssignment = z.infer<typeof driverAssignmentSchema>;
 /** An unclaimed ready delivery. Address and phone stay hidden until a driver claims it. */
 export const availableDeliverySchema = z.object({
   order_id: z.uuid(),
-  order_number: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null),
   customer_name: z.string(),
   city: z.string().default(""),
   postal_code: z.string().default(""),
@@ -97,7 +97,7 @@ export const deliveryMetricsSchema = z.object({
     cash_short_cents: z.number().int(), average_door_minutes: z.number().int(), late_count: z.number().int(),
   })).default([]),
   exceptions: z.array(z.object({
-    order_number: z.string(), driver_name: z.string(), issue: z.string(), detail: z.string(), occurred_at: z.string().nullable(),
+    order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null), driver_name: z.string(), issue: z.string(), detail: z.string(), occurred_at: z.string().nullable(),
   })).default([]),
 });
 export type DeliveryMetrics = z.infer<typeof deliveryMetricsSchema>;

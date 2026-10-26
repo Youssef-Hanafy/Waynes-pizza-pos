@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
@@ -83,7 +84,7 @@ function CustomerDetail({ customer, onEdit, onStartOrder, timeZone }: { customer
       {orders === null && !historyError ? <p className="mt-2 text-sm text-wayne-muted">Loading…</p> : null}
       {historyError ? <p className="mt-2 text-sm text-wayne-muted">{historyError}</p> : null}
       {orders?.length === 0 ? <p className="mt-2 text-sm text-wayne-muted">No orders yet.</p> : null}
-      {orders?.length ? <ul className="mt-2 divide-y divide-wayne-border">{orders.map((order) => <li className="grid gap-1 py-2 sm:grid-cols-[8rem_7rem_1fr_6rem]" key={order.id}><span className="font-bold">{date(order.placed_at)}</span><span>{order.order_number}</span><span className="truncate text-sm text-wayne-muted">{order.source}{order.phone_line ? ` · Line ${order.phone_line}` : ""} · {order.fulfillment_type} · {order.items}</span><strong className="sm:text-right">{formatCents(order.total_cents)}</strong></li>)}</ul> : null}
+      {orders?.length ? <ul className="mt-2 divide-y divide-wayne-border">{orders.map((order) => <li className="grid gap-1 py-2 sm:grid-cols-[8rem_7rem_1fr_6rem]" key={order.id}><span className="font-bold">{date(order.placed_at)}</span><span>#{ticketNumber(order)}</span><span className="truncate text-sm text-wayne-muted">{order.source}{order.phone_line ? ` · Line ${order.phone_line}` : ""} · {order.fulfillment_type} · {order.items}</span><strong className="sm:text-right">{formatCents(order.total_cents)}</strong></li>)}</ul> : null}
     </div>
   </div>;
 }

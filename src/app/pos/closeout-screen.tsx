@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { brandLabels, closeoutLayout, dayCloseoutSchema, expectedCash, ownerTipsToPayOut, sourceLabels, tipPayout, type DayCloseout } from "@/lib/closeout/schemas";
@@ -148,7 +149,7 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
       </div> : null}
       {report.unpaid.count ? <div className="rounded-xl border-2 border-wayne-alert bg-wayne-alert-soft p-3">
         <p className="font-black text-wayne-alert">⚠ {report.unpaid.count} order{report.unpaid.count === 1 ? "" : "s"} still not paid · {formatCents(report.unpaid.total_cents)}</p>
-        <p className="mt-1 text-sm font-bold">{report.unpaid.orders.slice(0, 8).map((order) => `#${order.order_number.replace(/^W0*/, "")} ${order.customer_name || ""} ${formatCents(order.total_cents)}`).join(" · ")}{report.unpaid.orders.length > 8 ? " …" : ""}</p>
+        <p className="mt-1 text-sm font-bold">{report.unpaid.orders.slice(0, 8).map((order) => `#${ticketNumber(order)} ${order.customer_name || ""} ${formatCents(order.total_cents)}`).join(" · ")}{report.unpaid.orders.length > 8 ? " …" : ""}</p>
         <p className="mt-1 text-xs font-bold">Take their payment in Payments (or cancel them) before closing out, so the totals are right.</p>
       </div> : null}
 

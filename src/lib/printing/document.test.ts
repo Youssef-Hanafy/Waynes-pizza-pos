@@ -72,7 +72,8 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(text).toContain("DELIVERY · PHONE · LINE 1");
     // The day's number, not the W number, is the big one (owner, 2026-10-13); W000123 is only a reference.
     expect(text).toContain("ORDER #123");
-    expect(text).toContain("Ref W000123");
+    // No W number on the POS's slips any more (owner, 2026-10-26): the day's number and date find an order.
+    expect(text).not.toContain("W000123");
     expect(layoutToText(buildReceipt({ ...doc, order: { ...doc.order, daily_number: 7 } })).join("\n")).toContain("ORDER #7");
     expect(text).toContain("(508) 555-1234");
     expect(text).toContain("123 Main Street, Apt 2");
@@ -88,12 +89,10 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const ticket = layoutToText(buildKitchenTicket(doc, ["Pizza"])!).join("\n");
     expect(ticket).toContain("Cheese Pizza");
     expect(ticket).not.toContain("Coke");
-    // Item lines carry no prices; the order totals and the item count are printed (owner, 2026-10-13).
+    // Item lines carry no prices; the order total and the item count are printed (owner, 2026-10-13).
     expect(ticket).not.toMatch(/Cheese Pizza\s+\$/);
-    expect(ticket).toMatch(/TOTAL\s+\$33\.99/);
-    expect(ticket).toContain("1 ITEM");
-    expect(ticket).toContain("(OF 2 ON ORDER)");
-    expect(layoutToText(buildKitchenTicket(doc)!).join("\n")).toContain("2 ITEMS");
+    expect(ticket).toMatch(/1 of 2 items\s+\$33\.99/);
+    expect(layoutToText(buildKitchenTicket(doc)!).join("\n")).toMatch(/2 items\s+\$33\.99/);
     expect(buildKitchenTicket(doc, ["Desserts"])).toBeNull();
   });
 
@@ -160,20 +159,20 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   });
 
   it("says PAID or NOT PAID in big letters at the top of every slip (owner, 2026-10-12)", () => {
+    // The kitchen ticket says it in its first line (owner, 2026-10-26: essentials only); the receipt keeps the big banner.
     const unpaid = layoutToText(buildKitchenTicket(doc)!, 40);
-    expect(unpaid.slice(0, 3).join("\n")).toContain("!! NOT PAID !!");
-    expect(unpaid.join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
+    expect(unpaid[0]).toContain("#123 · DELIVERY · NOT PAID");
     expect(layoutToText(buildReceipt(doc), 48).join("\n")).toContain("COLLECT $33.99 AT THE DOOR");
     const paid = { ...doc, order: { ...doc.order, fulfillment_type: "pickup", payment_status: "paid", payment_method: "card" } };
     const paidTicket = layoutToText(buildKitchenTicket(paid)!, 40).join("\n");
-    expect(paidTicket).toContain("** PAID - CARD **");
+    expect(paidTicket).toContain("PICKUP · PAID");
     expect(paidTicket).not.toContain("NOT PAID");
     expect(layoutToText(buildReceipt(paid), 48).join("\n")).toContain("** PAID - CARD **");
     const held = { ...doc, order: { ...doc.order, payment_status: "authorized", payment_method: "card" } };
     // A card held for the tip on the slip (owner, 2026-10-13): paid by card, driver gets the slip signed.
     const heldTicket = layoutToText(buildKitchenTicket(held)!, 40).join("\n");
-    expect(heldTicket).toContain("** PAID - CARD **");
-    expect(heldTicket).toContain("get the slip signed");
+    expect(heldTicket).toContain("DELIVERY · PAID");
+    expect(layoutToText(buildReceipt(held), 48).join("\n")).toContain("get the slip signed");
     const heldPickup = { ...held, order: { ...held.order, fulfillment_type: "pickup" } };
     expect(layoutToText(buildTipSignatureSlip(heldPickup), 48).join("\n")).toContain("CARD APPROVED — ADD TIP BELOW");
   });
@@ -200,32 +199,37 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
   it("prints only the items added after the ticket went out, marked ADDED, and add-ons as ADD-ON (owner, 2026-10-13)", () => {
     const numbered = { ...doc, order: { ...doc.order, daily_number: 12 } };
     const added = layoutToText(buildKitchenTicket(numbered, [], { onlyItemIds: ["66000000-0000-4000-8000-000000000012"] })!, 40).join("\n");
-    expect(added).toContain("ADDED TO #12");
+    expect(added).toContain("ADDED TO #12 - SAME ORDER");
     expect(added).toContain("Coke");
     expect(added).not.toContain("Cheese Pizza");
-    expect(added).toContain("1 ITEM ADDED");
-    expect(added).toContain("(2 ON ORDER)");
+    expect(added).toContain("1 added (2 on order)");
+    // A changed order reprints whole, marked so the first ticket is set aside (owner, 2026-10-26).
+    expect(layoutToText(buildKitchenTicket(numbered, [], { updated: true })!, 40).join("\n")).toContain("UPDATED ORDER #12 - USE THIS ONE");
     expect(buildKitchenTicket(numbered, [], { onlyItemIds: [] })).toBeNull();
     const addOn = layoutToText(buildKitchenTicket({ ...numbered, order: { ...numbered.order, add_on_to: "W000100" } })!, 40).join("\n");
     expect(addOn).toContain("ADD-ON TO #12");
   });
 
-  it("keeps the kitchen slip compact: one item count, no blank lines between items, one-line times and customer (owner, 2026-10-20)", () => {
+  it("keeps the kitchen slip short: food at the top, essentials only (owner, 2026-10-26)", () => {
     const lines = layoutToText(buildKitchenTicket(doc)!, 40);
     const text = lines.join("\n");
-    expect(text.match(/2 ITEMS/g)).toHaveLength(1);
-    expect(text).not.toContain("(OF 2 ON ORDER)");
-    expect(text).toMatch(/Placed \d{1,2}:\d\d [AP]M · Ready \d{1,2}:\d\d [AP]M/);
+    // Which order, then straight to the food.
+    expect(lines[0]).toContain("#123 · DELIVERY · NOT PAID");
+    expect(lines[2]).toContain("1 Large Cheese Pizza");
     expect(text).toMatch(/John Smith\s+\(508\) 555-1234/);
-    // The only blank lines are the feed at the very end (past the TM-U220B's cutter).
+    expect(text).toContain("123 Main Street, Apt 2, Worcester");
+    expect(text).toMatch(/\d{1,2}:\d\d [ap]m · 2 items\s+\$33\.99/);
+    // Receipt-only details are not on the kitchen ticket.
+    for (const gone of ["Subtotal", "Tax", "Ready", "LINE 1", "W000123", "COLLECT"]) expect(text).not.toContain(gone);
+    // No blank lines except the feed past the TM-U220B's cutter.
     const lastText = lines.findLastIndex((line) => line.trim() !== "");
     expect(lines.slice(0, lastText).some((line) => line.trim() === "")).toBe(false);
-    expect(text).toMatch(/Subtotal \$28\.99\s+Delivery \$3\.00/);
-    expect(text).toMatch(/TOTAL\s+\$33\.99/);
-    // The receipt is untouched: dated times, name and phone on their own lines.
+    expect(lastText).toBeLessThan(14);
+    // The receipt keeps everything.
     const receipt = layoutToText(buildReceipt(doc), 48).join("\n");
     expect(receipt).toMatch(/Placed \d+\/\d+, /);
     expect(receipt).toMatch(/^John Smith$/m);
+    expect(receipt).toContain("Subtotal");
   });
 
   it("keeps kitchen item lines full width (tall, not wide) and picks the TM-U220B's 40-column font", () => {

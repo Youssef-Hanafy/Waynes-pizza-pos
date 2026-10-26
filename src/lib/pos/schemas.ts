@@ -184,7 +184,7 @@ export const posSaveCustomerSchema = z.object({
 
 export const posCustomerOrderSchema = z.object({
   id: z.uuid(),
-  order_number: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null),
   placed_at: z.string(),
   status: z.string(),
   source: z.string(),

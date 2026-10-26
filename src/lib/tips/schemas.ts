@@ -3,7 +3,7 @@ import { z } from "zod";
 /** A card approved and held for the tip on its signed slip (database: wayne_pos_tip_queue). */
 export const heldCardSchema = z.object({
   order_id: z.uuid(),
-  order_number: z.string(),
+  order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null),
   customer_name: z.string().nullable().transform((value) => value ?? ""),
   source: z.string(),
   fulfillment_type: z.string(),

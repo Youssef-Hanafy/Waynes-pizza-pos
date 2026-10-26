@@ -34,7 +34,7 @@ export const dayCloseoutSchema = z.object({
   voids: z.object({ count: n, total_cents: n }),
   unpaid: z.object({
     count: n, total_cents: n,
-    orders: z.array(z.object({ id: z.uuid(), order_number: z.string(), customer_name: z.string().nullable().transform((value) => value ?? ""), source: z.string(), fulfillment_type: z.string(), total_cents: n, payment_method: z.string() })).catch([]),
+    orders: z.array(z.object({ id: z.uuid(), order_number: z.string(), daily_number: z.number().int().nullable().optional().default(null), customer_name: z.string().nullable().transform((value) => value ?? ""), source: z.string(), fulfillment_type: z.string(), total_cents: n, payment_method: z.string() })).catch([]),
   }),
   drawer: z.object({
     open_shifts: z.array(shiftTotalsSchema).catch([]),

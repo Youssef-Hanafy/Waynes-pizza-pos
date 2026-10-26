@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { StoreSettings } from "@/lib/content/schemas";
@@ -98,7 +99,7 @@ export function PosApp(props: Props) {
   /**
    * Tap an order card (Today's Orders, Orders): the order opens on the order
    * screen with its original items to change, take off or add to — same order,
-   * no new slip (owner, 2026-10-24).
+   * and the kitchen gets a slip for the change (owner, 2026-10-24, slips 2026-10-26).
    */
   const [opening, setOpening] = useState(false);
   async function editOrder(orderId: string) {
@@ -269,7 +270,7 @@ export function PosApp(props: Props) {
       <span aria-hidden className="animate-bounce text-2xl">🔔</span>
       <p className="min-w-0 flex-1 font-black">
         {onlineAlerts.alerts.length === 1 ? "New online order" : `${onlineAlerts.alerts.length} new online orders`}
-        <span className="ml-2 font-bold">{onlineAlerts.alerts.slice(-3).map((order) => `${order.order_number} · ${order.customer_name || "Customer"} · ${order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · ${formatCents(order.total_cents)}`).join("   |   ")}</span>
+        <span className="ml-2 font-bold">{onlineAlerts.alerts.slice(-3).map((order) => `#${ticketNumber(order)} · ${order.customer_name || "Customer"} · ${order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · ${formatCents(order.total_cents)}`).join("   |   ")}</span>
       </p>
       <Button onClick={() => { const delivery = onlineAlerts.alerts.every((order) => order.fulfillment_type === "delivery") && deliveryEnabled && settings.delivery_enabled; onlineAlerts.acknowledge(); setPhoneFocus(null); setPayFocus(null); setSection(delivery ? "delivery" : "orders"); }} size="sm" variant="brand">View</Button>
       <Button onClick={onlineAlerts.acknowledge} size="sm" variant="secondary">Got it</Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
@@ -159,7 +160,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
 
     {heldElsewhere ? <div className="mt-4 rounded-2xl bg-wayne-warn-soft p-4" role="status"><p className="text-lg font-black uppercase">Taking order — {call.claimedTerminal || "another register"}</p><p className="text-sm font-bold">{call.claimedByName ? `${call.claimedByName} has this call.` : "Someone else has this call."} Only take it over if they have stopped.</p></div> : null}
     {claimedMessage ? <div className="mt-4 rounded-2xl bg-wayne-warn-soft p-4" role="alert"><p className="font-bold">{claimedMessage}</p><Button className="mt-3" disabled={busy} onClick={() => void start(chosen, false, true)} variant="secondary">Take over this call</Button></div> : null}
-    {closed ? <p className="mt-4 rounded-2xl bg-wayne-cream p-4 font-bold">This call is {call.status === "completed" ? `finished${call.orderNumber ? ` — order ${call.orderNumber}` : ""}` : call.status}.</p> : null}
+    {closed ? <p className="mt-4 rounded-2xl bg-wayne-cream p-4 font-bold">This call is {call.status === "completed" ? `finished${call.orderNumber ? ` — order #${call.orderNumber}` : ""}` : call.status}.</p> : null}
 
     {outcome === "choose" && !chosen ? <div className="mt-5 grid gap-2">
       <p className="text-sm font-bold text-wayne-muted">This number belongs to more than one customer. Ask who is calling.</p>
@@ -226,7 +227,7 @@ function CustomerSummary({ customer }: { customer: PosCustomer }) {
       {orders === null && !historyError ? <p className="mt-2 text-sm text-wayne-muted">Loading…</p> : null}
       {historyError ? <p className="mt-2 text-sm text-wayne-muted">{historyError}</p> : null}
       {orders?.length === 0 ? <p className="mt-2 text-sm text-wayne-muted">No orders yet.</p> : null}
-      {orders?.length ? <ul className="mt-2 grid gap-1.5">{orders.slice(0, 4).map((order) => <li className="rounded-xl border border-wayne-border p-2 text-sm" key={order.id}><strong>{new Date(order.placed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {order.order_number} · {formatCents(order.total_cents)}</strong><span className="block truncate text-wayne-muted">{order.fulfillment_type} · {order.items}</span></li>)}</ul> : null}
+      {orders?.length ? <ul className="mt-2 grid gap-1.5">{orders.slice(0, 4).map((order) => <li className="rounded-xl border border-wayne-border p-2 text-sm" key={order.id}><strong>{new Date(order.placed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · #{ticketNumber(order)} · {formatCents(order.total_cents)}</strong><span className="block truncate text-wayne-muted">{order.fulfillment_type} · {order.items}</span></li>)}</ul> : null}
     </div>
   </div>;
 }
@@ -241,7 +242,7 @@ function RecentCalls({ recent, now, timeZone }: { recent: RecentCall[]; now: num
         <span className="w-20 font-black">{time(call.started_at)}</span>
         <span className="min-w-0 flex-1 truncate font-bold">{call.customer_name || formatPhone(call.caller_number ?? call.caller_number_raw)}{call.simulated ? <span className="ml-2 text-xs text-wayne-muted">TEST</span> : null}</span>
         <span className="text-sm text-wayne-muted">Line {call.line_number}</span>
-        <span className="text-sm font-bold">{call.order_number ? `Order ${call.order_number}` : outcome[call.status] ?? call.status}</span>
+        <span className="text-sm font-bold">{call.order_number ? `Order #${ticketNumber({ order_number: call.order_number, daily_number: call.daily_number })}` : outcome[call.status] ?? call.status}</span>
         {call.status === "dismissed" || call.status === "expired" ? <Button onClick={() => void phoneActions.reopenCall(call.event_key)} size="sm" variant="secondary">Reopen</Button> : null}
         <span className="sr-only">{since(call.started_at, now)}</span>
       </li>)}

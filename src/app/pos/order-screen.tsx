@@ -203,7 +203,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       const fresh = Boolean(returnTo?.fresh && returnTo.order.id === addTo.orderId);
       // An edited order that is still fully paid (owner, 2026-10-24): nothing to take, straight back to taking orders.
       if (editing && !fresh && result.paid_cents > 0 && result.paid_cents >= result.total_cents) {
-        setPaidFlash(`#${result.daily_number ?? addTo.dailyNumber ?? result.order_number.replace(/^W0*/, "")} updated · still paid · no new slip`);
+        setPaidFlash(`#${result.daily_number ?? addTo.dailyNumber ?? result.order_number.replace(/^W0*/, "")} updated · still paid · the kitchen gets a slip if its ticket was already out`);
         void draftSync.discard(draft);
         orderActions.clearActive();
         setReturnTo(null);
@@ -334,8 +334,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl bg-wayne-ok-soft px-3 py-1.5">
           <p className="font-black text-wayne-ok">✓ {created.added ? `Added to order #${ticketNumber(created.order)} — same ticket, new total ${formatCents(created.order.total_cents)}${paidAlready ? ` · ${formatCents(paidAlready)} already paid, ${formatCents(Math.max(0, created.order.total_cents - paidAlready))} to pay` : ""}` : created.duplicate ? `Already sent · #${ticketNumber(created.order)}` : `Order #${ticketNumber(created.order)} — take payment or Pay later to send it`}</p>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Recalled order whose slip is already out: nothing new prints (owner, 2026-10-19). */}
-            <span className="text-xs font-bold text-wayne-muted">{created.added && !created.fresh ? "No new slip prints — the added items are on the kitchen screen" : `${created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once, with everything on it, when they pay or you tap ${created.delivery ? "Cash at the door" : "Pay later"}`}</span>
+            {/* Recalled order whose slip is already out: the change prints on its own kitchen slip (owner, 2026-10-26). */}
+            <span className="text-xs font-bold text-wayne-muted">{created.added && !created.fresh ? "The kitchen slip for this change is printing now" : `${created.delivery ? "Kitchen ticket + delivery receipt print" : "Kitchen ticket prints"} once, with everything on it, when they pay or you tap ${created.delivery ? "Cash at the door" : "Pay later"}`}</span>
             <Button onClick={() => void print("receipt")} size="sm" variant="secondary">Print receipt</Button>
             <Button onClick={() => void print("kitchen")} size="sm" variant="secondary">{created.added && !created.fresh ? "Reprint full ticket" : "Print kitchen now"}</Button>
           </div>
@@ -350,7 +350,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
 
   const summary = addTo
     ? editing
-      ? { icon: "✏️", title: `Editing #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: `Tap an item to change it, − / + / ✕, or add items · same order, no new slip${addTo.paid ? " · already paid: you take only what's added" : ""}` }
+      ? { icon: "✏️", title: `Editing #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: `Tap an item to change it, − / + / ✕, or add items · same order; the kitchen gets a slip for the change${addTo.paid ? " · already paid: you take only what's added" : ""}` }
       : { icon: "➕", title: `Adding to #${addTo.dailyNumber ?? addTo.orderNumber.replace(/^W0*/, "")}${addTo.customerName ? ` · ${addTo.customerName}` : ""}`, detail: addTo.paid ? "Already paid — these items go on the same order; you take what's still owed next" : "Not paid yet — these items go on the same order" }
     : ticketSummary(draft, settings);
   if (draft.isTest) summary.title = `🧪 TEST · ${summary.title}`;

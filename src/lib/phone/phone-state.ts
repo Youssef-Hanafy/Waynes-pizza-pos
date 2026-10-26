@@ -1,5 +1,6 @@
 import type { IncomingCallEvent } from "@/hardware/types";
 import type { PosCustomer } from "@/lib/pos/schemas";
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { normalizePhone } from "./normalize";
 import type { CallStatus, PhoneBoard, PhoneCall, RecentCall } from "./schemas";
 
@@ -130,7 +131,8 @@ export function fromServerCall(call: PhoneCall): PhoneCallView {
     claimedByName: call.claimed_by_name,
     claimedTerminal: call.claimed_terminal,
     orderId: call.order_id,
-    orderNumber: call.order_number,
+    // The day's number, as the slips print it (owner, 2026-10-26).
+    orderNumber: call.order_number ? ticketNumber({ order_number: call.order_number, daily_number: call.daily_number }) : null,
     unsynced: false,
     syncError: "",
   };
@@ -222,7 +224,7 @@ export function applyBoard(state: PhoneState, board: PhoneBoard): PhoneState {
   for (const recent of board.recent) {
     const local = calls[recent.event_key];
     if (local && local.status !== recent.status && !ACTIVE_STATUSES.includes(recent.status)) {
-      calls[recent.event_key] = { ...local, status: recent.status, orderId: recent.order_id, orderNumber: recent.order_number };
+      calls[recent.event_key] = { ...local, status: recent.status, orderId: recent.order_id, orderNumber: recent.order_number ? ticketNumber({ order_number: recent.order_number, daily_number: recent.daily_number }) : null };
     }
   }
   return { ...state, lines, calls, lineCalls, recent: board.recent, expireMinutes: board.expire_minutes, hydrated: true };
