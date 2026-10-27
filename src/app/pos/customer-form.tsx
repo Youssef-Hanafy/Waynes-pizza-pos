@@ -29,16 +29,18 @@ async function findByPhone(digits: string): Promise<PosCustomer | null> {
  * Only the phone number is needed — names, email and address are all
  * optional so a rushed call never gets stuck here (owner, 2026-10-11).
  */
-export function CustomerForm({ customer, initialPhone = "", submitLabel, onSaved, onCancel, secondary }: {
+export function CustomerForm({ customer, initialPhone = "", initialName = "", submitLabel, onSaved, onCancel, secondary }: {
   customer?: PosCustomer | null;
   initialPhone?: string;
+  /** A new caller's caller ID name, so it is saved without typing (owner, 2026-10-27). */
+  initialName?: string;
   submitLabel: string;
   onSaved: (customer: PosCustomer) => void;
   onCancel?: () => void;
   /** A second save button, e.g. "Save only" next to "Save + start order". */
   secondary?: { label: string; onSaved: (customer: PosCustomer) => void };
 }) {
-  const [firstName, setFirstName] = useState(customer?.first_name ?? "");
+  const [firstName, setFirstName] = useState(customer?.first_name ?? initialName);
   const [lastName, setLastName] = useState(customer?.last_name ?? "");
   const [phone, setPhone] = useState(customer ? formatPhone(customer.phone) : formatPhone(initialPhone, ""));
   const [email, setEmail] = useState(customer?.email ?? "");

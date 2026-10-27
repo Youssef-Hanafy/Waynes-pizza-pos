@@ -9,9 +9,10 @@ import { formatCents } from "@/lib/menu/schemas";
 import type { DraftAddress, PosDraft } from "@/lib/orders/drafts";
 import { formatPhone } from "@/lib/phone/normalize";
 import type { PosCustomer } from "@/lib/pos/schemas";
-import { orderActions } from "@/stores/order-store";
+import { orderActions, orderStore } from "@/stores/order-store";
+import { alreadySaved, rememberCustomer, rememberPayload, savedAddressId } from "@/lib/pos/remember-customer";
 import { draftFromCall } from "@/lib/orders/drafts";
-import { callerCardInfo } from "@/lib/phone/caller-display";
+import { callerCardInfo, customerName } from "@/lib/phone/caller-display";
 import { callOnLine, type PhoneCallView } from "@/lib/phone/phone-state";
 import { phoneActions, usePhoneState } from "@/stores/phone-store";
 import { useCustomerSearch } from "./use-customer-search";
@@ -82,6 +83,36 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     const problem = startProblem({ ...draft, ...patch }, nextKind, settings);
     if (problem) { setError(problem); return; }
     update({ ...patch, started: true });
+    // Saved the moment the order starts — even a test order or one never sent (owner, 2026-10-27).
+    void saveCustomer({ ...draft, ...patch }, nextKind, true);
+  }
+
+  /**
+   * Save the customer now (owner, 2026-10-27).  By itself when the order
+   * starts; from the small Save button when just adding someone.  The server
+   * matches by phone, so the same customer is never saved twice.
+   */
+  const [saveNote, setSaveNote] = useState<{ tone: "ok" | "busy" | "bad"; text: string } | null>(null);
+  async function saveCustomer(target: PosDraft, targetKind: OrderKind | null, auto: boolean) {
+    const payload = rememberPayload(target, targetKind);
+    if (!payload) {
+      if (!auto) setSaveNote({ tone: "bad", text: "Type the 10-digit phone number to save the customer." });
+      return;
+    }
+    if (auto && alreadySaved(target, payload)) return;
+    if (!auto) setSaveNote({ tone: "busy", text: "Saving…" });
+    try {
+      const saved = await rememberCustomer(payload);
+      // The ticket uses the saved profile (and its saved address), so sending the order never adds them again.
+      if (orderStore.get().activeId === target.id) {
+        const addressId = payload.address ? savedAddressId(saved, target.address) : "";
+        orderActions.update(addressId ? { customer: saved, addressId } : { customer: saved });
+      }
+      setSaveNote({ tone: "ok", text: `✓ Saved ${customerName(saved) || formatPhone(saved.phone)}` });
+    } catch (cause) {
+      // Offline or a hiccup: the order itself still saves the customer when it is sent.
+      if (!auto) setSaveNote({ tone: "bad", text: cause instanceof Error ? cause.message : "The customer could not be saved." });
+    }
   }
 
   const zip = kind === "delivery" ? deliveryZip(draft) : "";
@@ -148,6 +179,10 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
             <Input autoComplete="off" id="start-first" label="First name" onChange={(event) => editIdentity({ firstName: event.target.value })} value={draft.firstName} />
             <Input autoComplete="off" id="start-last" label="Last name" onChange={(event) => editIdentity({ lastName: event.target.value })} value={draft.lastName} />
             <Input autoComplete="off" id="start-email" inputMode="email" label="Email (optional)" onChange={(event) => editIdentity({ email: event.target.value })} value={draft.email} />
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Button disabled={phoneDigits(draft.phone).length !== 10 || saveNote?.tone === "busy"} onClick={() => void saveCustomer(draft, kind, false)} size="sm" variant="secondary">💾 Save customer</Button>
+            {saveNote ? <span aria-live="polite" className={`text-sm font-bold ${saveNote.tone === "ok" ? "text-wayne-ok" : saveNote.tone === "bad" ? "text-wayne-alert" : "text-wayne-muted"}`}>{saveNote.text}</span> : null}
           </div>
           <div aria-live="polite" className="mt-1 min-h-5">
             {search.busy && !matches.length ? <p className="text-sm font-bold text-wayne-muted">Looking…</p> : null}

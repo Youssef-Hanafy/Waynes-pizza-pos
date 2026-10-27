@@ -168,7 +168,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
 
     {(outcome === "new_caller" || call.lookup === "failed") && !creating ? <p className="mt-5 rounded-2xl bg-wayne-cream p-4 text-lg font-bold">{call.lookup === "failed" ? "The customer lookup could not finish. You can still take the order." : "No customer found for this number."}</p> : null}
 
-    {creating ? <div className="mt-5"><h2 className="mb-3 text-xl font-black">New customer</h2><CustomerForm initialPhone={call.phoneNumber} onCancel={() => setCreating(false)} onSaved={(customer) => void start(customer)} submitLabel="Create customer + start order" /></div> : null}
+    {creating ? <div className="mt-5"><h2 className="mb-3 text-xl font-black">New customer</h2><CustomerForm initialName={callerIdPersonName(call.callerName) ?? ""} initialPhone={call.phoneNumber} onCancel={() => setCreating(false)} onSaved={(customer) => void start(customer)} submitLabel="Create customer + start order" /></div> : null}
 
     {message ? <p aria-live="polite" className="mt-4 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{message}</p> : null}
 
