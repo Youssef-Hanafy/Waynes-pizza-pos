@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { formatPhone } from "@/lib/phone/normalize";
 import { callOnLine, matchOutcome, type PhoneCallView } from "@/lib/phone/phone-state";
+import { callerCardInfo, callerIdPersonName, customerName, isPlaceholderName } from "@/lib/phone/caller-display";
 import type { RecentCall } from "@/lib/phone/schemas";
 import { posCustomerOrderSchema, type PosCustomer, type PosCustomerOrder } from "@/lib/pos/schemas";
 import { phoneActions, usePhoneState } from "@/stores/phone-store";
@@ -38,14 +39,6 @@ function since(iso: string, now: number) {
   if (seconds < 60) return "just now";
   const minutes = Math.round(seconds / 60);
   return minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
-}
-
-function callerTitle(call: PhoneCallView) {
-  const outcome = matchOutcome(call);
-  if (outcome === "existing") return `${call.matches[0]!.first_name} ${call.matches[0]!.last_name}`;
-  if (outcome === "choose") return `${call.matches.length} customers use this number`;
-  if (outcome === "looking_up") return call.callerName || "Looking up customer…";
-  return call.lookup === "failed" ? (call.callerName || "Caller") : "New caller";
 }
 
 /**
@@ -93,16 +86,18 @@ function statusChip(call: PhoneCallView | null, profileId: string) {
 function LineCard({ call, label, line, now, onOpen, profileId }: { call: PhoneCallView | null; label: string; line: number; now: number; onOpen: (call: PhoneCallView) => void; profileId: string }) {
   const chip = statusChip(call, profileId);
   const ringing = call?.status === "incoming";
+  const info = call ? callerCardInfo(call) : null;
   return <section aria-label={label} className={`flex min-h-56 flex-col rounded-2xl border-2 bg-white p-4 shadow-sm ${ringing ? "border-wayne-ok ring-4 ring-wayne-ok/25" : call ? "border-wayne-green" : "border-wayne-border"}`}>
     <div className="flex items-center justify-between gap-2">
       <h2 className="text-xl font-black uppercase tracking-[0.1em]">{label}</h2>
       <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${chip.tone}`}>{chip.dot} {chip.text}</span>
     </div>
-    {call ? <>
-      <p className="mt-4 text-2xl font-black leading-tight">{callerTitle(call)}</p>
-      <p className="text-xl font-bold">{formatPhone(call.phoneNumber)}</p>
+    {call && info ? <>
+      <p className="mt-4 text-2xl font-black leading-tight">{info.name}</p>
+      <p className="text-xl font-bold">{info.phone}</p>
+      {info.address ? <p className="text-lg font-black">📍 {info.address}</p> : null}
       <p className="mt-2 text-sm font-bold text-wayne-muted">
-        {matchOutcome(call) === "existing" ? `Existing customer · ${call.matches[0]!.order_count} orders` : matchOutcome(call) === "choose" ? "Choose the right customer" : matchOutcome(call) === "new_caller" ? "No customer found" : call.lookup === "failed" ? "Could not look up — you can still take the order" : "Looking up…"}
+        {info.detail}
         {" · "}{since(call.surfacedAt, now)}
         {call.endedAt ? " · call ended" : ""}
         {call.simulated ? " · TEST" : ""}
@@ -151,7 +146,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
     <div className="flex items-start justify-between gap-3">
       <div>
         <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-green">Line {call.line}{call.simulated ? " · Test call" : ""}</p>
-        <h1 className="mt-1 text-3xl font-black leading-tight">{outcome === "existing" || chosen ? `${chosen!.first_name} ${chosen!.last_name}` : outcome === "choose" ? "Which customer is calling?" : outcome === "looking_up" ? "Looking up customer…" : "New caller"}</h1>
+        <h1 className="mt-1 text-3xl font-black leading-tight">{outcome === "existing" || chosen ? customerName(chosen) || callerIdPersonName(call.callerName) || "Returning customer" : outcome === "choose" ? "Which customer is calling?" : outcome === "looking_up" ? callerIdPersonName(call.callerName) || "Looking up customer…" : callerIdPersonName(call.callerName) || "New caller"}</h1>
         <p className="text-2xl font-bold">{formatPhone(call.phoneNumber)}</p>
         {call.callerName ? <p className="text-sm text-wayne-muted">Caller ID name: {call.callerName} (not always the customer&apos;s name)</p> : null}
       </div>
@@ -164,7 +159,7 @@ function LineDetail({ call, onBack, onOpenCustomer, onStartOrder, profileId }: {
 
     {outcome === "choose" && !chosen ? <div className="mt-5 grid gap-2">
       <p className="text-sm font-bold text-wayne-muted">This number belongs to more than one customer. Ask who is calling.</p>
-      {call.matches.map((match) => <button className="min-h-16 rounded-2xl border-2 border-wayne-border p-4 text-left hover:border-wayne-green" key={match.id} onClick={() => setChosenId(match.id)} type="button"><strong className="text-lg">{match.first_name} {match.last_name}</strong><p className="text-sm text-wayne-muted">{match.order_count} orders{match.addresses[0] ? ` · ${match.addresses[0].address1}` : ""}</p></button>)}
+      {call.matches.map((match) => <button className="min-h-16 rounded-2xl border-2 border-wayne-border p-4 text-left hover:border-wayne-green" key={match.id} onClick={() => setChosenId(match.id)} type="button"><strong className="text-lg">{customerName(match) || "No name saved"}</strong><p className="text-sm text-wayne-muted">{match.order_count} orders{match.addresses[0] ? ` · ${match.addresses[0].address1}` : ""}</p></button>)}
       <Button onClick={() => setCreating(true)} variant="secondary">Someone else — new customer</Button>
     </div> : null}
 
@@ -240,7 +235,7 @@ function RecentCalls({ recent, now, timeZone }: { recent: RecentCall[]; now: num
     {recent.length ? <ul className="mt-2 divide-y divide-wayne-border overflow-hidden rounded-2xl border border-wayne-border bg-white">
       {recent.map((call) => <li className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2" key={call.id}>
         <span className="w-20 font-black">{time(call.started_at)}</span>
-        <span className="min-w-0 flex-1 truncate font-bold">{call.customer_name || formatPhone(call.caller_number ?? call.caller_number_raw)}{call.simulated ? <span className="ml-2 text-xs text-wayne-muted">TEST</span> : null}</span>
+        <span className="min-w-0 flex-1 truncate font-bold">{(call.customer_name && !isPlaceholderName(call.customer_name, "") ? call.customer_name : callerIdPersonName(call.caller_name)) || formatPhone(call.caller_number ?? call.caller_number_raw)}{call.simulated ? <span className="ml-2 text-xs text-wayne-muted">TEST</span> : null}</span>
         <span className="text-sm text-wayne-muted">Line {call.line_number}</span>
         <span className="text-sm font-bold">{call.order_number ? `Order #${ticketNumber({ order_number: call.order_number, daily_number: call.daily_number })}` : outcome[call.status] ?? call.status}</span>
         {call.status === "dismissed" || call.status === "expired" ? <Button onClick={() => void phoneActions.reopenCall(call.event_key)} size="sm" variant="secondary">Reopen</Button> : null}

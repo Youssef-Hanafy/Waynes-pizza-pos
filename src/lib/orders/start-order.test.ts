@@ -41,6 +41,17 @@ describe("New Order card (owner, 2026-09-30)", () => {
     expect(blankDraft().isTest).toBe(false);
   });
 
+  it("needs a name on a phone order only when caller ID gave none (owner, 2026-10-27)", () => {
+    const phone = blankDraft({ customerMode: "identified", source: "phone", phone: "(508) 555-0199" });
+    expect(startProblem(phone, "pickup", settings)).toMatch(/caller's name/);
+    expect(startProblem(phone, "delivery", { ...settings }) ).toMatch(/caller's name/);
+    // Caller ID filled it in: nothing to type.
+    expect(startProblem({ ...phone, firstName: "David Strub" }, "pickup", settings)).toBe("");
+    // Walk-ins and counter orders never need a name.
+    expect(startProblem(phone, "walkin", settings)).toBe("");
+    expect(startProblem({ ...phone, source: "pos" }, "pickup", settings)).toBe("");
+  });
+
   it("needs an address for delivery, saved or typed", () => {
     const draft = blankDraft({ customerMode: "identified", fulfillment: "delivery", ...person });
     expect(startProblem(draft, "delivery", settings)).toMatch(/address/);

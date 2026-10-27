@@ -10,6 +10,10 @@ import type { DraftAddress, PosDraft } from "@/lib/orders/drafts";
 import { formatPhone } from "@/lib/phone/normalize";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { orderActions } from "@/stores/order-store";
+import { draftFromCall } from "@/lib/orders/drafts";
+import { callerCardInfo } from "@/lib/phone/caller-display";
+import { callOnLine, type PhoneCallView } from "@/lib/phone/phone-state";
+import { phoneActions, usePhoneState } from "@/stores/phone-store";
 import { useCustomerSearch } from "./use-customer-search";
 import { customerDetailsPatch, deliveryZip, editCustomerDetails, orderKind, orderTypePatch, outsideDeliveryArea, phoneDigits, startProblem, type OrderKind } from "@/lib/orders/start-order";
 
@@ -29,6 +33,26 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   // "In the store" chosen on purpose for a pickup / delivery (otherwise it's a phone order).
   const [sourceTouched, setSourceTouched] = useState(draft.started || draft.cart.length > 0);
   const shownSource: "phone" | "pos" = fromCall ? "phone" : sourceTouched && draft.source === "pos" ? "pos" : "phone";
+
+  // A phone order started from Pickup / Delivery instead of the ringing line
+  // still gets the caller's number (owner, 2026-10-27: 20 phone orders had been
+  // saved with no number, so those customers came up as new every time).
+  const phone = usePhoneState();
+  const waitingCallers = fromCall || draft.customer || phoneDigits(draft.phone).length || shownSource !== "phone" || kind === "walkin" ? []
+    : phone.lines.map((line) => callOnLine(phone, line.line))
+      .filter((call): call is PhoneCallView => call !== null && (call.status === "incoming" || call.status === "selected"));
+
+  function takeCaller(call: PhoneCallView) {
+    setError("");
+    const customer = call.matches.length === 1 ? call.matches[0]! : null;
+    // The order type already picked stays; only who is calling comes from the line.
+    const patch = draftFromCall({
+      callKey: call.key, callId: call.serverId, line: call.line, phoneNumber: call.phoneNumber, callerName: call.callerName, customer,
+    });
+    delete patch.fulfillment; delete patch.orderKind; delete patch.started;
+    update(patch);
+    void phoneActions.startOrderFromCall(call.key);
+  }
 
   const searchText = draft.customer ? "" : searchField === "phone" ? draft.phone : `${draft.firstName} ${draft.lastName}`.trim();
   const search = useCustomerSearch(searchText);
@@ -100,6 +124,16 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
       <div className={needsStreet ? "grid min-w-0 gap-x-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "min-w-0"}>
       <div className="min-w-0">
       <Step n={1} title="Customer details (optional)">
+        {waitingCallers.length ? <div className="mb-2 grid gap-2 sm:grid-cols-2">
+          {waitingCallers.map((call) => {
+            const info = callerCardInfo(call);
+            return <button className="min-h-14 rounded-xl border-2 border-wayne-ok bg-wayne-ok-soft p-2.5 text-left active:scale-[0.99]" key={call.key} onClick={() => takeCaller(call)} type="button">
+              <span className="block text-xs font-black uppercase tracking-wider text-wayne-ok">☎ Line {call.line} — tap to use this caller</span>
+              <strong className="block text-base">{info.name} · {info.phone}</strong>
+              {info.address ? <span className="block truncate text-xs font-bold">{info.address}</span> : null}
+            </button>;
+          })}
+        </div> : null}
         {draft.customer ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-wayne-ok bg-wayne-ok-soft p-3">
           <div>
             <p className="text-sm font-black">✓ Returning customer — details are editable below</p>

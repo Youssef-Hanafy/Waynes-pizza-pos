@@ -1,4 +1,5 @@
 import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
+import { callerIdPersonName, customerName } from "@/lib/phone/caller-display";
 import { z } from "zod";
 import { cartLineSchema, type CartLine } from "@/lib/orders/schemas";
 import { posCustomerSchema, type PosCustomer } from "@/lib/pos/schemas";
@@ -363,8 +364,11 @@ export function draftFromCall(input: {
     orderKind: "pickup",
     started: false,
     customer,
-    firstName: customer?.first_name ?? "",
-    lastName: customer?.last_name ?? "",
+    // A profile saved without a name, or a new caller, starts with the caller ID
+    // name ("DAVID STRUB" → "David Strub") so they are saved by name the first
+    // time (owner, 2026-10-27: save a customer once, never twice).
+    firstName: customerName(customer) ? customer!.first_name : callerIdPersonName(input.callerName) ?? "",
+    lastName: customerName(customer) ? customer!.last_name : "",
     // The employee never retypes the number (§9).
     phone: customer?.phone ?? input.phoneNumber,
     email: customer?.email ?? "",

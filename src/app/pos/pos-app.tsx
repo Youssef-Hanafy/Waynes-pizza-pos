@@ -43,6 +43,8 @@ import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
+import { RingingBanner } from "./ringing-banner";
+import { useStore } from "@/stores/create-store";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 import { useAppUpdate } from "@/stores/use-app-update";
@@ -231,6 +233,19 @@ export function PosApp(props: Props) {
     });
   }, [callerIdEnabled]);
 
+  // Caller ID on every screen (owner, 2026-10-27).  A ticket with items, or a
+  // payment in progress, is never closed by the banner's one-tap Take order.
+  const paymentOpen = useStore(paymentPromptStore, (open) => open, false);
+  const ticketBusy = paymentOpen || (section === "order" && !isDraftIdle(currentDraft));
+  function openLineFromBanner(key: string) {
+    setPhoneFocus((current) => ({ key, n: (current?.n ?? 0) + 1000 }));
+    setSection("phone");
+  }
+  async function takeOrderFromBanner(call: Parameters<StartPhoneOrder>[0]) {
+    const result = await startPhoneOrder(call, call.matches.length === 1 ? call.matches[0]! : null);
+    if (!result.ok) notify(result.message, "warn");
+  }
+
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
   const warning = !hardwareState.online || !connectivity.reachable
@@ -266,6 +281,7 @@ export function PosApp(props: Props) {
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">🔒 Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
+    {callerIdEnabled && section !== "phone" ? <RingingBanner busy={ticketBusy} onOpenLine={(call) => openLineFromBanner(call.key)} onTakeOrder={(call) => void takeOrderFromBanner(call)} /> : null}
     {onlineAlerts.alerts.length ? <div className="flex shrink-0 flex-wrap items-center gap-3 bg-wayne-gold px-3 py-2 text-wayne-ink" role="alert">
       <span aria-hidden className="animate-bounce text-2xl">🔔</span>
       <p className="min-w-0 flex-1 font-black">
