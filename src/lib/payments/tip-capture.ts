@@ -85,6 +85,8 @@ export async function captureHeldCards(options: {
     const wanted = Math.max(0, Math.round(request.tip_cents || 0));
     const metadata = (payment.metadata ?? {}) as Record<string, unknown>;
     const authorized = payment.amount_cents as number;
+    // A tip already charged on its own by an earlier try (see the fallback below).
+    const separateTip = typeof metadata.tip_charge_cents === "number" ? metadata.tip_charge_cents : 0;
 
     // A test order's card was simulated: "capture" it without Stripe.
     if (payment.provider === "test") {
@@ -104,8 +106,8 @@ export async function captureHeldCards(options: {
       // Ask Stripe how far this card can go, right now.
       const status = await provider.value.provider.getPaymentStatus(payment.provider_payment_id);
       if (status.status === "captured" && status.amountCents) {
-        // An earlier try already captured it: record what Stripe has.
-        result.captures.push({ order_id: payment.order_id, payment_id: payment.id, captured_cents: status.amountCents, tip_cents: Math.max(0, status.amountCents - authorized), card_brand: status.cardBrand ?? payment.card_brand ?? null, card_last4: status.cardLast4 ?? payment.card_last4 ?? null });
+        // An earlier try already captured it: record what Stripe has (plus a tip it charged on its own).
+        result.captures.push({ order_id: payment.order_id, payment_id: payment.id, captured_cents: status.amountCents + separateTip, tip_cents: Math.max(0, status.amountCents + separateTip - authorized), card_brand: status.cardBrand ?? payment.card_brand ?? null, card_last4: status.cardLast4 ?? payment.card_last4 ?? null });
         continue;
       }
       if (status.status !== "authorized") throw new PaymentProviderError(status.status === "voided" ? "the card's approval was cancelled or ran out" : "the card is no longer approved", "NOT_AUTHORIZED");
@@ -140,12 +142,59 @@ export async function captureHeldCards(options: {
           // capture the approval — leave it waiting; a retry reuses the same key.
           if (rechargeCause instanceof PaymentProviderError && rechargeCause.retryable) throw rechargeCause;
           logger.error("payments.tip_recharge_failed", rechargeCause, { payment_id: payment.id });
-          // Owner, 2026-10-28: a $2 tip was lost this way — the order alone was charged and the tip dropped.
-          // Now nothing is charged: the card stays waiting with its tip still typed in, and staff decide —
-          // try again, or set the tip to 0 to charge just the order (and settle the tip in cash).
           const reason = rechargeCause instanceof Error ? rechargeCause.message.replace(/\.$/, "") : "the card was refused";
-          result.skipped.push(payment.order_id);
-          result.problems.push(`${label}: Stripe refused order + ${money(wanted)} tip (${reason}). Nothing was charged and the card is still waiting with the tip typed in. Try again, or set this tip to 0 to charge just the order and collect the tip in cash.`);
+          /*
+           * Owner, 2026-10-28 (Stripe: "insufficient funds" on order + tip): the order's
+           * approval is still holding its money, so a new charge for order + tip needs
+           * about double the order free on the card.  Fall back to charging JUST the
+           * tip on its own (only the tip has to be free), then the order on the approval
+           * it already has (that can't be declined).  Two charges, so a second small fee,
+           * only on a card that refused the single charge.  The tip goes first: if it is
+           * refused too, nothing has been charged and the card stays waiting.
+           */
+          let tipCharged: { id: string; cents: number; brand: string | null; last4: string | null } | null = null;
+          try {
+            const tipOnly = await stripeApi.chargeSavedCard({
+              customerId: status.customerId, paymentMethodId: status.paymentMethodId, amountCents: wanted,
+              idempotencyKey: `${options.keyPrefix}-tiponly-${payment.id}-${wanted}`,
+              note: `${label} tip`,
+              metadata: { wayne_payment_id: payment.id, wayne_order_number: orderNumber, wayne_tip_only: "true", wayne_tip_for: payment.provider_payment_id },
+            });
+            if (tipOnly.status !== "captured" || !tipOnly.providerPaymentId) throw new PaymentProviderError(tipOnly.status === "failed" ? "the card was declined for the tip on its own too" : "the tip charge is still pending — try the cash-out again in a minute", "NOT_CAPTURED", tipOnly.status !== "failed");
+            tipCharged = { id: tipOnly.providerPaymentId, cents: tipOnly.amountCents ?? wanted, brand: tipOnly.cardBrand ?? null, last4: tipOnly.cardLast4 ?? null };
+          } catch (tipCause) {
+            // No answer: the tip charge may have gone through; a retry reuses its key, so it never charges twice.
+            if (tipCause instanceof PaymentProviderError && tipCause.retryable) throw tipCause;
+            logger.error("payments.tip_only_failed", tipCause, { payment_id: payment.id });
+            const tipReason = tipCause instanceof Error ? tipCause.message.replace(/\.$/, "") : "the card was refused";
+            // Owner, 2026-10-28: a $2 tip was lost when the order alone was charged and the tip dropped.
+            // Nothing is charged: the card stays waiting with its tip typed in, and staff decide.
+            result.skipped.push(payment.order_id);
+            result.problems.push(`${label}: Stripe refused order + ${money(wanted)} tip (${reason}), and the tip on its own (${tipReason}). Nothing was charged and the card is still waiting with the tip typed in. Try again, or set this tip to 0 to charge just the order and collect the tip in cash.`);
+            continue;
+          }
+          // Remembered on the payment straight away, so a retry after a lost answer still counts the tip.
+          const { error: tipNoteError } = await service.from("payments").update({
+            metadata: { ...metadata, tip_charge_intent: tipCharged.id, tip_charge_cents: tipCharged.cents, tip_charged_separately: true },
+          }).eq("id", payment.id);
+          if (tipNoteError) logger.error("payments.tip_only_record_failed", new Error(tipNoteError.message), { payment_id: payment.id, intent: tipCharged.id });
+          let orderCapture: Awaited<ReturnType<typeof stripeApi.capturePayment>>;
+          try {
+            orderCapture = await stripeApi.capturePayment(payment.provider_payment_id, { amountCents: authorized, idempotencyKey: `${options.keyPrefix}-${payment.id}-${authorized}` });
+            if (orderCapture.status !== "captured") throw new PaymentProviderError("the order was not charged on its approval", "NOT_CAPTURED", true);
+          } catch (captureCause) {
+            if (captureCause instanceof PaymentProviderError && captureCause.retryable) throw captureCause;
+            logger.error("payments.tip_only_order_capture_failed", captureCause, { payment_id: payment.id, tip_intent: tipCharged.id });
+            result.skipped.push(payment.order_id);
+            result.problems.push(`${label}: the ${money(tipCharged.cents)} tip was charged on its own, but the order itself could not be charged (${captureCause instanceof Error ? captureCause.message : "refused"}). Don't charge the tip again — check this order in Stripe.`);
+            continue;
+          }
+          const orderCents = orderCapture.amountCents ?? authorized;
+          result.captures.push({
+            order_id: payment.order_id, payment_id: payment.id, captured_cents: orderCents + tipCharged.cents, tip_cents: Math.max(0, orderCents + tipCharged.cents - authorized),
+            card_brand: orderCapture.cardBrand ?? tipCharged.brand ?? payment.card_brand ?? null, card_last4: orderCapture.cardLast4 ?? tipCharged.last4 ?? payment.card_last4 ?? null,
+          });
+          result.problems.push(`${label}: the card didn't have room for order + tip together (${reason}), so the ${money(tipCharged.cents)} tip went through as its own charge. All paid.`);
           continue;
         }
       } else if (wanted > 0 && room === 0 && !(status.paymentMethodId && status.customerId)) {
@@ -163,7 +212,7 @@ export async function captureHeldCards(options: {
       try {
         const status = await provider.value.provider.getPaymentStatus(payment.provider_payment_id);
         if (status.status === "captured" && status.amountCents) {
-          result.captures.push({ order_id: payment.order_id, payment_id: payment.id, captured_cents: status.amountCents, tip_cents: Math.max(0, status.amountCents - authorized), card_brand: status.cardBrand ?? payment.card_brand ?? null, card_last4: status.cardLast4 ?? payment.card_last4 ?? null });
+          result.captures.push({ order_id: payment.order_id, payment_id: payment.id, captured_cents: status.amountCents + separateTip, tip_cents: Math.max(0, status.amountCents + separateTip - authorized), card_brand: status.cardBrand ?? payment.card_brand ?? null, card_last4: status.cardLast4 ?? payment.card_last4 ?? null });
           continue;
         }
       } catch { /* report the original problem */ }
