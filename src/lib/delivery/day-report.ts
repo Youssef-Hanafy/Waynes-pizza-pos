@@ -1,3 +1,4 @@
+import { ticketNumber } from "@/lib/orders/ticket-number";
 import { z } from "zod";
 import { readableSlipLines, type PrintLayout, type PrintLine } from "@/lib/printing/document";
 import type { PosCashoutResult } from "./pos-board";
@@ -119,7 +120,7 @@ export function driverTipsLayout(options: { storeName: string; day: string; driv
   if (cashout) {
     lines.push({ kind: "text", text: "THIS CASH-OUT", bold: true, tall: true });
     for (const line of cashout.detail) {
-      lines.push({ kind: "pair", left: `${line.order_number.replace(/^W0*/, "#")} ${paidByShort[line.paid_by] ?? line.paid_by}`, right: `tip ${money(line.tip_cents)}`, tall: true });
+      lines.push({ kind: "pair", left: `#${ticketNumber(line)} ${paidByShort[line.paid_by] ?? line.paid_by}`, right: `tip ${money(line.tip_cents)}`, tall: true });
     }
     lines.push(
       { kind: "pair", left: "Deliveries", right: String(cashout.order_count), tall: true },

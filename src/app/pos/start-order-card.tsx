@@ -59,10 +59,34 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   const search = useCustomerSearch(searchText);
   const matches = search.results.slice(0, 6);
 
+  /**
+   * One tap starts the order (owner, 2026-10-28, same as 2026-10-13): type the
+   * name (optional), then Walk-in / Pickup / Delivery opens the menu.  Only
+   * what can't be skipped stops it: a delivery with no address shows the
+   * address box (then Continue), a phone order with no caller ID name asks for
+   * the name, a half-typed phone number.  "Jump to take order" still skips it all.
+   * Editing an order that has items only changes the type.
+   */
   function choose(next: OrderKind) {
     setError("");
     setKind(next);
-    update(orderTypePatch(draft, next, shownSource));
+    const patch = orderTypePatch(draft, next, shownSource);
+    if (editing) { update(patch); return; }
+    const target = { ...draft, ...patch };
+    const problem = startProblem(target, next, settings);
+    if (!problem) {
+      update({ ...patch, started: true });
+      // Saved the moment the order starts — even a test order or one never sent (owner, 2026-10-27).
+      void saveCustomer(target, next, true);
+      return;
+    }
+    update(patch);
+    // Delivery with no address yet: the street box appears beside the tiles, no error.
+    if (next === "delivery" && settings.delivery_enabled && !draft.addressId && !draft.address.address1.trim() && !problem.startsWith("Enter a 10-digit") && !problem.startsWith("Type the caller")) {
+      window.setTimeout(() => document.getElementById("start-address1")?.focus(), 50);
+      return;
+    }
+    setError(problem);
   }
 
   function selectCustomer(customer: PosCustomer) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { logDevice } from "@/lib/pos/device-log";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
@@ -50,6 +51,8 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
   const [cards, setCards] = useState<HeldCard[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
+  useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "tips" }); }, [error]);
   // The boxes live in the saved tip store, not in this screen (owner, 2026-10-28: tips went missing).
   const { drafts, lastError: saveError } = useTipDrafts();
   const tips = useMemo(() => {
@@ -71,6 +74,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     return () => window.clearTimeout(timer);
   }, []);
   const [notice, setNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  useEffect(() => { if (notice?.tone === "warn") logDevice("pos.error_shown", notice.text, { screen: "tips" }); }, [notice]);
 
   const load = useCallback(async () => {
     void refreshTipDrafts();

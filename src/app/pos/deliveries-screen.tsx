@@ -1,5 +1,6 @@
 "use client";
 
+import { logDevice } from "@/lib/pos/device-log";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
@@ -61,6 +62,8 @@ function minutesAgo(iso: string | null | undefined) {
 export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { timeZone: string; storeName?: string }) {
   const [board, setBoard] = useState<PosDeliveryBoard | null>(null);
   const [error, setError] = useState("");
+  // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
+  useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "deliveries" }); }, [error]);
   const [busy, setBusy] = useState<string | null>(null);
   // The tip boxes are saved as they are typed (owner, 2026-10-28), so leaving Deliveries — or a call opening
   // the Phone screen, or a reload — never loses them.
@@ -243,11 +246,11 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         </div>
         {printNote ? <p aria-live="polite" className="mt-2 text-sm font-bold">{printNote}</p> : null}
         {result.detail.length ? <table className="mt-3 w-full text-left text-sm">
-          <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
+          <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">Ticket</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
           <tbody>{result.detail.map((line) => {
             const tipFromDrawer = line.paid_by === "card_held" || line.paid_by === "card" || line.paid_by === "paid";
             return <tr className="border-b border-wayne-border last:border-0" key={line.order_id}>
-              <td className="py-1 pr-2 font-black">{ticketNumber(line)}</td>
+              <td className="py-1 pr-2 text-xl font-black whitespace-nowrap">#{ticketNumber(line)}</td>
               <td className="pr-2">{paidByShort[line.paid_by] ?? line.paid_by}</td>
               <td className="pr-2 text-right">{formatCents(line.total_cents - line.tip_cents)}</td>
               <td className="pr-2 text-right">{formatCents(line.tip_cents)}</td>
@@ -300,7 +303,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
             {driver.last_cashout_at ? <p className="text-xs text-wayne-muted">Last cashed out {time(driver.last_cashout_at)}</p> : null}
             {orders.length ? <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[34rem] text-left text-sm">
-                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-2 pr-2">#</th><th className="pr-2">Customer</th><th className="pr-2">Paid</th><th className="pr-4 text-right">Total</th><th className="w-28 pr-2">Tip</th><th /></tr></thead>
+                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-2 pr-2">Ticket</th><th className="pr-2">Customer</th><th className="pr-2">Paid</th><th className="pr-4 text-right">Total</th><th className="w-28 pr-2">Tip</th><th /></tr></thead>
                 <tbody>{orders.map((order) => {
                   const allowed = tipAllowed(order);
                   const raw = tips[order.order_id] ?? "";
@@ -310,7 +313,8 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                   const staleHold = order.paid_by === "card_held" && order.held_at && Date.now() - Date.parse(order.held_at) > 5 * 86_400_000;
                   const noCardTip = order.paid_by === "card_held" && cap === 0;
                   return <tr className="border-b border-wayne-border align-top last:border-0" key={order.order_id}>
-                    <td className="py-2 pr-2 font-black">{ticketNumber(order)}</td>
+                    {/* The slip number, big, so the tip on each paper slip is easy to match (owner, 2026-10-28). */}
+                    <td className="py-2 pr-2 whitespace-nowrap"><span className="inline-block rounded-lg bg-wayne-green px-2 py-0.5 text-2xl font-black text-white">#{ticketNumber(order)}</span></td>
                     <td className="py-2 pr-2"><strong className="block">{order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</strong><span className="block text-xs text-wayne-muted">{order.address}{order.city ? `, ${order.city}` : ""}</span>{staleHold ? <span className="block text-xs font-bold text-wayne-alert">Card approval expires soon — cash out today</span> : null}</td>
                     <td className="py-2 pr-2 text-xs font-bold">{paidByLabel(order)}</td>
                     <td className="py-2 pr-4 text-right font-bold">{allowed && cents && !over ? <>{formatCents(order.total_cents + cents)}<span className="block text-xs font-normal text-wayne-muted">{formatCents(order.total_cents)} + {formatCents(cents)} tip</span></> : formatCents(order.total_cents)}</td>
@@ -328,9 +332,9 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
             {orders.length ? confirming ? <div className="mt-4 rounded-2xl border-2 border-wayne-green bg-wayne-green/5 p-4">
               <p className="text-sm font-black uppercase tracking-[0.16em] text-wayne-muted">Run down · {orders.length} {orders.length === 1 ? "delivery" : "deliveries"}</p>
               <table className="mt-2 w-full text-left text-sm">
-                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">#</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
+                <thead><tr className="border-b border-wayne-border text-xs uppercase tracking-wider text-wayne-muted"><th className="py-1 pr-2">Ticket</th><th className="pr-2">Paid</th><th className="pr-2 text-right">Order</th><th className="pr-2 text-right">Tip</th><th className="pr-4 text-right">Total</th><th>Driver</th></tr></thead>
                 <tbody>{cashoutLines(orders, tipCents).map((line) => <tr className="border-b border-wayne-border last:border-0" key={line.order.order_id}>
-                  <td className="py-1 pr-2 font-black">{ticketNumber(line.order)}</td>
+                  <td className="py-1 pr-2 text-xl font-black whitespace-nowrap">#{ticketNumber(line.order)}</td>
                   <td className="pr-2">{paidByShort[line.order.paid_by] ?? line.order.paid_by}</td>
                   <td className="pr-2 text-right">{formatCents(line.order.total_cents - (line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.tip_cents : 0))}</td>
                   <td className="pr-2 text-right">{formatCents(line.tip)}</td>

@@ -1,5 +1,6 @@
 "use client";
 
+import { logDevice } from "@/lib/pos/device-log";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
@@ -26,6 +27,8 @@ export function thankCustomer(changeCents: number | null = null) {
 export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (order: OpenOrder) => void }) {
   const [note, setNote] = useState("Waiting for the customer to choose a tip on the screen…");
   const [error, setError] = useState("");
+  // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
+  useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "customer_tip", order: order.order_number }); }, [error, order.order_number]);
   const cancelRef = useRef<() => void>(() => {});
   const done = useRef(false);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { logDevice } from "@/lib/pos/device-log";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
@@ -187,6 +188,8 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
 function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPayment, onDrawerChanged, keyedCardConfig, stripeReader, onPayLater, onAddItems }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: KeyedConfig | null; stripeReader: boolean; /** Shown when the payment prompt opens right after an order is sent. */ onPayLater?: () => void; /** Back to the menu to add items to this same unpaid order, then one payment for everything (owner, 2026-10-16). */ onAddItems?: () => void }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
+  // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
+  useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "payments", order: openedOrder.order_number, daily: openedOrder.daily_number ?? null }); }, [error, openedOrder.order_number, openedOrder.daily_number]);
   const [busy, setBusy] = useState(false);
   // The customer screen (owner, 2026-10-11): a tip before the card, a signature after.
   const screen = useCustomerScreen();
