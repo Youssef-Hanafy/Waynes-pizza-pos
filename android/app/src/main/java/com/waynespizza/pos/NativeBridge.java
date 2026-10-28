@@ -89,10 +89,49 @@ final class NativeBridge {
             info.put("android", Build.VERSION.SDK_INT);
             info.put("model", Build.MODEL);
             info.put("hardwareKeyboard", hardwareKeyboard());
+            // 1.5.1 (owner, 2026-10-28): enough to tell from POS → More exactly which app each tablet runs.
+            info.put("versionCode", BuildConfig.VERSION_CODE);
+            info.put("package", activity.getPackageName());
+            info.put("buildType", BuildConfig.BUILD_TYPE);
+            putInstallDetails(info);
         } catch (JSONException ignored) {
             // Only constant keys: cannot happen.
         }
         return info.toString();
+    }
+
+    /** When this app was installed / last updated, its signing key and the WebView in use (best effort, never throws). */
+    private void putInstallDetails(JSONObject info) {
+        try {
+            android.content.pm.PackageManager pm = activity.getPackageManager();
+            android.content.pm.PackageInfo pkg;
+            if (Build.VERSION.SDK_INT >= 28) {
+                pkg = pm.getPackageInfo(activity.getPackageName(), android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES);
+                if (pkg.signingInfo != null) {
+                    android.content.pm.Signature[] signers = pkg.signingInfo.getApkContentsSigners();
+                    if (signers != null && signers.length > 0) {
+                        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(signers[0].toByteArray());
+                        StringBuilder hex = new StringBuilder();
+                        for (int index = 0; index < 8; index++) hex.append(String.format("%02X", digest[index]));
+                        info.put("signer", hex.toString());
+                    }
+                }
+            } else {
+                pkg = pm.getPackageInfo(activity.getPackageName(), 0);
+            }
+            info.put("installedAt", pkg.firstInstallTime);
+            info.put("updatedAt", pkg.lastUpdateTime);
+        } catch (Exception ignored) {
+            // Diagnostics only.
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                android.content.pm.PackageInfo webView = android.webkit.WebView.getCurrentWebViewPackage();
+                if (webView != null) info.put("webView", webView.packageName + " " + webView.versionName);
+            }
+        } catch (Exception ignored) {
+            // Diagnostics only.
+        }
     }
 
     /**

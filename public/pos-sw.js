@@ -11,12 +11,27 @@
  *     same name): kept once loaded, so the page can start offline
  * Everything else (orders, payments, the API) always goes to the server.
  * Tickets taken offline are kept by the page itself and sent when it is back.
+ *
+ * v2 (owner, 2026-10-28: "the POS would switch between older and newer
+ * versions"): the saved copy is only ever the newest page this register
+ * loaded, stamped with when it was saved, and a page opened from it is told so
+ * (message "wayne-offline-copy") — the POS shows it and reloads onto the
+ * current build the moment the server answers.  A server error page (5xx) is
+ * passed through as before, never swapped for the saved copy; only "no answer
+ * at all" (no connection, or nothing within 10 s) opens the copy.
  */
+// The cache names stay "v1": changing them would throw away the saved copy and the
+// app's code files on the update, leaving the register unable to open offline
+// until it was opened online again.  WORKER is this worker's own version.
 const VERSION = "wayne-pos-v1";
+const WORKER = "pos-sw 2 (2026-10-28)";
 const PAGES = `${VERSION}-pages`;
 const STATIC = `${VERSION}-static`;
 const MAX_STATIC = 400;
 const PAGE_TIMEOUT_MS = 10000;
+const SAVED_AT = "x-wayne-saved-at";
+// Pages (client ids) this worker opened from the saved copy, and when that copy was saved.
+const servedOffline = new Map();
 
 self.addEventListener("install", () => { self.skipWaiting(); });
 
@@ -39,7 +54,7 @@ async function trimStatic() {
   for (let index = 0; index < keys.length - MAX_STATIC; index += 1) await cache.delete(keys[index]);
 }
 
-async function page(request) {
+async function page(request, clientId) {
   const url = new URL(request.url);
   const key = `${url.origin}${url.pathname}`;
   const controller = new AbortController();
@@ -51,13 +66,23 @@ async function page(request) {
     const finalUrl = new URL(response.url || request.url);
     if (response.ok && !response.redirected && isPosPage(finalUrl) && (response.headers.get("content-type") || "").includes("text/html")) {
       const copy = response.clone();
-      caches.open(PAGES).then((cache) => cache.put(key, copy)).catch(() => undefined);
+      copy.text().then((html) => {
+        const headers = new Headers(copy.headers);
+        headers.set(SAVED_AT, new Date().toISOString());
+        return caches.open(PAGES).then((cache) => cache.put(key, new Response(html, { status: 200, headers })));
+      }).catch(() => undefined);
     }
     return response;
   } catch (error) {
     clearTimeout(timer);
     const saved = await caches.match(key, { cacheName: PAGES });
-    if (saved) return saved;
+    if (saved) {
+      if (clientId) {
+        servedOffline.set(clientId, saved.headers.get(SAVED_AT) || "");
+        if (servedOffline.size > 20) servedOffline.delete(servedOffline.keys().next().value);
+      }
+      return saved;
+    }
     throw error;
   }
 }
@@ -80,6 +105,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // Server-component refreshes (?_rsc / RSC header) always go to the server.
   if (url.searchParams.has("_rsc") || request.headers.get("RSC") === "1") return;
-  if (request.mode === "navigate" && isPosPage(url)) { event.respondWith(page(request)); return; }
+  if (request.mode === "navigate" && isPosPage(url)) { event.respondWith(page(request, event.resultingClientId)); return; }
   if (url.pathname.startsWith("/_next/static/")) { event.respondWith(staticFile(request)); return; }
+});
+
+// The POS asks once it has started: "was I opened from the saved copy?"
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "wayne-ask-offline" || !event.source) return;
+  const id = event.source.id;
+  const offline = servedOffline.has(id);
+  event.source.postMessage({ type: "wayne-offline-copy", offline, savedAt: offline ? servedOffline.get(id) : "", version: WORKER });
 });

@@ -1,14 +1,33 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import { heldCardSchema, parseTipInput, tipRoom, type HeldCard } from "@/lib/tips/schemas";
+import { tipSaveState } from "@/lib/tips/drafts";
+import { workspaceStorageKey } from "@/lib/tenancy/active-workspace";
+import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
+import { clearTipDrafts, loadTipDrafts, refreshTipDrafts, setTipDraft, syncTipDrafts, useTipDrafts } from "@/stores/tip-drafts";
+import { TipSavedNote, TipsSavedBanner } from "./tip-saved-note";
 
 const brandNames: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", american_express: "Amex", discover: "Discover", test: "Test card" };
 const sourceNames: Record<string, string> = { pos: "Counter", phone: "Phone", online: "Online" };
+
+/** The last list of cards, so a restart with no connection still shows them with the tips typed. */
+function cardsCacheKey() {
+  return workspaceStorageKey(getClientWorkspaceScope().workspaceId, "pos-tip-cards.v1");
+}
+function readCachedCards(): { at: string; cards: HeldCard[] } | null {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(cardsCacheKey()) ?? "null") as { at?: unknown; cards?: unknown } | null;
+    const cards = heldCardSchema.array().safeParse(raw?.cards);
+    return cards.success && typeof raw?.at === "string" ? { at: raw.at, cards: cards.data } : null;
+  } catch {
+    return null;
+  }
+}
 
 function when(iso: string) {
   return new Date(iso).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
@@ -31,18 +50,38 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
   const [cards, setCards] = useState<HeldCard[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
-  const [tips, setTips] = useState<Record<string, string>>({});
+  // The boxes live in the saved tip store, not in this screen (owner, 2026-10-28: tips went missing).
+  const { drafts, lastError: saveError } = useTipDrafts();
+  const tips = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [orderId, draft] of Object.entries(drafts)) out[orderId] = draft.raw;
+    return out;
+  }, [drafts]);
+  const [cachedAt, setCachedAt] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    loadTipDrafts();
+    // Before the server answers (or with no connection), show the last list this register saw.
+    const timer = window.setTimeout(() => {
+      const cached = readCachedCards();
+      if (!cached) return;
+      setCards((current) => (current.length ? current : cached.cards));
+      setCachedAt((current) => current || cached.at);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [notice, setNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
 
   const load = useCallback(async () => {
+    void refreshTipDrafts();
     try {
       const response = await fetch("/api/pos/tips", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The cards could not be loaded.");
       const parsed = heldCardSchema.array().safeParse(body);
       if (!parsed.success) throw new Error("The cards could not be read.");
-      setCards(parsed.data); setError(""); setLoaded(true);
+      setCards(parsed.data); setError(""); setLoaded(true); setCachedAt("");
+      try { window.localStorage.setItem(cardsCacheKey(), JSON.stringify({ at: new Date().toISOString(), cards: parsed.data })); } catch { /* list shows again once online */ }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The cards could not be loaded.");
       setLoaded(true);
@@ -62,17 +101,20 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     if (busy || !lines.length) return;
     if (lines.some((line) => line.cents === null)) { setNotice({ tone: "warn", text: "One of the tips isn't a number. Fix the boxes in red." }); return; }
     setBusy(true); setNotice(null);
+    // Whatever was typed is saved first, so nothing is lost if the charge is interrupted.
+    await syncTipDrafts();
     try {
       const response = await fetch("/api/pos/tips", {
         method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
         body: JSON.stringify({ tips: lines.map((line) => ({ order_id: line.card.order_id, tip_cents: line.cents ?? 0 })) }),
         signal: AbortSignal.timeout(90_000),
       });
-      const body = await response.json().catch(() => ({})) as { charged?: number; tips_cents?: number; problems?: string[]; error?: string };
+      const body = await response.json().catch(() => ({})) as { charged?: number; tips_cents?: number; problems?: string[]; error?: string; charged_order_ids?: string[] };
       if (!response.ok) throw new Error(body.error || "The cards could not be charged.");
       const problems = body.problems ?? [];
       setNotice({ tone: problems.length ? "warn" : "ok", text: `✓ Charged ${body.charged ?? lines.length} card${(body.charged ?? lines.length) === 1 ? "" : "s"} with ${formatCents(body.tips_cents ?? 0)} in tips.${problems.length ? ` ${problems.join(" ")}` : ""}` });
-      setTips((current) => { const next = { ...current }; for (const line of lines) delete next[line.card.order_id]; return next; });
+      // Only the cards actually charged are done; a card that couldn't be charged keeps its tip in the box.
+      clearTipDrafts(body.charged_order_ids ?? []);
     } catch (cause) {
       setNotice({ tone: "warn", text: cause instanceof Error ? cause.message : "The cards could not be charged." });
     } finally {
@@ -91,7 +133,8 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
         <Button disabled={busy || !here.length} onClick={() => { void charge(entered); }} size="lg">{busy ? "Charging…" : `Charge ${here.length} card${here.length === 1 ? "" : "s"}${tipTotal ? ` · ${formatCents(tipTotal)} tips` : ""}`}</Button>
       </div>
       {notice ? <p className={`rounded-xl p-3 text-sm font-bold ${notice.tone === "ok" ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-warn-soft"}`} role="status">{notice.text}</p> : null}
-      {error ? <p className="rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}</p> : null}
+      {error ? <p className="rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}{cachedAt ? ` Showing the list from ${when(cachedAt)} — the tips typed are kept and charging works once the connection is back.` : ""}</p> : null}
+      <TipsSavedBanner drafts={drafts} orderIds={here.map((card) => card.order_id)} saveError={saveError} />
       {tooBig.length ? <p className="rounded-xl bg-wayne-warn-soft p-3 text-sm font-bold">{tooBig.length === 1 ? "One tip is" : `${tooBig.length} tips are`} more than the card allows — only the most the card can take will be charged.</p> : null}
 
       {loaded && !here.length && !error ? <p className="rounded-2xl bg-white p-6 text-center font-bold text-wayne-muted">No cards waiting for a tip. 👍</p> : null}
@@ -115,7 +158,8 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
               <p className="text-sm font-bold">Approved {formatCents(card.authorized_cents)}{card.tip_already_cents ? ` (incl. ${formatCents(card.tip_already_cents)} tip already)` : ""} · room for up to {formatCents(room)} more</p>
             </div>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-wayne-muted">Tip on slip ($)
-              <input className={`min-h-12 rounded-xl border-2 px-3 text-xl font-black text-wayne-ink ${cents === null ? "border-wayne-alert" : over ? "border-wayne-gold" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [card.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
+              <input className={`min-h-12 rounded-xl border-2 px-3 text-xl font-black text-wayne-ink ${cents === null ? "border-wayne-alert" : over ? "border-wayne-gold" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTipDraft(card.order_id, event.target.value, parseTipInput(event.target.value) ?? 0, "tips")} placeholder="0.00" value={raw} />
+              <TipSavedNote state={tipSaveState(drafts[card.order_id])} terminal={drafts[card.order_id]?.terminal} error={drafts[card.order_id]?.error} />
             </label>
             <div className="text-right">
               <p className="text-xs font-bold text-wayne-muted">Card charged</p>

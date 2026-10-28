@@ -6,7 +6,6 @@ import { getHardwareSettings } from "@/lib/hardware/queries";
 import { callerIdProviderSchema } from "@/lib/hardware/schemas";
 import { getPosMenu } from "@/lib/pos/queries";
 import { getPosKeyedCardConfig, getPosStripeReaderEnabled } from "@/lib/payments/queries";
-import { AutoRefresh } from "@/components/ops/auto-refresh";
 import { SupportPill } from "@/components/ops/support-banner";
 import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { OneTab } from "./one-tab";
@@ -31,8 +30,8 @@ export default async function PosPage() {
     ...(envProvider.success ? { caller_id_provider: envProvider.data } : {}),
     ...(Number.isInteger(envLines) && envLines >= 1 && envLines <= 8 ? { caller_line_count: envLines } : {}),
   };
-  // The menu (sold-out items, prices) refreshes in the background — every 3 minutes and whenever the screen comes back
-  // (owner, 2026-10-24: less Vercel compute; the server still refuses a sold-out item on submit). Open tickets are kept.
+  // The menu (sold-out items, prices) refreshes in the background every 3 minutes, but only while the register is
+  // idle (PosAutoRefresh inside PosApp, owner 2026-10-28); the server still refuses a sold-out item on submit.
   return <>
     <WorkspaceScope defaultCity={settings.city} defaultState={settings.state} legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} />
     <OneTab><PosApp
@@ -52,6 +51,5 @@ export default async function PosPage() {
       staffName={access.display_name}
     /></OneTab>
     <SupportPill access={access} />
-    <div className="sr-only"><AutoRefresh intervalMs={180_000} label="Menu refreshes every 3 minutes" /></div>
   </>;
 }

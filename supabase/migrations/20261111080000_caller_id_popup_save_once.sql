@@ -86,6 +86,15 @@ begin
   patched := def;
 
   -- a. A phone order linked to a call keeps the call's number when none was typed.
+  --    (2026-10-28) The live function has no comment between these two lines, but a
+  --    database built from the migrations does (20261024080000 adds one); drop it
+  --    first so this migration also replays on a fresh database.  No effect live.
+  patched := replace(patched,
+    $old$    normalized_phone := public.wayne_normalize_phone(payload ->> 'phone');
+    -- Nothing is required in a rush; a phone that was typed must still be a real number.
+    if normalized_phone is null and char_length$old$,
+    $new$    normalized_phone := public.wayne_normalize_phone(payload ->> 'phone');
+    if normalized_phone is null and char_length$new$);
   patched := replace(patched,
     $old$    normalized_phone := public.wayne_normalize_phone(payload ->> 'phone');
     if normalized_phone is null and char_length$old$,

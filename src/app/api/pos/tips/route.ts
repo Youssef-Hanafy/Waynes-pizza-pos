@@ -52,6 +52,8 @@ export async function POST(request: Request) {
       problems: result.problems,
     }, { status: 400 });
   }
+  // The tips typed for these orders are done (best effort: the list only shows orders still waiting anyway).
+  await supabase.rpc("wayne_pos_clear_tip_drafts", { order_ids: result.captures.map((capture) => capture.order_id) }).then(() => undefined, () => undefined);
   const saved = z.object({ count: z.number().int(), tips_cents: z.number().int() }).safeParse(data);
-  return Response.json({ charged: saved.success ? saved.data.count : result.captures.length, tips_cents: saved.success ? saved.data.tips_cents : 0, problems: result.problems }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ charged_order_ids: result.captures.map((capture) => capture.order_id), charged: saved.success ? saved.data.count : result.captures.length, tips_cents: saved.success ? saved.data.tips_cents : 0, problems: result.problems }, { headers: { "Cache-Control": "no-store" } });
 }

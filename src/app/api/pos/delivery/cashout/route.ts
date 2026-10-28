@@ -74,7 +74,10 @@ export async function POST(request: Request) {
       problems,
     }, { status: 400 });
   }
+  // The tips typed for the orders just cashed out are done (best effort: only orders still waiting are ever shown).
+  const cashedOut = driver.orders.map((order) => order.order_id).filter((id) => !skipped.includes(id));
+  await supabase.rpc("wayne_pos_clear_tip_drafts", { order_ids: cashedOut }).then(() => undefined, () => undefined);
   const result = posCashoutResultSchema.safeParse(data);
   if (!result.success) return Response.json({ error: "The cash-out was saved but could not be read back. Refresh Deliveries." }, { status: 500 });
-  return Response.json({ ...result.data, problems }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ...result.data, problems, cashed_out_order_ids: cashedOut }, { headers: { "Cache-Control": "no-store" } });
 }

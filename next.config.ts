@@ -12,7 +12,8 @@ const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl) : undefined;
 const buildId = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || "";
 
 const nextConfig: NextConfig = {
-  env: { WAYNE_BUILD_ID: buildId },
+  // Shown on POS → More → "This app" so each register's exact version can be read off the screen (owner, 2026-10-28).
+  env: { WAYNE_BUILD_ID: buildId, WAYNE_COMMIT: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 12), WAYNE_BUILT_AT: new Date().toISOString() },
   // `npm run dev` seen from the Android emulator (10.0.2.2 is this computer there).
   allowedDevOrigins: ["10.0.2.2"],
   images: supabaseOrigin

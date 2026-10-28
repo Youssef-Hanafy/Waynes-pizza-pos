@@ -59,10 +59,30 @@ export function loadSavedDrafts() {
     raw = null;
   }
   const saved = parseSavedDrafts(raw);
+  backUpUnreadable(raw, saved?.drafts.length ?? 0);
   if (saved) orderStore.set(saved);
   orderStore.subscribe(() => save(orderStore.get()));
   // No cross-tab mirroring: only one tab runs the POS (see app/pos/one-tab.tsx).
   // Two tabs mirroring each other's tickets is what made the screen shake.
+}
+
+/**
+ * Tickets saved by a different build that this one can't read are copied aside
+ * before anything is written over them (owner, 2026-10-28: an old and a new copy
+ * of the POS must never be able to wipe each other's tickets).  Nothing reads the
+ * copy automatically; it is there to recover by hand.
+ */
+function backUpUnreadable(raw: string | null, readable: number) {
+  if (!raw) return;
+  try {
+    const value = JSON.parse(raw) as { drafts?: unknown };
+    const total = Array.isArray(value?.drafts) ? value.drafts.length : 0;
+    if (total <= readable) return;
+    window.localStorage.setItem(`${STORAGE_KEY}.unreadable`, JSON.stringify({ at: new Date().toISOString(), build: process.env.WAYNE_BUILD_ID ?? "", raw }));
+    console.warn(`POS: ${total - readable} saved ticket(s) could not be read by this build; a copy was kept.`);
+  } catch {
+    // Not JSON at all: nothing to keep.
+  }
 }
 
 export const orderActions = {

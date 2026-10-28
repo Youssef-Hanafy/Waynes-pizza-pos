@@ -13,6 +13,9 @@ import { deliveryDayReportSchema, driverTipsLayout, type DeliveryDayDriver } fro
 import { getHardwareRuntime } from "@/stores/hardware-store";
 import { PinPad } from "@/components/ui/pin-pad";
 import { ClockButton } from "./clock-button";
+import { tipSaveState } from "@/lib/tips/drafts";
+import { clearTipDrafts, loadTipDrafts, refreshTipDrafts, setTipDraft, syncTipDrafts, useTipDrafts } from "@/stores/tip-drafts";
+import { TipSavedNote, TipsSavedBanner } from "./tip-saved-note";
 
 async function readError(response: Response, fallback: string) {
   const body: unknown = await response.json().catch(() => null);
@@ -59,7 +62,14 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
   const [board, setBoard] = useState<PosDeliveryBoard | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [tips, setTips] = useState<Record<string, string>>({});
+  // The tip boxes are saved as they are typed (owner, 2026-10-28), so leaving Deliveries — or a call opening
+  // the Phone screen, or a reload — never loses them.
+  const { drafts, lastError: saveError } = useTipDrafts();
+  const tips = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [orderId, draft] of Object.entries(drafts)) out[orderId] = draft.raw;
+    return out;
+  }, [drafts]);
   const [cashingOut, setCashingOut] = useState<string | null>(null);
   const [result, setResult] = useState<(PosCashoutResult & { problems: string[]; driver_id: string }) | null>(null);
   const mounted = useRef(true);
@@ -97,6 +107,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
   }
 
   const load = useCallback(async () => {
+    void refreshTipDrafts();
     try {
       const response = await fetch("/api/pos/delivery", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!response.ok) throw new Error(await readError(response, "Deliveries could not be loaded."));
@@ -109,6 +120,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
   }, []);
 
   useEffect(() => {
+    loadTipDrafts();
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
@@ -160,6 +172,8 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
     const bad = orders.find((order) => tips[order.order_id] && dollarsToCents(tips[order.order_id]!) === null);
     if (bad) { setError(`Check the tip on order #${ticketNumber(bad)} (e.g. 5.00).`); return; }
     setBusy(`cashout-${driverId}`); setError("");
+    // Whatever was typed is saved first, so nothing is lost if the cash-out is interrupted.
+    await syncTipDrafts();
     try {
       const response = await fetch("/api/pos/delivery/cashout", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -179,11 +193,10 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         void printDriverTips(driverId, parsed.data.driver_name, parsed.data);
       }
       setCashingOut(null);
-      setTips((current) => {
-        const next = { ...current };
-        for (const order of orders) delete next[order.order_id];
-        return next;
-      });
+      // Only the orders actually cashed out are done; one left on the run keeps its tip in the box.
+      const done = body && typeof body === "object" && "cashed_out_order_ids" in body && Array.isArray((body as { cashed_out_order_ids: unknown }).cashed_out_order_ids)
+        ? (body as { cashed_out_order_ids: string[] }).cashed_out_order_ids : [];
+      clearTipDrafts(done);
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The cash-out could not be saved.");
@@ -214,6 +227,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         </div>
       </div> : null}
       {error ? <p className="rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{error}</p> : null}
+      <TipsSavedBanner drafts={drafts} orderIds={drivers.flatMap((driver) => driver.orders.map((order) => order.order_id))} saveError={saveError} />
 
       {result ? <section aria-live="polite" className="rounded-3xl border-2 border-wayne-ok bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -301,7 +315,8 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                     <td className="py-2 pr-2 text-xs font-bold">{paidByLabel(order)}</td>
                     <td className="py-2 pr-4 text-right font-bold">{allowed && cents && !over ? <>{formatCents(order.total_cents + cents)}<span className="block text-xs font-normal text-wayne-muted">{formatCents(order.total_cents)} + {formatCents(cents)} tip</span></> : formatCents(order.total_cents)}</td>
                     <td className="py-2 pr-2">{noCardTip ? <span className="text-xs font-bold text-wayne-alert">This card can&apos;t take a tip after the order (Stripe). The order is charged as is.</span> : allowed ? <>
-                      <input aria-label={`Tip for order #${ticketNumber(order)}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTips((current) => ({ ...current, [order.order_id]: event.target.value }))} placeholder="0.00" value={raw} />
+                      <input aria-label={`Tip for order #${ticketNumber(order)}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTipDraft(order.order_id, event.target.value, dollarsToCents(event.target.value) ?? 0, "delivery")} placeholder="0.00" value={raw} />
+                      <TipSavedNote error={drafts[order.order_id]?.error} state={tipSaveState(drafts[order.order_id])} terminal={drafts[order.order_id]?.terminal} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
                     </> : <span className="text-sm font-bold">{formatCents(order.tip_cents)}<span className="block text-xs font-normal text-wayne-muted">{order.paid_by === "paid" ? "tip paid online" : "charged at the counter"} · drawer pays it</span></span>}</td>
                     <td className="py-2 text-right">{order.status === "out_for_delivery" ? <button className="min-h-9 text-xs font-bold underline" disabled={busy !== null} onClick={() => { void act(`back-${order.order_id}`, { action: "unassign", order_id: order.order_id }); }} type="button">Take back</button> : null}</td>

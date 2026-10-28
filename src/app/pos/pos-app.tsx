@@ -51,6 +51,10 @@ import { useAppUpdate } from "@/stores/use-app-update";
 import { configureOfflineOrders, startOfflineOrders } from "@/stores/offline-orders";
 import { useConnectivity, watchConnectivity } from "@/stores/connectivity";
 import { OfflineOrdersBar } from "./offline-orders-bar";
+import { PosAutoRefresh } from "./pos-auto-refresh";
+import { AppInfoPanel } from "./app-info-panel";
+import { askOfflineWorker, useAppBuild } from "@/stores/app-build";
+import { loadTipDrafts } from "@/stores/tip-drafts";
 
 type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "tips" | "closeout" | "more";
 
@@ -165,6 +169,10 @@ export function PosApp(props: Props) {
     startOfflineOrders();
     // The register screen itself opens with no connection (public/pos-sw.js keeps the last good copy).
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/pos-sw.js", { scope: "/pos" }).catch(() => undefined);
+    // Was this page opened from the offline copy? (shown in the header and on More → This app)
+    askOfflineWorker();
+    // Typed tips that never reached the server are sent as soon as the register opens (owner, 2026-10-28).
+    loadTipDrafts();
   }, []);
   const connectivity = useConnectivity();
   // Tickets held before 2026-10-19 (and their phone lines) are closed out when the register opens; the one on screen stays.
@@ -173,11 +181,15 @@ export function PosApp(props: Props) {
     return () => window.clearTimeout(timer);
   }, []);
   // A newer deploy is live: reload onto it the next time this register is idle on New Order (owner, 2026-10-20).
-  useAppUpdate(() => {
+  const idleOnNewOrder = () => {
     const state = orderStore.get();
     return sectionRef.current === "order" && isDraftIdle(activeDraft(state)) && !paymentPromptStore.get()
       && !state.drafts.some((draft) => draft.submitPending) && !unsettledOrder.id;
-  });
+  };
+  useAppUpdate(idleOnNewOrder);
+  // The background menu refresh: only when nothing on screen could be lost (owner, 2026-10-28).
+  const idleForRefresh = () => idleOnNewOrder() || sectionRef.current === "today" || sectionRef.current === "orders";
+  const appBuild = useAppBuild();
   const { notices } = useSyncState();
   const pendingCount = drafts.filter((draft) => draft.submitPending).length;
 
@@ -248,7 +260,8 @@ export function PosApp(props: Props) {
 
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
-  const warning = !hardwareState.online || !connectivity.reachable
+  const warning = appBuild.offlineCopy && connectivity.reachable ? "Running the saved offline copy of the POS — it reloads onto the current version by itself as soon as nothing is on screen"
+    : !hardwareState.online || !connectivity.reachable
     ? `No connection — keep taking orders: they are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : " and sent when it is back"}`
     : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
     : callerStatus && callerStatus.state === "error" ? `Caller ID: ${callerStatus.detail ?? callerStatus.label}`
@@ -270,6 +283,7 @@ export function PosApp(props: Props) {
   // --pos-kb-h: the on-screen keyboard's height, so the page sits above it.
   return <div className={`flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden ${section === "order" ? "md:h-screen md:overflow-hidden" : ""}`} style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
     <PosKeyboard />
+    <PosAutoRefresh isSafe={idleForRefresh} />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
@@ -382,6 +396,7 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
         {canManageHardware ? <Button asChild className="mt-3" variant="secondary"><Link href="/admin/hardware">Admin → Hardware</Link></Button> : null}
       </section>
       {hardware.payment_terminal_mode === "integrated" ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Card reader</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Stripe Reader M2 over Bluetooth. Press its button once to wake it; it stays connected to this tablet.</p><StripeReaderStatus /></section> : null}
+      <AppInfoPanel />
       <PrintStationPanel />
       <TestOrdersPanel />
       {hardware.simulator_enabled ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Test calls</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Rings a line through the same path the real caller ID box will use.</p><SimulatorPanel lineCount={hardware.caller_line_count} /></section> : null}

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { logDevice } from "@/lib/pos/device-log";
 import { reportNetworkFailure, reportServerOk } from "./connectivity";
+import { appBuildStore, setLiveBuild } from "./app-build";
 
 /**
  * Keeps a register on the newest build (owner, 2026-10-20).
@@ -17,6 +18,13 @@ import { reportNetworkFailure, reportServerOk } from "./connectivity";
  *
  * Never loops: one reload per new build per 10 minutes, even if the tablet
  * comes back on the old copy.
+ *
+ * 2026-10-28 (old screens coming back): the first check now runs 3 seconds
+ * after the page opens (was 15) and again the moment the server answers after
+ * a drop, so a register that had to open the offline copy (possibly from
+ * before the last deploy) is back on the current build within seconds, not
+ * minutes.  A page opened from the offline copy is reloaded once the server is
+ * back even when the build looks the same, so it gets fresh data too.
  */
 const CURRENT = process.env.WAYNE_BUILD_ID ?? "";
 const CHECK_EVERY_MS = 60_000;
@@ -62,7 +70,10 @@ export function useAppUpdate(isSafe: () => boolean) {
         reportServerOk();
         const body = (await response.json().catch(() => null)) as { build?: unknown } | null;
         const live = typeof body?.build === "string" ? body.build : "";
+        if (response.ok && live) setLiveBuild(live);
         if (response.ok && live && live !== CURRENT) waitingFor = live;
+        // Opened from the offline copy and the server answers again: load the real page when idle.
+        else if (response.ok && appBuildStore.get().offlineCopy) waitingFor = live || "offline-copy";
       } catch {
         // Offline: try again next time (and the POS knows it is offline).
         reportNetworkFailure();
@@ -70,12 +81,13 @@ export function useAppUpdate(isSafe: () => boolean) {
       reloadIfSafe();
     };
 
-    const first = window.setTimeout(() => { void check(); }, 15_000);
+    const first = window.setTimeout(() => { void check(); }, 3_000);
     const poll = window.setInterval(() => { void check(); }, CHECK_EVERY_MS);
     const safePoll = window.setInterval(reloadIfSafe, SAFE_CHECK_MS);
     const onVisible = () => { if (document.visibilityState === "visible") void check(); };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
+    window.addEventListener("wayne:reconnected", onVisible);
     return () => {
       stopped = true;
       window.clearTimeout(first);
@@ -83,6 +95,7 @@ export function useAppUpdate(isSafe: () => boolean) {
       window.clearInterval(safePoll);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onVisible);
+      window.removeEventListener("wayne:reconnected", onVisible);
     };
   }, []);
 }
