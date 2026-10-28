@@ -66,7 +66,7 @@ export async function captureHeldCards(options: {
   if (!requests.length) return result;
 
   const { data: rows, error } = await service.from("payments")
-    .select("id, order_id, provider, provider_payment_id, amount_cents, card_brand, card_last4, metadata, order:orders!inner(order_number, workspace_id)")
+    .select("id, order_id, provider, provider_payment_id, amount_cents, card_brand, card_last4, metadata, order:orders!inner(order_number, daily_number, workspace_id)")
     .in("order_id", requests.map((request) => request.order_id))
     .eq("status", "authorized").eq("method", "card").in("provider", ["stripe", "test"])
     .eq("orders.workspace_id", workspaceId);
@@ -77,9 +77,11 @@ export async function captureHeldCards(options: {
 
   for (const request of requests) {
     const payment = rows?.find((row) => row.order_id === request.order_id);
-    const orderNumber = (payment?.order as unknown as { order_number?: string } | null)?.order_number ?? "";
+    const orderRow = payment?.order as unknown as { order_number?: string; daily_number?: number | null } | null;
+    const orderNumber = orderRow?.order_number ?? "";
     if (!payment) { result.skipped.push(request.order_id); result.problems.push("A card is no longer waiting for a tip (already charged or cancelled)."); continue; }
-    const label = `Order ${orderNumber || payment.order_id.slice(0, 8)}`;
+    // The slip number staff read off the paper (#12), owner 2026-10-28.
+    const label = `#${orderRow?.daily_number ?? (orderNumber.replace(/^W0*/, "") || payment.order_id.slice(0, 8))}`;
     const wanted = Math.max(0, Math.round(request.tip_cents || 0));
     const metadata = (payment.metadata ?? {}) as Record<string, unknown>;
     const authorized = payment.amount_cents as number;
@@ -138,8 +140,13 @@ export async function captureHeldCards(options: {
           // capture the approval — leave it waiting; a retry reuses the same key.
           if (rechargeCause instanceof PaymentProviderError && rechargeCause.retryable) throw rechargeCause;
           logger.error("payments.tip_recharge_failed", rechargeCause, { payment_id: payment.id });
-          result.problems.push(`${label}: the card didn't go through for order + ${money(wanted)} tip, so only the order was charged. Collect the tip another way.`);
-          // fall through: charge the order on the approval as it stands
+          // Owner, 2026-10-28: a $2 tip was lost this way — the order alone was charged and the tip dropped.
+          // Now nothing is charged: the card stays waiting with its tip still typed in, and staff decide —
+          // try again, or set the tip to 0 to charge just the order (and settle the tip in cash).
+          const reason = rechargeCause instanceof Error ? rechargeCause.message.replace(/\.$/, "") : "the card was refused";
+          result.skipped.push(payment.order_id);
+          result.problems.push(`${label}: Stripe refused order + ${money(wanted)} tip (${reason}). Nothing was charged and the card is still waiting with the tip typed in. Try again, or set this tip to 0 to charge just the order and collect the tip in cash.`);
+          continue;
         }
       } else if (wanted > 0 && room === 0 && !(status.paymentMethodId && status.customerId)) {
         result.problems.push(`${label}: this card was approved before tips could be added to it, so only the order was charged.`);
