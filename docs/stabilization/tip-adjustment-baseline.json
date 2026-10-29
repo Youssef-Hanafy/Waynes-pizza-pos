@@ -1,0 +1,363 @@
+{
+  "baseline_commit": "a2035a0a3cd2adfe84b1f13e368f9066375895e9",
+  "branch": "codex/stabilize-tip-adjustment",
+  "audit_date": "2026-10-29",
+  "deployment_id_observed": "dpl_HoiQny3guq9948WYfLcAtFfhhNDW",
+  "deployment_hosts": [
+    "app.hanafymedia.com",
+    "waynes-pizza-pos.vercel.app"
+  ],
+  "deployment_commit_mapping": "unverified",
+  "postgres_major_expected": 17,
+  "migration_count": 87,
+  "migrations": [
+    {
+      "file": "20260908000000_phase0_foundation.sql",
+      "sha256": "06c49301c84f487fc0ea6fce537577958407012f57935628dccab84acab2590d"
+    },
+    {
+      "file": "20260908010000_phase1_public_menu.sql",
+      "sha256": "2346e056f06ef9306f9bbdfcceafcd634b8f213bf0c853412653530bc04d84b8"
+    },
+    {
+      "file": "20260908020000_phase2_orders.sql",
+      "sha256": "55990f35e4dc1fbec211d8cf5f5827136c3bd9432b3bc2fc8a97e7d4e7e35f52"
+    },
+    {
+      "file": "20260908030000_phase3_admin_orders.sql",
+      "sha256": "4580ff03578de233282b2eb11867826b7d169c14ce258b3449dc708cc7a41991"
+    },
+    {
+      "file": "20260908040000_phase4_front_pos.sql",
+      "sha256": "b77f1c22452787d739e2cfb8d00df2fdcc3708cf5e9605688118655928db061d"
+    },
+    {
+      "file": "20260909050000_phase5_kitchen_printing.sql",
+      "sha256": "dd1294389ee0024dcf0aa00b420bc4359070bb30e04a5d0ab0ecb4fd41a081a6"
+    },
+    {
+      "file": "20260909060000_phase0_5_reliability_fixes.sql",
+      "sha256": "99cd996ed4c3f7090975c70984d927072d6227fe1b09236311679e7fabecf80b"
+    },
+    {
+      "file": "20260909070000_phase0_5_special_hours_carryover.sql",
+      "sha256": "da7d9d92a6d67c539f6389379150716612abc2139b63830894fdf282e8a297d4"
+    },
+    {
+      "file": "20260910060000_phase6_reports.sql",
+      "sha256": "ad8636b481853fd23e7dec0c6dccd1ab874deec214b93ccfc13f85a79ca61e75"
+    },
+    {
+      "file": "20260910070000_phase7_customer_intelligence.sql",
+      "sha256": "5d4f4867aaa56ca1831dcd57832ed7802fd25a8f00b72cedf1bcf9b12d4e381e"
+    },
+    {
+      "file": "20260911080000_phase6_7_audit_remediation.sql",
+      "sha256": "2f8e88fca7b40e5c8627ba392555e0d473c5db82958f813cddbd19193e0ac605"
+    },
+    {
+      "file": "20260912080000_phase8_hanafy_outbox.sql",
+      "sha256": "b5212f7f8063cb36c460dfadc4291f7583f35500b0e7b1606cdabd9a77570cd1"
+    },
+    {
+      "file": "20260913080000_phase9_outbox_database_delivery.sql",
+      "sha256": "eba03f8d23348daa730e02977ac6120dc0bf0d02f5471cd2460034cb7e08cd45"
+    },
+    {
+      "file": "20260914080000_phase0_8_audit_remediation.sql",
+      "sha256": "30e16fa22f135eddd4b0cae82b516e0bcd0527126240663b49850cac651738c3"
+    },
+    {
+      "file": "20260914090000_rewards_welcome_offer.sql",
+      "sha256": "b398e1858a94c13831dea8f0d3f4585def7f2843cc8e3e0e16166ddea3a2bed1"
+    },
+    {
+      "file": "20260914100000_customer_removal.sql",
+      "sha256": "0fddc6407bdfbc8518f70e22e56453ee298278de2af40e08e1e998850d11608c"
+    },
+    {
+      "file": "20260914110000_hide_removed_customers.sql",
+      "sha256": "4b8778b10368ba821d7abf37c26ec7e00192498d77f9c40a9437d9b2d8e79c98"
+    },
+    {
+      "file": "20260914120000_pos_modifiers_everywhere.sql",
+      "sha256": "fab9b0b623899625f292a4c9638176b46201714875e98db44512a7ab2ef2089f"
+    },
+    {
+      "file": "20260914160830_phase14_variant_modifier_pricing.sql",
+      "sha256": "46c28fb972eae5f2ac03a8e7ef364fc6a25f7fb7dcb296af384ee5391687a20e"
+    },
+    {
+      "file": "20260914205755_phase14_scope_variant_prices_to_item.sql",
+      "sha256": "34d35d2ceb22e559cb8f66bc3799b855124dca2b8b072bc2bb444248f6880873"
+    },
+    {
+      "file": "20260915080000_phase10_delivery_driver.sql",
+      "sha256": "f816f1acb204764e2a3ca0cdc30bb172736b368869a76debba3ce37af2d49b88"
+    },
+    {
+      "file": "20260916080000_phase11_payment_processor.sql",
+      "sha256": "f43bdda9dbb8dfd5c873a70af746d3d9c7823aca2d05559b332398be5c73b892"
+    },
+    {
+      "file": "20260917080000_phase12_cash_drawer.sql",
+      "sha256": "a1e119c7e42579b6bfbb9551a8f0fa80cfc029b08c2e8fd2af8706905094d7ea"
+    },
+    {
+      "file": "20260918080000_public_promotions.sql",
+      "sha256": "e348c54a2d24a3f29c14ebc4247fa78413c2f5c0687476faa739f220364e72c2"
+    },
+    {
+      "file": "20260919080000_phone_lines_member_offers_social.sql",
+      "sha256": "74764cc5ef6a2b86b8e50eee0ed76cc76039dd640d0525a1cde3f984e743ae93"
+    },
+    {
+      "file": "20260920080000_included_toppings.sql",
+      "sha256": "e694b9469ad5ed4790fe29dbf3d8e7c10f844a9b2967b1e16c10fe8a9eb47c55"
+    },
+    {
+      "file": "20260921080000_phone_workflow_hardware.sql",
+      "sha256": "8682468f4ca8ca5d136790de491396e74ee8ae8b3c7c058d73c0f9660699d4a8"
+    },
+    {
+      "file": "20260922080000_draft_sync_printing_pilot.sql",
+      "sha256": "07da50ae63a712a83a2f1bdaad952a1c96117d849977174ffb23f5dbe5c1a48c"
+    },
+    {
+      "file": "20260923080000_store_printers_print_station.sql",
+      "sha256": "911dfbc2abbe3f062392080bb58f4206c66e9c450228002ed4b4bf8153bd4316"
+    },
+    {
+      "file": "20260923090000_print_station_release.sql",
+      "sha256": "5936fcacc5378a3a3323d6d84d05d7cb55934c5a2b81d498b091e6dc0da6a9c2"
+    },
+    {
+      "file": "20260924080000_delivery_receipts_and_receipt_requests.sql",
+      "sha256": "94d37a9ebcc408a5cd8f80591b6699314292a36321bfb06b6674afefcc40cc42"
+    },
+    {
+      "file": "20260925080000_extra_sauce_portions.sql",
+      "sha256": "5895d2151cdbc886fd8438879e741d33648aa9f9cc86ea1b71320991a429ad15"
+    },
+    {
+      "file": "20260926080000_fix_hardware_settings_save.sql",
+      "sha256": "0679a0b0fab533206ed748efb11b471f0c36cbff4b68136f31c65ced885f3a4f"
+    },
+    {
+      "file": "20260927080000_menu_modifier_cleanup.sql",
+      "sha256": "37e5b523ebab3dbf009ccd5f152a74e0342092a424ab8c41b75cb83fab4b68e0"
+    },
+    {
+      "file": "20260928080000_double_toppings_and_name_toppings.sql",
+      "sha256": "d15c6aa89fa01ddccb0f815904ef7fef7f0477a0f374dbd102bac3908c552545"
+    },
+    {
+      "file": "20260929080000_card_checkout_without_test_mode.sql",
+      "sha256": "7e4ba0bd10d136b07717c5d12dfe7f776455ad8e7b4acc04848336b8d3979e35"
+    },
+    {
+      "file": "20260929090000_stripe_online_payments.sql",
+      "sha256": "d9689ec4147bfedd98d0de2158d24ee0cd913368da1a2d96fdc6ce87c6323d52"
+    },
+    {
+      "file": "20260930080000_pos_payments_drawer_kick.sql",
+      "sha256": "a02ad4e771f381b1ddf3442784a1efc7cce27258420620e6e3bf53875e11a225"
+    },
+    {
+      "file": "20260930090000_pos_keyed_card_and_delivery_cash.sql",
+      "sha256": "dc4cb1bdb2b034070ec94e43c8f8188bd472d388d497d96aad4ecd42ef4b3f0b"
+    },
+    {
+      "file": "20261001080000_personal_offers_and_links.sql",
+      "sha256": "12e05d63948c3cbb421d1fe53a0956b1e0d1d56d7d61c271d48363681560d56b"
+    },
+    {
+      "file": "20261002080000_phase1_core_tenancy.sql",
+      "sha256": "75c02d47d951878a135bb5e23d689031f0ab2d72cb5f016271e9d4c83b7b3c8b"
+    },
+    {
+      "file": "20261003080000_phase2_waynes_operational_backfill.sql",
+      "sha256": "7e469f342e44c74be998c08ae70350fe82ddd2713b4a85ff4dca09760bdb923c"
+    },
+    {
+      "file": "20261004080000_phase3_workspace_rls_hardening.sql",
+      "sha256": "86e55c70c37aacf9cb6705e4cc3e9bbd7ff80c5d0c3295a1df73df5dbf73316b"
+    },
+    {
+      "file": "20261005080000_phase4_workspace_location_configuration.sql",
+      "sha256": "8823b06e927dfd71626fb6c8bb15adf4f43aeb848acf3d90a9eb23e61f708e93"
+    },
+    {
+      "file": "20261006080000_phase4_1_platform_fixes.sql",
+      "sha256": "6aba81c9166b21ed7846522f3453ba2d41525063d23e5b08a975a0553266fa07"
+    },
+    {
+      "file": "20261007080000_phase5_workspace_shell_service_gating.sql",
+      "sha256": "889929497d211110e8093912f895ce8cead42541b4198893d19cf7ca0bd5fb9c"
+    },
+    {
+      "file": "20261008080000_phase6_platform_admin_foundation.sql",
+      "sha256": "0e8b46fd093999238ac7f42a9256e81e2030ad121430292de7677c1387ec60f5"
+    },
+    {
+      "file": "20261009080000_phase7_crm_messaging_tenancy.sql",
+      "sha256": "0e7f03e424a9dcfc904272b2e7dee720f179407f42ed0a40ac5d52163a8eb079"
+    },
+    {
+      "file": "20261010080000_phase8_events_automations.sql",
+      "sha256": "be0f9cf7b437245bb51c4d5f540b0d8bee23517451db3ff35be0f24468f741a5"
+    },
+    {
+      "file": "20261011080000_phase9_integrations_payment_connectors.sql",
+      "sha256": "d0a6cd3d493965361d044a07323b214e2f58d26a260f507a4c8aa486ab574316"
+    },
+    {
+      "file": "20261012080000_phase10_hardware_devices.sql",
+      "sha256": "98acdf5533b4e7d6b07b596f03c77e72b5ec59e4766ec08d7ff9cab3d47b25c1"
+    },
+    {
+      "file": "20261013080000_phase11_billing_equipment.sql",
+      "sha256": "9f5595098e0788034e6b104d54494f59299e7bf91a47b4a45067afbb261e5859"
+    },
+    {
+      "file": "20261014080000_phase12_add_business_provisioning.sql",
+      "sha256": "aca2439626b9302c4ad2a1b3fc88428f1d1e7de49ad1eec31602db8040d88cbb"
+    },
+    {
+      "file": "20261015080000_phase13_multi_tenant_storefront.sql",
+      "sha256": "faa87a67af3f10595c2ba28596c42ad9316fa51d0e618225183ae9ed85f5687a"
+    },
+    {
+      "file": "20261016080000_phase14_regression_hardening.sql",
+      "sha256": "89db878b3550b4742402faae639d71ec562efd5b12ed6f3164a47668da1ec061"
+    },
+    {
+      "file": "20261017080000_waynes_live_stripe_online_checkout.sql",
+      "sha256": "09686b124a3c596e622aa3104eee1af2b7db712743c22278f61206388e540df1"
+    },
+    {
+      "file": "20261018080000_promotion_delivery_once.sql",
+      "sha256": "3621d90da95347f144edd3ab36ce41fb1e8d2824c82c7c5bcd278b879af64d2b"
+    },
+    {
+      "file": "20261018080000_stripe_reader_m2.sql",
+      "sha256": "ea0c7d32bfe4b4a4bf9ca4ad0599b457f0fa77b097320fae688277334764b8d3"
+    },
+    {
+      "file": "20261019080000_allow_stripe_terminal_m2.sql",
+      "sha256": "9821adf1153588fa98629819cb60ad3588b8b46d90b285e3935cec25a86fb48d"
+    },
+    {
+      "file": "20261020080000_allow_stripe_terminal_in_legacy_mirror.sql",
+      "sha256": "dd0eadd95065d90bdb3f5491112d648595e489f4308740445f4186ec180fb4b2"
+    },
+    {
+      "file": "20261021080000_pos_device_events.sql",
+      "sha256": "24b1d96d1375f2b7db9091706653bcbddbc529e7e053afa92ff4f2f76bfd344a"
+    },
+    {
+      "file": "20261021090000_pos_reader_staff_can_charge.sql",
+      "sha256": "db734f6d9d2e862df9d173d61e636bf2a781b7b01adfd0c6d022e82f8b81526c"
+    },
+    {
+      "file": "20261022080000_grant_read_location_configs.sql",
+      "sha256": "45f0e3c47309417521e1a51646047e0cad951844091243f6138198ea77a148a7"
+    },
+    {
+      "file": "20261023080000_category_options.sql",
+      "sha256": "d07dc0acccd84dcd3b63b1e7339a9def9fc7921fac4736b49347d65f61a05ab0"
+    },
+    {
+      "file": "20261024080000_pos_rush_orders_test_orders_drawer.sql",
+      "sha256": "b828a89c16c3649c8d634bf86366718b339b1df68d0c081aa3a64c4d0ae91c67"
+    },
+    {
+      "file": "20261025080000_customer_display_driver_cashout.sql",
+      "sha256": "511d8014144ade93492634539128f0da4cba480ac09cfa23d309caccc8a4071c"
+    },
+    {
+      "file": "20261026080000_delivery_tip_adjust_test_payments_display.sql",
+      "sha256": "82963b63f78f62914630d00dcc19046d1c88452d42fed1b2024b21a734fc39a7"
+    },
+    {
+      "file": "20261027080000_staff_pins_admin_lock.sql",
+      "sha256": "1b1e2e90d76b0d00ed0015c59e29dbe1235c56f5dc83c7e7276c60b316704ab5"
+    },
+    {
+      "file": "20261028080000_included_portions_per_size.sql",
+      "sha256": "018eec7d57b3349d3a9a0c0856d487a2ff2d8fe1638f26861e5cbe6adba90045"
+    },
+    {
+      "file": "20261029080000_cash_only_drawer_dollar_tips.sql",
+      "sha256": "63c1ec94c111a246e832eed7e4c8288aabe3ba0fcdb5d232578e6760a10eecd9"
+    },
+    {
+      "file": "20261029090000_purge_archived_menu.sql",
+      "sha256": "cb01f7ae842dbdb199c3cf0427000ddd3863fa070142b11b5db834810b365939"
+    },
+    {
+      "file": "20261029100000_slips_show_paid.sql",
+      "sha256": "fe08d9b471aeb565a71ef14a922a3a639730179420227402a01013ff612d4c37"
+    },
+    {
+      "file": "20261029110000_pos_day_orders.sql",
+      "sha256": "5c099e58d7eea3db85af5b35a593735838943e3f8b8501282d554c8e147e4316"
+    },
+    {
+      "file": "20261029120000_salad_dressing_merge_extra_meats.sql",
+      "sha256": "6f762bf6851e6081cd7a20f89fe30bb22c5e5be142db2ed502eab22d31a48f85"
+    },
+    {
+      "file": "20261029130000_salad_extra_bread.sql",
+      "sha256": "d666c9fab3e329881bfe16c8ae9343f1553d62d0b2e37dc269b01cba6f38816f"
+    },
+    {
+      "file": "20261030080000_pos_open_items.sql",
+      "sha256": "fbc12f95edc5521c35faf0868257c81cd049fb00fe44d4a88b1b58f6cd0a4574"
+    },
+    {
+      "file": "20261030090000_day_closeout.sql",
+      "sha256": "40f936125c9ebfbc293afcd3c995be067a1e4476555fc5064d1c6a62c8212fd9"
+    },
+    {
+      "file": "20261030100000_tip_adjust_everywhere.sql",
+      "sha256": "45b81bd8212104db914e5da5f166387df11299d83dff30d82dad08c9a5c27345"
+    },
+    {
+      "file": "20261030110000_no_required_options.sql",
+      "sha256": "b38602380d9fafd6145607ddd63464097ee04dc48ad824ac997b1c9ede681ca0"
+    },
+    {
+      "file": "20261031080000_daily_numbers_add_items_tip_payout.sql",
+      "sha256": "53db67399020f1782d5cb7724e6c90a5bc71338bc8dfb491ccc36b9e8672aa40"
+    },
+    {
+      "file": "20261101080000_specials_colors_discounts_one_order.sql",
+      "sha256": "2ae03f58fe31fbd63f0b0a44b61f5becd674735038157d44eee74ff8f8d8adb7"
+    },
+    {
+      "file": "20261102080000_free_cheese_sauce_extras_charged.sql",
+      "sha256": "f0be793d5a82927ecc37a29f4e5c48c7a5dc821e057cb6d3e3a1c38620015fa8"
+    },
+    {
+      "file": "20261103080000_kitchen_ticket_waits_for_payment.sql",
+      "sha256": "76827ee3be66936f4cc7708520cff8aeea3b981f450c0f6503136db88d0983ea"
+    },
+    {
+      "file": "20261103090000_delivery_card_tip_room.sql",
+      "sha256": "d2464fbc4f9ad7f543287977acefa0ddd883d57326f83daf3e8def1c448ccb4a"
+    },
+    {
+      "file": "20261104080000_specials_pos_only_auto_add_payment_records_delivery_report.sql",
+      "sha256": "ccef49a16bae964adcc057dc4072f732ed3240e7102413a13f097fb19601ec4d"
+    },
+    {
+      "file": "20261105080000_special_price_beside_regular.sql",
+      "sha256": "339f5864d0ae631cf0c70de6f88e1203836234b1ad0fb4cc40949e4f048c0ee7"
+    },
+    {
+      "file": "20261106080000_pizza_halves_sizes_beverages.sql",
+      "sha256": "6a18e28ee620506011277ad7289af8900089c4f758c2dacfa2ba9971606b6fd7"
+    }
+  ]
+}

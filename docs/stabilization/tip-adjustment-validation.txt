@@ -1,0 +1,217 @@
+FINAL LOCAL VERIFICATION (exit 0)
+
+> waynes-pizza-pos@0.1.0 verify
+> npm run lint && npm run typecheck && npm run test && npm run build
+
+
+> waynes-pizza-pos@0.1.0 lint
+> eslint . --max-warnings=0
+
+
+> waynes-pizza-pos@0.1.0 typecheck
+> tsc --noEmit
+
+
+> waynes-pizza-pos@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.0 /Users/youssefhanafy/Downloads/hanafy-retention-v1
+
+
+ Test Files  107 passed (107)
+      Tests  660 passed (660)
+   Start at  13:04:14
+   Duration  23.98s (tests 94%, import 4%, transform 2%)
+
+    Isolate  107 workers spawned · ~152ms startup each (spawn + environment, per file)
+             at least ~1.65s faster with isolate: false — reuses workers across files instead of one per file
+
+
+> waynes-pizza-pos@0.1.0 build
+> next build
+
+▲ Next.js 16.3.4 (Turbopack)
+- Environments: .env.local
+✓ Running next.config.ts took 80ms
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1513ms
+  Running TypeScript ...
+  Finished TypeScript in 1409ms ...
+  Collecting page data using 9 workers ...
+  Generating static pages using 9 workers (0/42) ...
+  Generating static pages using 9 workers (10/42) 
+  Generating static pages using 9 workers (20/42) 
+  Generating static pages using 9 workers (31/42) 
+✓ Generating static pages using 9 workers (42/42) in 179ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /about
+├ ƒ /admin
+├ ƒ /admin/audit
+├ ƒ /admin/automations
+├ ƒ /admin/automations/[automationId]
+├ ƒ /admin/calendar
+├ ƒ /admin/cash
+├ ƒ /admin/customers
+├ ƒ /admin/customers/[id]
+├ ƒ /admin/delivery
+├ ƒ /admin/discounts
+├ ƒ /admin/hardware
+├ ƒ /admin/hardware/save
+├ ƒ /admin/integrations
+├ ƒ /admin/marketing
+├ ƒ /admin/marketing/campaigns/[campaignId]
+├ ƒ /admin/menu
+├ ƒ /admin/menu/categories/[id]/options
+├ ƒ /admin/menu/items/[id]
+├ ƒ /admin/menu/new
+├ ƒ /admin/menu/photos
+├ ƒ /admin/menu/specials
+├ ƒ /admin/orders
+├ ƒ /admin/orders/[id]
+├ ƒ /admin/payments
+├ ƒ /admin/pilot
+├ ƒ /admin/printing
+├ ƒ /admin/promotions
+├ ƒ /admin/reports
+├ ƒ /admin/segments
+├ ƒ /admin/settings
+├ ƒ /admin/staff
+├ ƒ /admin/tips
+├ ƒ /api/admin-lock
+├ ƒ /api/driver
+├ ƒ /api/integrations/hanafy/marketing-removal
+├ ƒ /api/integrations/hanafy/worker
+├ ƒ /api/kitchen
+├ ƒ /api/messaging/dispatch
+├ ƒ /api/messaging/inbound
+├ ƒ /api/orders
+├ ƒ /api/orders/status
+├ ƒ /api/payments/card
+├ ƒ /api/payments/intent
+├ ƒ /api/payments/intent/confirm
+├ ƒ /api/payments/webhooks/[key]
+├ ƒ /api/phone/board
+├ ƒ /api/phone/calls
+├ ƒ /api/phone/calls/[id]/action
+├ ƒ /api/phone/events
+├ ƒ /api/pos/clock
+├ ƒ /api/pos/closeout
+├ ƒ /api/pos/customers
+├ ƒ /api/pos/customers/[id]/orders
+├ ƒ /api/pos/day-orders
+├ ƒ /api/pos/delivery
+├ ƒ /api/pos/delivery/cashout
+├ ƒ /api/pos/delivery/day-report
+├ ƒ /api/pos/device-log
+├ ƒ /api/pos/discounts
+├ ƒ /api/pos/display
+├ ƒ /api/pos/drafts
+├ ƒ /api/pos/drafts/[id]/close
+├ ƒ /api/pos/drafts/[id]/take
+├ ƒ /api/pos/drawer
+├ ƒ /api/pos/keyed-card/confirm
+├ ƒ /api/pos/keyed-card/intent
+├ ƒ /api/pos/open-orders
+├ ƒ /api/pos/orders
+├ ƒ /api/pos/orders/[id]/abandon
+├ ƒ /api/pos/orders/[id]/items
+├ ƒ /api/pos/orders/[id]/print
+├ ƒ /api/pos/orders/[id]/receipt
+├ ƒ /api/pos/orders/[id]/release-print
+├ ƒ /api/pos/orders/[id]/signature
+├ ƒ /api/pos/orders/[id]/tip
+├ ƒ /api/pos/payments
+├ ƒ /api/pos/stripe-terminal/cancel
+├ ƒ /api/pos/stripe-terminal/confirm
+├ ƒ /api/pos/stripe-terminal/connection-token
+├ ƒ /api/pos/stripe-terminal/intent
+├ ƒ /api/pos/stripe-terminal/location
+├ ƒ /api/pos/terminal
+├ ƒ /api/pos/test-orders
+├ ƒ /api/pos/test-payment
+├ ƒ /api/pos/tips
+├ ƒ /api/pos/tips/auto
+├ ƒ /api/reports/export
+├ ƒ /api/rewards
+├ ƒ /api/rewards/offers
+├ ƒ /api/version
+├ ƒ /api/webhooks/square
+├ ƒ /api/webhooks/stripe
+├ ƒ /auth/callback
+├ ƒ /auth/password-login
+├ ƒ /checkout
+├ ƒ /contact
+├ ƒ /driver
+├ ƒ /kitchen
+├ ƒ /login
+├ ƒ /menu
+├ ƒ /offers
+├ ƒ /order
+├ ƒ /order/[id]
+├ ƒ /platform
+├ ƒ /platform/audit
+├ ƒ /platform/billing
+├ ƒ /platform/workspaces
+├ ƒ /platform/workspaces/[workspaceSlug]
+├ ƒ /platform/workspaces/[workspaceSlug]/audit
+├ ƒ /platform/workspaces/[workspaceSlug]/billing
+├ ƒ /platform/workspaces/[workspaceSlug]/domains
+├ ƒ /platform/workspaces/[workspaceSlug]/equipment
+├ ƒ /platform/workspaces/[workspaceSlug]/hardware
+├ ƒ /platform/workspaces/[workspaceSlug]/health
+├ ƒ /platform/workspaces/[workspaceSlug]/integrations
+├ ƒ /platform/workspaces/[workspaceSlug]/messaging
+├ ƒ /platform/workspaces/[workspaceSlug]/services
+├ ƒ /platform/workspaces/[workspaceSlug]/setup
+├ ƒ /platform/workspaces/[workspaceSlug]/users
+├ ƒ /platform/workspaces/new
+├ ƒ /pos
+├ ƒ /pos/admin-pin
+├ ƒ /pos/display
+├ ƒ /pos/display/manifest.webmanifest
+├ ƒ /privacy
+├ ƒ /r/[key]
+├ ƒ /rewards
+├ ƒ /robots.txt
+├ ƒ /sitemap.xml
+├ ƒ /terms
+├ ƒ /unauthorized
+├ ƒ /w
+├ ƒ /w/[workspaceSlug]
+└ ƒ /w/[workspaceSlug]/billing
+
+
+ƒ Proxy (Middleware)
+
+ƒ  (Dynamic)  server-rendered on demand
+
+
+
+EXISTING PGTAP SUITE — BLOCKED BEFORE TEST EXECUTION
+
+> waynes-pizza-pos@0.1.0 test:db
+> supabase test db
+
+Connecting to local database...
+{"_tag":"Error","error":{"code":"LegacyDbConnectError","message":"failed to connect to postgres: failed to connect to `host=127.0.0.1 user=postgres database=postgres`: dial error (connect ECONNREFUSED 127.0.0.1:54322)","suggestion":"Make sure Docker is running, then run: supabase start"}}
+
+
+EXISTING BROWSER ACCEPTANCE — SKIPPED, NOT PASSED
+
+> waynes-pizza-pos@0.1.0 test:e2e
+> playwright test
+
+
+Running 1 test using 1 worker
+
+  -  1 [chromium] › e2e/phase0-5.spec.ts:106:3 › Phase 0–5 staging vertical slice › creates, reconciles, and operates one online and POS order for each core path
+
+  1 skipped

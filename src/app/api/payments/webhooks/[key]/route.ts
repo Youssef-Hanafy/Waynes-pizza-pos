@@ -1,3 +1,4 @@
+import { isTipSuccessWebhook } from "@/lib/payments/stripe-webhook";
 import { logger } from "@/lib/logging/logger";
 import { paymentConnectionSchema } from "@/lib/payments/capabilities";
 import { applyProviderWebhook, buildWebhookProvider, webhookSignature } from "@/lib/payments/registry";
@@ -44,7 +45,16 @@ export async function POST(request: Request, context: { params: Promise<{ key: s
     return new Response(null, { status: 500 });
   }
   const stored = recorded as { duplicate: boolean; id?: string } | null;
-  if (!stored || stored.duplicate || !stored.id) return new Response(null, { status: 200 });
+  if (!stored) return new Response(null, { status: 500 });
+  if (stored.duplicate) {
+    if (!(connection.provider === "stripe") || !envelope.signatureVerified || !isTipSuccessWebhook(envelope.eventType, envelope.payload)) return new Response(null, { status: 200 });
+    // A prior delivery may have been recorded before its database write failed.
+    const { data: previous, error: lookupError } = await supabase.from("payment_webhook_events")
+      .select("id").eq("workspace_id", connection.workspace_id).eq("provider", "stripe").eq("event_id", envelope.eventId).maybeSingle();
+    if (lookupError || !previous) return new Response(null, { status: 500 });
+    stored.id = previous.id;
+  }
+  if (!stored.id) return new Response(null, { status: 500 });
 
   if (!envelope.signatureVerified) {
     logger.warn("payment_webhook.bad_signature", { connection_id: connection.id, event_type: envelope.eventType });

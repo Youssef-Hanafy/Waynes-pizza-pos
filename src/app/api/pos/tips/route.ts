@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
-import { spokenDatabaseMessage } from "@/lib/errors/database";
 import { logger } from "@/lib/logging/logger";
 import { captureHeldCards } from "@/lib/payments/tip-capture";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
@@ -43,15 +42,11 @@ export async function POST(request: Request) {
   });
   if (!result.captures.length) return Response.json({ error: result.problems.join(" ") || "No card could be charged.", problems: result.problems }, { status: 502 });
 
-  const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.rpc("wayne_pos_apply_card_tips", { captures: result.captures, via: "pos_tips" });
-  if (error) {
-    logger.error("pos.tip_apply_failed", error, { captured: result.captures.length });
-    return Response.json({
-      error: `${spokenDatabaseMessage(error, "The tips could not be saved.")} The cards were already charged — press Charge again to finish saving (nobody is charged twice).`,
-      problems: result.problems,
-    }, { status: 400 });
-  }
-  const saved = z.object({ count: z.number().int(), tips_cents: z.number().int() }).safeParse(data);
-  return Response.json({ charged: saved.success ? saved.data.count : result.captures.length, tips_cents: saved.success ? saved.data.tips_cents : 0, problems: result.problems }, { headers: { "Cache-Control": "no-store" } });
+  // The coordinator has already committed the provider receipt and order tip
+  // atomically. Re-applying here would incorrectly report zero on every success.
+  return Response.json({
+    charged: result.captures.length,
+    tips_cents: result.captures.reduce((sum, capture) => sum + (capture.is_test ? 0 : capture.tip_cents), 0),
+    problems: result.problems,
+  }, { headers: { "Cache-Control": "no-store" } });
 }

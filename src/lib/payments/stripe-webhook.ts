@@ -5,12 +5,20 @@ type Intent = {
   id?: string;
   status?: string;
   amount?: number;
+  amount_received?: number;
   metadata?: Record<string, string>;
   charges?: { data?: Array<{ receipt_url?: string; payment_method_details?: { card?: { brand?: string; last4?: string } } }> };
 };
 
+/** Only verified tip-success events may bypass the legacy duplicate guard. */
+export function isTipSuccessWebhook(eventType: string, payload: Record<string, unknown>) {
+  const intent = readStripeWebhookObject(payload) as Intent;
+  return eventType === "payment_intent.succeeded" && intent.status === "succeeded"
+    && (intent.metadata?.wayne_tip_adjust === "true" || Boolean(intent.metadata?.wayne_tip_operation));
+}
+
 /** Settles a verified Stripe PaymentIntent without trusting browser input. */
-export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType: string, payload: Record<string, unknown>) {
+export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType: string, payload: Record<string, unknown>, workspaceId?: string) {
   if (!eventType.startsWith("payment_intent.")) return;
   const intent = readStripeWebhookObject(payload) as Intent;
   if (!intent.id) return;
@@ -20,10 +28,21 @@ export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType
   // the same intent takes the next card; it is not a failed payment (the POS
   // cancels it if the customer pays another way).
   if (status === "failed" && intent.metadata?.wayne_entry === "terminal") return;
-  // A card held for its tip (owner, 2026-10-13) is captured by the POS — Tips,
-  // driver cash-out or the 4:30 am safety net — which records order + tip in
-  // the same step.  Settling it here first would hide the tip, so leave it.
-  if (status === "captured" && intent.metadata?.wayne_tip_adjust === "true") return;
+  // Recover even when the request died after Stripe succeeded. SQL matches
+  // the stored intent, workspace and frozen amount; repeated events are safe.
+  if (isTipSuccessWebhook(eventType, payload)) {
+    if (!workspaceId) throw new Error("Tip webhook has no workspace scope");
+    const card = intent.charges?.data?.[0]?.payment_method_details?.card;
+    const { data, error } = await supabase.rpc("wayne_reconcile_tip_webhook", {
+      target_workspace_id: workspaceId, provider_id: intent.id,
+      captured_cents: intent.amount_received ?? intent.amount ?? null,
+      card_brand: card?.brand ?? null, card_last4: card?.last4 ?? null,
+    });
+    if (error) throw new Error(error.message);
+    if (!data && intent.metadata?.wayne_tip_operation) throw new Error("Tip operation is not yet bound; retry reconciliation");
+    // Legacy held intents without a durable operation keep their existing behavior.
+    return;
+  }
   // An approval replaced at cash-out by one charge for order + tip: the payment
   // now points at the new charge, so this cancellation must not void it.
   if (intent.metadata?.wayne_replaced_by) return;

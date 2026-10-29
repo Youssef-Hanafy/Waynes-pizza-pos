@@ -1,0 +1,77 @@
+
+ RUN  v5.0.0 /Users/youssefhanafy/Downloads/hanafy-retention-v1
+
+stderr | tests/tip-adjustment-concurrency.test.ts > tip adjustment across independent PostgreSQL sessions > recovers a lost successful replacement response from another screen without charging again
+{"timestamp":"2026-10-29T16:42:22.675Z","level":"error","message":"payments.tip_capture_failed","order_id":"d795a65e-8644-483c-883f-6e80665253a4","prefix":"tips","error_name":"PaymentProviderError","error_message":"Lost Stripe response"}
+
+ ❯ tests/tip-adjustment-concurrency.test.ts (3 tests | 3 failed) 1136ms
+   ❯ tip adjustment across independent PostgreSQL sessions (3)
+     × allows at most one charge when Tips and driver cash-out race 72ms
+     × does not capture the original hold when scheduled capture races a replacement 65ms
+     × recovers a lost successful replacement response from another screen without charging again 123ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tip-adjustment-concurrency.test.ts > tip adjustment across independent PostgreSQL sessions > allows at most one charge when Tips and driver cash-out race
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/tip-adjustment-concurrency.test.ts:58:21
+     56|     const results = await Promise.all([run(payment.orderId, "tips"), r…
+     57|     expect(results.some((result) => result.captures.length === 1)).toB…
+     58|     expect(charges).toHaveLength(1);
+       |                     ^
+     59|   });
+     60|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/tip-adjustment-concurrency.test.ts > tip adjustment across independent PostgreSQL sessions > does not capture the original hold when scheduled capture races a replacement
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/tip-adjustment-concurrency.test.ts:64:21
+     62|     const payment = await fixture();
+     63|     await Promise.all([run(payment.orderId, "tips"), run(payment.order…
+     64|     expect(charges).toHaveLength(1);
+       |                     ^
+     65|   });
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/tip-adjustment-concurrency.test.ts > tip adjustment across independent PostgreSQL sessions > recovers a lost successful replacement response from another screen without charging again
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/tip-adjustment-concurrency.test.ts:73:21
+     71|     const result = await run(payment.orderId, "driver-cashout");
+     72|     expect(result.captures).toHaveLength(1);
+     73|     expect(charges).toHaveLength(1);
+       |                     ^
+     74|   });
+     75| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  12:42:21
+   Duration  1.23s (tests 96%, transform 2%, import 2%)
+
