@@ -54,8 +54,8 @@ const getStorefrontForHost = cache(async (host: string): Promise<Storefront> => 
   const settings = settingsResult.error || !settingsParse.success ? null : settingsParse.data;
   if (!workspace || !settings) {
     logger.warn("storefront.resolve_failed", { host, workspace_error: workspaceResult.error?.code ?? null, settings_error: settingsResult.error?.code ?? null,
-      workspace_fields: workspaceParse.success ? [] : workspaceParse.error.issues.map((issue) => issue.path.join(".")),
-      settings_fields: settingsParse.success ? [] : settingsParse.error.issues.map((issue) => issue.path.join(".")) });
+      workspace_fields: workspaceParse.success ? "" : workspaceParse.error.issues.map((issue) => issue.path.join(".")).join(","),
+      settings_fields: settingsParse.success ? "" : settingsParse.error.issues.map((issue) => issue.path.join(".")).join(",") });
     return { known: false, workspace: null, settings: defaultSettings, services: [] };
   }
   return { known: true, workspace, settings, services: workspace.enabled_services };

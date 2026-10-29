@@ -50,6 +50,18 @@ describe("Stripe ordering and retained replacement reconciliation (real PostgreS
       expect((await db.admin.query("select count(*)::int n from public.order_events where order_id=$1 and event_type='payment.tip_captured'", [f.orderId])).rows[0].n).toBe(1);
     } finally { await db.admin.query("update public.pos_tip_capture_control set execution_enabled=true"); }
   });
+  it("acknowledges a bound canceled replacement without reverting its reserved ledger", async () => {
+    const f=await replacement();
+    const latest={...provider(f.replacementId,"voided",f.amount+500),metadata:{wayne_tip_operation:f.operationId}};
+    await expect(deliver(f.replacementId,latest,"payment_intent.canceled")).resolves.toBeUndefined();
+    expect((await ledger(f.paymentId)).status).toBe("authorized");
+  });
+  it("retries an unbound captured operation rather than acknowledging lost money", async () => {
+    const f=await db.fixture();
+    const latest={...provider(f.originalId,"captured",f.amount),metadata:{wayne_tip_operation:randomUUID(),wayne_tip_adjust:"true"}};
+    await expect(deliver(f.originalId,latest,"payment_intent.succeeded")).rejects.toThrow("not yet bound");
+    expect((await ledger(f.paymentId)).status).toBe("authorized");
+  });
   it("does not let a canceled or failed snapshot roll a captured payment back", async () => {
     const f = await db.fixture(); await db.admin.query("update public.payments set status='captured' where id=$1", [f.paymentId]);
     await deliver(f.originalId, provider(f.originalId, "captured", f.amount), "payment_intent.canceled", "canceled");

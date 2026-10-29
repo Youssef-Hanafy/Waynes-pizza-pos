@@ -36,7 +36,9 @@ export async function applyStripeWebhookEvent(
     },
   });
   if (error) throw new Error(error.message);
-  if (current.metadata?.wayne_tip_operation && !(data as { reconciled?: boolean } | null)?.reconciled) {
+  const outcome = data as { reconciled?: boolean; deferred?: boolean; operation_id?: string } | null;
+  const boundDeferred = current.status !== "captured" && outcome?.deferred && outcome.operation_id === current.metadata?.wayne_tip_operation;
+  if (current.metadata?.wayne_tip_operation && !outcome?.reconciled && !boundDeferred) {
     throw new Error("Tip operation is not yet bound; retry reconciliation");
   }
 }
