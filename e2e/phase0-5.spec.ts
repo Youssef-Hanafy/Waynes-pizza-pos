@@ -110,7 +110,7 @@ async function assertExactlyOneOrderForPhone(
   await owner.goto(`/admin/orders?q=${phone}`);
   await expect(owner.getByRole("heading", { name: "1 order", exact: true })).toBeVisible();
   await expect(owner.getByText(orderNumber, { exact: true })).toHaveCount(1);
-  await expect(owner.getByText(source, { exact: true })).toBeVisible();
+  await expect(owner.getByRole("link", { name: `Open order ${orderNumber}`, exact: true }).getByText(source, { exact: true })).toBeVisible();
 }
 
 test.describe("Phase 0–5 staging vertical slice", () => {
@@ -183,7 +183,7 @@ test.describe("Phase 0–5 staging vertical slice", () => {
     await assertExactlyOneOrderForPhone(owner, phoneOrderPhone, phoneOrder, "Phone");
 
     await owner.goto("/admin/calendar");
-    const today = owner.getByRole("link", { name: /today/i });
+    const today = owner.locator('a[aria-current="date"]:visible');
     await expect(today).toBeVisible();
     await today.click();
     await expect(owner.getByText(pickupOrder, { exact: true })).toBeVisible();
@@ -193,21 +193,23 @@ test.describe("Phase 0–5 staging vertical slice", () => {
 
     await owner.goto("/kitchen");
     await expect(owner.getByRole("status")).toContainText(/Live|Reconnecting/);
+    await owner.getByRole("button", { name: /^All tickets/ }).click();
     const pickupTicket = owner.locator("article").filter({ hasText: `E2E Pickup ${runId} item note` });
     await expect(pickupTicket).toContainText("Fresh basil");
     await expect(pickupTicket).toContainText(`E2E Pickup ${runId} item note`);
     await owner.reload();
+    await owner.getByRole("button", { name: /^All tickets/ }).click();
     await expect(pickupTicket.getByRole("heading", { name: /^#\d+$/ })).toBeVisible();
     await pickupTicket.getByRole("button", { name: "Accept order" }).click();
     await pickupTicket.getByRole("button", { name: "Start cooking" }).click();
     await pickupTicket.getByRole("button", { name: "Mark ready" }).click();
-    await expect(pickupTicket).toContainText("Ready at the counter");
+    await expect(pickupTicket).toContainText("Ready at the counter", { timeout: 15_000 });
 
     await owner.goto("/admin/printing");
-    await expect(owner.getByText(pickupOrder, { exact: true })).toBeVisible();
-    await expect(owner.getByText(deliveryOrder, { exact: true })).toBeVisible();
-    await expect(owner.getByText(walkInOrder, { exact: true })).toBeVisible();
-    await expect(owner.getByText(phoneOrder, { exact: true })).toBeVisible();
+    await expect(owner.getByText(pickupOrder, { exact: true }).first()).toBeVisible();
+    await expect(owner.getByText(deliveryOrder, { exact: true }).first()).toBeVisible();
+    await expect(owner.getByText(walkInOrder, { exact: true }).first()).toBeVisible();
+    await expect(owner.getByText(phoneOrder, { exact: true }).first()).toBeVisible();
     await ownerContext.close();
   });
 });

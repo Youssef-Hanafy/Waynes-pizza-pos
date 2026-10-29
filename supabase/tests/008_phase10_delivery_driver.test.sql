@@ -115,7 +115,7 @@ select ok((select count(*)>=4 from public.order_events where order_id=current_se
 -- Owner analytics; a driver may not read them.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000001',true);
-select is(((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'delivered_count')),'1','owner metrics count the delivery');
+select is(((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'delivered_count')),((current_setting('phase10.metrics_before')::jsonb->'totals'->>'delivered_count')::integer+1)::text,'owner metrics count the delivery');
 select is((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'cash_collected_cents')::bigint,(current_setting('phase10.metrics_before')::jsonb->'totals'->>'cash_collected_cents')::bigint+current_setting('phase10.total')::bigint,'owner metrics add exactly this delivery cash to the retained ledger');
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000002',true);
 select throws_ok($$select public.wayne_delivery_metrics(current_date,current_date)$$,'42501','Report viewing permission required','a driver cannot read delivery analytics');
