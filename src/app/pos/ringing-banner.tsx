@@ -1,12 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { callerCardInfo } from "@/lib/phone/caller-display";
 import { callOnLine, type PhoneCallView } from "@/lib/phone/phone-state";
-import { usePhoneState } from "@/stores/phone-store";
+import { getTerminalLabel, usePhoneState } from "@/stores/phone-store";
+
+/**
+ * Which calls the box shows: every line still ringing, plus a call this
+ * register opened ("Open line now", or tapped on the Phone screen) whose order
+ * hasn't started yet — so going back to the ticket never makes the caller
+ * disappear (owner, 2026-10-29: "the caller ID box … sometimes just doesn't
+ * show up").  A call another register picked up is theirs and is not shown.
+ */
+export function bannerCalls(lines: readonly (PhoneCallView | null)[], me: { profileId: string; terminal: string }, hidden: ReadonlySet<string>): PhoneCallView[] {
+  return lines.filter((call): call is PhoneCallView => {
+    if (!call || hidden.has(call.key)) return false;
+    if (call.status === "incoming") return true;
+    if (call.status !== "selected") return false;
+    return !call.serverId || (Boolean(me.profileId) && call.claimedById === me.profileId) || (Boolean(call.claimedTerminal) && call.claimedTerminal === me.terminal);
+  });
+}
 
 type Props = {
+  /** The signed-in staff profile on this register. */
+  profileId: string;
   /** A ticket with items (or a payment) is in progress on this register: taking the call would close it. */
   busy: boolean;
   onTakeOrder: (call: PhoneCallView) => void;
@@ -20,15 +38,53 @@ type Props = {
  * takes the cashier off a ticket they are ringing up: with items on the ticket
  * it only shows who is calling.
  */
-export function RingingBanner({ busy, onTakeOrder, onOpenLine }: Props) {
+export function RingingBanner({ profileId, busy, onTakeOrder, onOpenLine }: Props) {
   const state = usePhoneState();
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  const ringing = state.lines
-    .map((line) => callOnLine(state, line.line))
-    .filter((call): call is PhoneCallView => call !== null && call.status === "incoming" && !hidden.has(call.key));
-  if (!ringing.length) return null;
+  const box = useRef<HTMLDivElement>(null);
+  const ringing = bannerCalls(state.lines.map((line) => callOnLine(state, line.line)), { profileId, terminal: getTerminalLabel() }, hidden);
+  const showing = ringing.length > 0;
 
-  return <div aria-live="assertive" className="shrink-0 border-b-4 border-wayne-ok bg-wayne-ok-soft" role="alert">
+  /*
+   * Always on top (owner, 2026-10-29: "if he's taking an order it just doesn't
+   * show up at all").  The box used to sit under any open window — the item's
+   * options, Discount, Open item, the drawer, the orders panel — so while
+   * ringing up a pizza the caller was hidden.  Now the box stays above them,
+   * and while it shows, those windows start just below it
+   * (html[data-pos-ringing] in globals.css) so nothing in them is covered.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!showing) {
+      root.removeAttribute("data-pos-ringing");
+      root.style.removeProperty("--pos-ring-bottom");
+      return;
+    }
+    const measure = () => {
+      const bottom = box.current ? Math.max(0, Math.round(box.current.getBoundingClientRect().bottom)) : 0;
+      root.style.setProperty("--pos-ring-bottom", `${bottom}px`);
+    };
+    measure();
+    root.setAttribute("data-pos-ringing", "");
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (observer && box.current) observer.observe(box.current);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    // A notice line appearing above the box moves it down without resizing it.
+    const settle = window.setInterval(measure, 1_000);
+    return () => {
+      window.clearInterval(settle);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+      root.removeAttribute("data-pos-ringing");
+      root.style.removeProperty("--pos-ring-bottom");
+    };
+  }, [showing]);
+
+  if (!showing) return null;
+
+  return <div aria-live="assertive" className="sticky top-0 z-[90] shrink-0 border-b-4 border-wayne-ok bg-wayne-ok-soft shadow-lg" ref={box} role="alert">
     {ringing.map((call) => {
       const info = callerCardInfo(call);
       return <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2" key={call.key}>

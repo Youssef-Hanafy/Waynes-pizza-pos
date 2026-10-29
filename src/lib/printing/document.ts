@@ -268,7 +268,7 @@ export function itemCount(items: readonly PrintDocument["items"][number][]) {
 export function buildKitchenTicket(doc: PrintDocument, routingCategories: readonly string[] = [], options: { onlyItemIds?: readonly string[]; updated?: boolean } = {}): PrintLayout | null {
   // Items added to an order whose ticket already printed (owner, 2026-10-13): only those go.
   const only = options.onlyItemIds ? new Set(options.onlyItemIds) : null;
-  const items = routeToKitchen(doc, routingCategories).filter((item) => !only || only.has(item.id));
+  const items = kitchenOrder(routeToKitchen(doc, routingCategories).filter((item) => !only || only.has(item.id)));
   if (!items.length) return null;
   const order = doc.order;
   const count = itemCount(items);
@@ -322,9 +322,92 @@ function clock(iso: string | null, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso)).replace(/\s?([AP])M$/, (_, half: string) => ` ${half.toLowerCase()}m`);
 }
 
+/*
+ * Kitchen slips print in the same order every time (owner, 2026-10-29: "the
+ * pizzas and then the dinners and then the appetizers and then the drinks …
+ * and then modifiers the same way, all of the no's at the top and then all the
+ * toppings").  Only the ORDER of the lines changes — the same lines, the same
+ * text size, the same slip length.  Receipts keep the order the items were rung.
+ *
+ * Items: by kind of food, read from the item's menu category name (so a new
+ * category such as "Specialty Pizza" still lands with the pizzas); anything
+ * that matches none of these prints just before the drinks.  Items of the same
+ * kind stay together by category, then in the order they were rung in.
+ */
+const KITCHEN_ITEM_ORDER: readonly RegExp[] = [
+  /pizza/i,
+  /calzone|stromboli/i,
+  /sub|wrap|sandwich|grinder|burger/i,
+  /dinner|pasta|kid/i,
+  /salad/i,
+  /appetizer|wing|finger|fries|side/i,
+];
+const KITCHEN_ITEM_OTHER = KITCHEN_ITEM_ORDER.length;
+const KITCHEN_ITEM_DRINKS = /beverage|drink|soda|juice|water/i;
+
+function kitchenItemRank(category: string | null) {
+  const name = category ?? "";
+  if (KITCHEN_ITEM_DRINKS.test(name)) return KITCHEN_ITEM_OTHER + 1;
+  const rank = KITCHEN_ITEM_ORDER.findIndex((pattern) => pattern.test(name));
+  return rank === -1 ? KITCHEN_ITEM_OTHER : rank;
+}
+
+/** The kitchen's order for a slip's items (stable: same input, same slip). */
+export function kitchenOrder<T extends { category: string | null }>(items: readonly T[]): T[] {
+  const firstSeen = new Map<string, number>();
+  items.forEach((item, index) => { const key = (item.category ?? "").trim().toLowerCase(); if (!firstSeen.has(key)) firstSeen.set(key, index); });
+  return items
+    .map((item, index) => ({ item, index, rank: kitchenItemRank(item.category), group: firstSeen.get((item.category ?? "").trim().toLowerCase()) ?? index }))
+    .sort((a, b) => a.rank - b.rank || a.group - b.group || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
+/*
+ * Options under an item: every "NO …" first, then by option group — the
+ * item's choice (pasta, side, filling), toppings and meats (whole pizza, then
+ * left half, then right half), vegetables, cheese, sauces, dressing, extras,
+ * and cooking instructions (toasted …) last.  Same kind of option keeps the
+ * order it was tapped in.
+ */
+const KITCHEN_MODIFIER_ORDER: readonly RegExp[] = [
+  /choice|filling|crispy or grilled|size|crust|style/i,
+  /topping|meat/i,
+  /vegetable|veggie/i,
+  /cheese/i,
+  /sauce/i,
+  /dressing/i,
+];
+const KITCHEN_MODIFIER_COOKING = /cooking|cook|instruction|toast|well done/i;
+
+function isRemovedOption(name: string) {
+  return name.trim().toUpperCase().startsWith("NO ");
+}
+
+function kitchenModifierRank(modifier: { name: string; group: string }) {
+  if (isRemovedOption(modifier.name)) return 0;
+  // "Cold Subs – Cheese" → "Cheese": the kind is after the dash when there is one.
+  const kind = modifier.group.split(/\s[–-]\s/).pop() ?? modifier.group;
+  if (KITCHEN_MODIFIER_COOKING.test(kind)) return KITCHEN_MODIFIER_ORDER.length + 3;
+  const rank = KITCHEN_MODIFIER_ORDER.findIndex((pattern) => pattern.test(kind));
+  return rank === -1 ? KITCHEN_MODIFIER_ORDER.length + 2 : rank + 1;
+}
+
+function halfRank(name: string) {
+  const upper = name.trim().toUpperCase();
+  return upper.startsWith("LEFT") ? 1 : upper.startsWith("RIGHT") ? 2 : 0;
+}
+
+/** The kitchen's order for one item's options (stable). */
+export function kitchenModifierOrder<T extends { name: string; group: string }>(modifiers: readonly T[]): T[] {
+  return modifiers
+    .map((modifier, index) => ({ modifier, index, rank: kitchenModifierRank(modifier), half: halfRank(modifier.name) }))
+    .sort((a, b) => a.rank - b.rank || a.half - b.half || a.index - b.index)
+    .map((entry) => entry.modifier);
+}
+
 /** "1 Large Cheese Pizza", then its options and note — what the cook needs, no prices. */
 function kitchenItemLines(item: PrintDocument["items"][number]): PrintLine[] {
-  const [first, ...rest] = itemLines(item, false);
+  const [first, ...rest] = itemLines({ ...item, modifiers: kitchenModifierOrder(item.modifiers) }, false);
   const name = `${item.quantity} ${item.variant ? `${item.variant} ` : ""}${item.name}`;
   return [first && first.kind === "text" ? { ...first, text: name } : { kind: "text", text: name, bold: true, tall: true }, ...rest];
 }

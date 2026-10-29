@@ -10,7 +10,7 @@ import type { PublicMenu } from "@/lib/menu/schemas";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { activeDraft, draftFromCall, draftHasContent, isDraftIdle } from "@/lib/orders/drafts";
 import { customerDetailsPatch } from "@/lib/orders/start-order";
-import { ringingCallsToOpen } from "@/lib/phone/phone-state";
+import { callOnLine, ringingCallsToOpen } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
 import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
@@ -186,7 +186,34 @@ export function PosApp(props: Props) {
     return sectionRef.current === "order" && isDraftIdle(activeDraft(state)) && !paymentPromptStore.get()
       && !state.drafts.some((draft) => draft.submitPending) && !unsettledOrder.id;
   };
-  useAppUpdate(idleOnNewOrder);
+  /*
+   * When a newer build is live, also reload from the order lists or an empty
+   * Phone screen (owner, 2026-10-29: "make sure the POS is running one page
+   * and is not bouncing between old and new").  The register used to update
+   * only from an empty New Order — but every ring opens the Phone screen by
+   * itself and it stays there, so on 10/28 the counter tablet ran the build it
+   * opened with all day while the server moved on: old screens talking to the
+   * new server.  Never with a call on a line, a payment, a ticket sending or
+   * an unsettled order, and only once nobody has touched the screen for a minute.
+   */
+  const lastTouch = useRef(0);
+  useEffect(() => {
+    const touched = () => { lastTouch.current = Date.now(); };
+    window.addEventListener("pointerdown", touched, true);
+    window.addEventListener("keydown", touched, true);
+    return () => { window.removeEventListener("pointerdown", touched, true); window.removeEventListener("keydown", touched, true); };
+  }, []);
+  const idleForUpdate = () => {
+    if (idleOnNewOrder()) return true;
+    const current = sectionRef.current;
+    if (current !== "today" && current !== "orders" && current !== "phone") return false;
+    const state = orderStore.get();
+    if (paymentPromptStore.get() || state.drafts.some((draft) => draft.submitPending) || unsettledOrder.id) return false;
+    const phone = phoneStore.get();
+    if (phone.lines.some((line) => callOnLine(phone, line.line) !== null)) return false;
+    return Date.now() - lastTouch.current > 60_000;
+  };
+  useAppUpdate(idleForUpdate);
   // The background menu refresh: only when nothing on screen could be lost (owner, 2026-10-28).
   const idleForRefresh = () => idleOnNewOrder() || sectionRef.current === "today" || sectionRef.current === "orders";
   const appBuild = useAppBuild();
@@ -295,7 +322,7 @@ export function PosApp(props: Props) {
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">🔒 Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
-    {callerIdEnabled && section !== "phone" ? <RingingBanner busy={ticketBusy} onOpenLine={(call) => openLineFromBanner(call.key)} onTakeOrder={(call) => void takeOrderFromBanner(call)} /> : null}
+    {callerIdEnabled && section !== "phone" ? <RingingBanner busy={ticketBusy} profileId={profileId} onOpenLine={(call) => openLineFromBanner(call.key)} onTakeOrder={(call) => void takeOrderFromBanner(call)} /> : null}
     {onlineAlerts.alerts.length ? <div className="flex shrink-0 flex-wrap items-center gap-3 bg-wayne-gold px-3 py-2 text-wayne-ink" role="alert">
       <span aria-hidden className="animate-bounce text-2xl">🔔</span>
       <p className="min-w-0 flex-1 font-black">

@@ -52,7 +52,25 @@ export function useHardware(hardware: HardwareSettings, options: { drafts?: bool
     // A local clock quiets cards nobody took (§34.6); it reads no server.
     const expiry = window.setInterval(() => phoneActions.expireStale(), 15_000);
     const status = window.setInterval(() => void runtime.refreshStatus(), 30_000);
+    /*
+     * Backstop for the caller ID box (owner, 2026-10-29: "sometimes the phone
+     * caller ID box just doesn't show up").  While the live connection is down
+     * the phone board is pulled every 15 s, so a ring recorded by the store
+     * bridge or another register still shows here; while it is live, once
+     * every 2 minutes to catch anything a silent drop missed.  Only while the
+     * screen is on.
+     */
+    let lastBoard = Date.now();
+    const backstop = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const every = runtime.cloud.isLive() ? 120_000 : 15_000;
+      if (Date.now() - lastBoard < every) return;
+      lastBoard = Date.now();
+      phoneActions.retryUnsynced();
+      void phoneActions.refresh();
+    }, 5_000);
     return () => {
+      window.clearInterval(backstop);
       alive = false;
       window.removeEventListener("online", back);
       document.removeEventListener("visibilitychange", visible);

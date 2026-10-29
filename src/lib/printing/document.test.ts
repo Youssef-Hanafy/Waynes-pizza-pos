@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { encodeDrawerKick, encodeEscPos } from "@/hardware/printers/escpos";
 import { renderLayoutHtml } from "@/hardware/printers/render-html";
 import { columnsFor, printerModel } from "@/hardware/printers/models";
-import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, layoutToText, routeToKitchen, type PrintDocument } from "./document";
+import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, kitchenModifierOrder, kitchenOrder, layoutToText, routeToKitchen, type PrintDocument } from "./document";
 
 const doc: PrintDocument = {
   store: { name: "Wayne's Pizza", address_line1: "93 West Boylston St", address_line2: "", city: "Worcester", state: "MA", postal_code: "01606", phone: "5085551000", timezone: "America/New_York" },
@@ -245,5 +245,51 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     expect(bytes[esc + 2]).toBe(0x01 | 0x08 | 0x10);
     expect(printerModel("epson-tm-u220b").fontB).toBe(true);
     expect(printerModel("epson-tm-t20iii").fontB).toBe(false);
+  });
+
+  it("prints kitchen slips in the same order every time: pizzas, subs, dinners, appetizers, drinks; NO options first (owner, 2026-10-29)", () => {
+    const item = (n: number, name: string, category: string | null, modifiers: PrintDocument["items"][number]["modifiers"] = []) => ({
+      id: `66000000-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`, name, variant: null, category, station: "kitchen", quantity: 1, line_total_cents: 100, instructions: "", modifiers,
+    });
+    const rung = [
+      item(1, "Coke", "Beverages"),
+      item(2, "Mozzarella Sticks", "Appetizers"),
+      item(3, "Chicken Parm Dinner", "Dinners"),
+      item(4, "Italian Sub", "Cold Subs", [
+        { name: "Toasted", group: "Cold Subs – Cooking Instructions", quantity: 1 },
+        { name: "Mayo", group: "Cold Subs – Sauces", quantity: 1 },
+        { name: "NO Onion", group: "Cold Subs – Vegetables", quantity: 1 },
+        { name: "Provolone Cheese", group: "Cold Subs – Cheese", quantity: 1 },
+        { name: "Hot Pepper", group: "Cold Subs – Vegetables", quantity: 1 },
+        { name: "NO Tomato", group: "Cold Subs – Vegetables", quantity: 1 },
+      ]),
+      item(5, "Two Topping Pizza", "Build Your Own Pizza", [
+        { name: "RIGHT ½ Onion", group: "Two Topping Pizza – Toppings", quantity: 1 },
+        { name: "Pepperoni", group: "Two Topping Pizza – Toppings", quantity: 1 },
+        { name: "LEFT ½ Mushrooms", group: "Two Topping Pizza – Toppings", quantity: 1 },
+      ]),
+      item(6, "Chips", "Chips"),
+      item(7, "BBQ Chicken Pizza", "Gourmet Pizza"),
+      item(8, "Cheese Pizza", "Build Your Own Pizza"),
+      item(9, "Greek Salad", "Salads"),
+    ];
+    expect(kitchenOrder(rung).map((entry) => entry.name)).toEqual([
+      "Two Topping Pizza", "Cheese Pizza", "BBQ Chicken Pizza", "Italian Sub", "Chicken Parm Dinner", "Greek Salad", "Mozzarella Sticks", "Chips", "Coke",
+    ]);
+    // Same items rung in another order: the same slip.
+    expect(kitchenOrder([...rung].reverse()).map((entry) => entry.category)).toEqual(kitchenOrder(rung).map((entry) => entry.category));
+    expect(kitchenModifierOrder(rung[3]!.modifiers).map((entry) => entry.name)).toEqual(["NO Onion", "NO Tomato", "Hot Pepper", "Provolone Cheese", "Mayo", "Toasted"]);
+    expect(kitchenModifierOrder(rung[4]!.modifiers).map((entry) => entry.name)).toEqual(["Pepperoni", "LEFT ½ Mushrooms", "RIGHT ½ Onion"]);
+
+    const text = layoutToText(buildKitchenTicket({ ...doc, items: rung })!, 40).join("\n");
+    const at = (needle: string) => text.indexOf(needle);
+    expect(at("Two Topping Pizza")).toBeLessThan(at("Italian Sub"));
+    expect(at("Chicken Parm Dinner")).toBeLessThan(at("Mozzarella Sticks"));
+    expect(at("Mozzarella Sticks")).toBeLessThan(at("Coke"));
+    expect(at("NO ONION")).toBeLessThan(at("+ Hot Pepper"));
+    expect(at("+ Provolone Cheese")).toBeLessThan(at("+ Toasted"));
+    // The receipt keeps the order the items were rung in.
+    const receipt = layoutToText(buildReceipt({ ...doc, items: rung }), 48).join("\n");
+    expect(receipt.indexOf("Coke")).toBeLessThan(receipt.indexOf("Two Topping Pizza"));
   });
 });

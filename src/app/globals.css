@@ -156,3 +156,20 @@ gmp-place-autocomplete {
 body.wayne-kb-pad {
   padding-bottom: var(--pos-kb-h, 0px);
 }
+
+/*
+ * Caller ID box over open windows (owner, 2026-10-29: "the caller ID box …
+ * if he's taking an order it just doesn't show up at all").  While a line is
+ * ringing the box (src/app/pos/ringing-banner.tsx) stays on top, and any open
+ * POS window — item options, Discount, Open item, the drawer, the orders
+ * panel, PIN pads — starts just below it and shrinks to fit, so the caller and
+ * every button in the window are both on screen.  Nothing changes when no
+ * line is ringing.
+ */
+html[data-pos-ringing] [aria-modal="true"] {
+  padding-top: calc(var(--pos-ring-bottom, 0px) + 0.75rem) !important;
+}
+html[data-pos-ringing] [aria-modal="true"] > * {
+  max-height: calc(100vh - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
+  max-height: calc(100dvh - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
+}
