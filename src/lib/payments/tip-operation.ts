@@ -186,7 +186,7 @@ export async function runTipOperation(options: {
   } finally {
     // Losing this response leaves a lease, not permission to start a second
     // financial operation. After expiry a worker resumes the same saved plan/ID.
-    try { await service.rpc("wayne_update_tip_operation", { target_operation_id: op.id, worker_token: token, action: "release", details: {} }); }
+    try { if (op.state !== "succeeded") await service.rpc("wayne_update_tip_operation", { target_operation_id: op.id, worker_token: token, action: "release", details: {} }); }
     catch { /* A lost release acknowledgment is recovered by lease expiry. */ }
   }
 }

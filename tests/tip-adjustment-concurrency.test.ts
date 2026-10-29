@@ -301,6 +301,16 @@ describe("tip adjustment across independent PostgreSQL sessions", () => {
     expect(provider.capturePayment).not.toHaveBeenCalled();
   });
 
+  it("treats completed receipt lease cleanup as an idempotent no-op after a lost acknowledgment", async () => {
+    const payment = await fixture();
+    await run(payment.orderId,"tips");
+    const op = await operation(payment.paymentId),service=await db.service();
+    const cleanup=await service.api.rpc("wayne_update_tip_operation", {target_operation_id:op.id,worker_token:randomUUID(),action:"release",details:{}});
+    expect(cleanup.error).toBeNull();
+    expect((cleanup.data as {state:string}).state).toBe("succeeded");
+    expect(charges).toHaveLength(1);
+  });
+
   it("does not fall back if replacement cancellation is uncertain", async () => {
     const payment = await fixture();
     provider.confirmSavedCardIntent.mockImplementationOnce(async (id) => ({ ...intents.get(id)!, status: "failed", providerStatus: "requires_payment_method" }));
