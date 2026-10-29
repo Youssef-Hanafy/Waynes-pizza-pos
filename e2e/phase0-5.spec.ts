@@ -44,6 +44,18 @@ async function placeOnlineOrder(
   await page.goto("/order");
   await page.getByRole("link", { name: `Choose ${fulfillment}` }).click();
   await expect(page).toHaveURL(new RegExp(`/menu\\?fulfillment=${fulfillment}`));
+  const gate = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Start my order" }) });
+  await expect(gate).toBeVisible();
+  await gate.getByLabel("First name").fill(name);
+  await gate.getByLabel("Last name").fill("Acceptance");
+  await gate.getByLabel("Mobile number").fill(phone);
+  if (fulfillment === "delivery") {
+    await gate.getByLabel("Street address").fill("93 West Boylston St");
+    await gate.getByLabel("City", { exact: true }).fill("Worcester");
+    await gate.getByLabel("ZIP", { exact: false }).fill("01606");
+  }
+  await gate.getByRole("button", { name: "Start my order" }).click();
+  await expect(gate).not.toBeVisible();
   await addConfiguredItem(page, `${name} item note`);
   await page.getByRole("link", { name: "Continue to checkout" }).click();
   await page.getByLabel("First name").fill(name);
@@ -104,7 +116,11 @@ test.describe("Phase 0–5 staging vertical slice", () => {
   });
 
   test("creates, reconciles, and operates one online and POS order for each core path", async ({ browser, page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
+    // Dismiss the actual rewards dialog through its normal close control.
+    await page.addLocatorHandler(page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Close", exact: true }) }), async (dialog) => {
+      await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    });
     const pickupPhone = phoneFor(1);
     const deliveryPhone = phoneFor(2);
     const phoneOrderPhone = phoneFor(3);
