@@ -14,6 +14,8 @@ export type ProviderPayment = {
   cardLast4: string | null;
   receiptUrl: string | null;
   failureReason: string | null;
+  /** Current provider metadata, read with the payment rather than from an old event. */
+  metadata?: Record<string, string>;
   /**
    * An authorised (not yet captured) card that may be captured for MORE than
    * was authorised — Stripe "overcapture", used to add a delivery tip after the

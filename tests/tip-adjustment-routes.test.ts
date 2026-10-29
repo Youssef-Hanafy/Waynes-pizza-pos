@@ -86,10 +86,10 @@ describe.each(routes)("$name", ({ invoke }) => {
     expect((await invoke()).status).toBe(200);
     expect(applyProviderWebhook).not.toHaveBeenCalled();
   });
-  it("keeps ordinary duplicate webhook behavior unchanged", async () => {
+  it("retries ordinary Stripe duplicates too, so a recorded failed apply is recoverable", async () => {
     duplicate = true; envelope.payload.data.object.metadata.wayne_tip_adjust = "false";
     expect((await invoke()).status).toBe(200);
-    expect(applyProviderWebhook).not.toHaveBeenCalled();
+    expect(applyProviderWebhook).toHaveBeenCalledTimes(1);
   });
   it("returns a retryable error if duplicate reconciliation fails again", async () => {
     duplicate = true;

@@ -110,7 +110,7 @@ describe("tip adjustment across independent PostgreSQL sessions", () => {
     return applyStripeWebhookEvent(api ?? (await db.service()).api, "payment_intent.succeeded", {
       data: { object: { id: intent.providerPaymentId, status: "succeeded", amount_received: intent.amountCents,
         metadata: { wayne_tip_adjust: "true", wayne_tip_operation: op.id } } },
-    }, workspaceId);
+    }, workspaceId, (id) => provider.getPaymentStatus(id));
   }
 
   it("serializes three entry points and applies the ledger exactly once", async () => {

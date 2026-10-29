@@ -59,6 +59,7 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     cardLast4: card?.last4 ?? null,
     receiptUrl: charge?.receipt_url ?? intent.charges?.data?.[0]?.receipt_url ?? null,
     failureReason: intent.last_payment_error ? "The card was declined. Try another card." : null,
+    metadata: intent.metadata ?? {},
     maxCapturableCents,
     paymentMethodId: typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id ?? null,
     customerId: typeof intent.customer === "string" ? intent.customer : intent.customer?.id ?? null,

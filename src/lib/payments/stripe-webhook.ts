@@ -1,59 +1,42 @@
 import { readStripeWebhookObject } from "./stripe-mapping";
 import type { ServiceClient } from "./square-webhook";
 
-type Intent = {
-  id?: string;
-  status?: string;
-  amount?: number;
-  amount_received?: number;
-  metadata?: Record<string, string>;
-  charges?: { data?: Array<{ receipt_url?: string; payment_method_details?: { card?: { brand?: string; last4?: string } } }> };
-};
-
-/** Only verified tip-success events may bypass the legacy duplicate guard. */
-export function isTipSuccessWebhook(eventType: string, payload: Record<string, unknown>) {
-  const intent = readStripeWebhookObject(payload) as Intent;
-  return eventType === "payment_intent.succeeded" && intent.status === "succeeded"
-    && (intent.metadata?.wayne_tip_adjust === "true" || Boolean(intent.metadata?.wayne_tip_operation));
+/** A signed duplicate is a safe opportunity to retry an authoritative read. */
+export function isStripePaymentIntentWebhook(eventType: string, payload: Record<string, unknown>) {
+  return eventType.startsWith("payment_intent.") && typeof readStripeWebhookObject(payload).id === "string";
 }
 
-/** Settles a verified Stripe PaymentIntent without trusting browser input. */
-export async function applyStripeWebhookEvent(supabase: ServiceClient, eventType: string, payload: Record<string, unknown>, workspaceId?: string) {
-  if (!eventType.startsWith("payment_intent.")) return;
-  const intent = readStripeWebhookObject(payload) as Intent;
-  if (!intent.id) return;
-  const status = intent.status === "succeeded" ? "captured" : intent.status === "requires_capture" ? "authorized" : intent.status === "canceled" ? "voided" : intent.status === "requires_payment_method" ? "failed" : "pending";
-  if (status === "pending") return;
-  // A card declined on the Stripe M2 goes back to "requires_payment_method" and
-  // the same intent takes the next card; it is not a failed payment (the POS
-  // cancels it if the customer pays another way).
-  if (status === "failed" && intent.metadata?.wayne_entry === "terminal") return;
-  // Recover even when the request died after Stripe succeeded. SQL matches
-  // the stored intent, workspace and frozen amount; repeated events are safe.
-  if (isTipSuccessWebhook(eventType, payload)) {
-    if (!workspaceId) throw new Error("Tip webhook has no workspace scope");
-    const card = intent.charges?.data?.[0]?.payment_method_details?.card;
-    const { data, error } = await supabase.rpc("wayne_reconcile_tip_webhook", {
-      target_workspace_id: workspaceId, provider_id: intent.id,
-      captured_cents: intent.amount_received ?? intent.amount ?? null,
-      card_brand: card?.brand ?? null, card_last4: card?.last4 ?? null,
-    });
-    if (error) throw new Error(error.message);
-    if (!data && intent.metadata?.wayne_tip_operation) throw new Error("Tip operation is not yet bound; retry reconciliation");
-    // Legacy held intents without a durable operation keep their existing behavior.
-    return;
-  }
-  // An approval replaced at cash-out by one charge for order + tip: the payment
-  // now points at the new charge, so this cancellation must not void it.
-  if (intent.metadata?.wayne_replaced_by) return;
-  const card = intent.charges?.data?.[0]?.payment_method_details?.card;
-  const { error } = await supabase.rpc("wayne_settle_payment", {
+/** Events are notifications, never state snapshots to write to the ledger. */
+export async function applyStripeWebhookEvent(
+  supabase: ServiceClient, eventType: string, payload: Record<string, unknown>,
+  workspaceId: string | undefined,
+  readPayment: (id: string) => Promise<import("./provider").ProviderPayment>,
+) {
+  if (!isStripePaymentIntentWebhook(eventType, payload)) return;
+  if (!workspaceId) throw new Error("Stripe webhook has no workspace scope");
+  const eventIntent = readStripeWebhookObject(payload) as { id: string };
+  const current = await readPayment(eventIntent.id);
+  if (current.providerPaymentId !== eventIntent.id) throw new Error("Stripe returned a different payment identity");
+  if (current.status === "pending") return;
+  // The M2 may reuse a declined, still-unconfirmed intent for the next card.
+  if (current.status === "failed" && (!current.failureReason || current.metadata?.wayne_entry === "terminal")) return;
+  // A newly created intent awaiting its first card is not a declined payment.
+  // Preserve legacy hold-release handling, using current metadata rather than
+  // a historical event's marker.
+  if (current.metadata?.wayne_replaced_by) return;
+  const { data, error } = await supabase.rpc("wayne_settle_stripe_payment", {
+    target_workspace_id: workspaceId,
     payload: {
-      provider_payment_id: intent.id, status, provider_status: intent.status ?? "", amount_cents: intent.amount ?? null,
-      card_brand: card?.brand ?? null, card_last4: card?.last4 ?? null, receipt_url: intent.charges?.data?.[0]?.receipt_url ?? null,
-      failure_reason: eventType === "payment_intent.payment_failed" ? "The card was declined. Try another card." : null,
-      metadata: { source: "stripe_webhook" },
+      provider_payment_id: current.providerPaymentId, status: current.status,
+      provider_status: current.providerStatus, amount_cents: current.amountCents,
+      card_brand: current.cardBrand, card_last4: current.cardLast4, receipt_url: current.receiptUrl,
+      failure_reason: current.failureReason,
+      tip_operation_id: current.metadata?.wayne_tip_operation,
+      tip_adjust: current.metadata?.wayne_tip_adjust === "true",
     },
   });
-  if (error && error.code !== "P0002") throw new Error(error.message);
+  if (error) throw new Error(error.message);
+  if (current.metadata?.wayne_tip_operation && !(data as { reconciled?: boolean } | null)?.reconciled) {
+    throw new Error("Tip operation is not yet bound; retry reconciliation");
+  }
 }
