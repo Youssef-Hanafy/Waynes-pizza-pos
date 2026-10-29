@@ -28,11 +28,9 @@ export function startProblem(draft: PosDraft, kind: OrderKind | null, settings: 
   // it all (owner, 2026-10-11).  A phone that was typed must be a real number.
   const digits = phoneDigits(draft.phone).length;
   if (digits > 0 && digits !== 10) return "Enter a 10-digit phone number, or leave the phone blank.";
-  // A phone order is saved by name (owner, 2026-10-27): the caller ID name is
-  // filled in by itself, so only a caller with no caller ID name needs one typed.
-  if (draft.source === "phone" && kind !== "walkin" && !`${draft.firstName} ${draft.lastName}`.trim()) {
-    return "Type the caller's name — no caller ID name came through for this number.";
-  }
+  // The name is never required, phone orders included (owner, 2026-10-29: "don't
+  // require the name … the jump to order button should still work").  The
+  // caller ID name still fills it in by itself when there is one.
   if (kind === "delivery") {
     if (!settings.delivery_enabled) return "Delivery is switched off in Admin → Settings.";
     if (!draft.addressId && !draft.address.address1.trim()) return "Enter the street address (city, state and ZIP can be left blank).";

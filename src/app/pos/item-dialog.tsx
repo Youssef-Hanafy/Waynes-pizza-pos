@@ -6,6 +6,7 @@ import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, countedPortions, groupAllowanceLines, groupMaxPortions, groupSizeRule, includedSelection, isIncludedChoice, isExtraChoice, isInstructionChoice } from "@/lib/orders/cart";
 import type { CartLine, ToppingPlacement } from "@/lib/orders/schemas";
 import { uuid } from "@/lib/uuid";
+import { FitToSpace } from "./fit-to-space";
 
 type MenuItem = PublicMenu[number]["items"][number];
 
@@ -136,25 +137,32 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
   }
 
   return <div aria-modal="true" className="fixed inset-0 z-50 bg-black/60 p-3 sm:grid sm:place-items-center" role="dialog">
-    <section className="mx-auto flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-4 border-b border-wayne-border p-5">
-        <div><p className="text-xs font-black uppercase tracking-[0.18em] text-wayne-ok">Front POS customizer</p><h2 className="mt-1 text-3xl font-black">{item.name}</h2><p className="mt-1 text-wayne-muted">{item.description}</p></div>
+    {/*
+      Fits the screen (owner, 2026-10-29: "on the modifiers … shrink it down a
+      little bit and try to have it fit the page"): the window uses the whole
+      width so the options spread into more columns, and the options shrink
+      together to fit the height; only a very long list scrolls.
+    */}
+    <section className="mx-auto flex max-h-[96vh] w-full max-w-none flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-wayne-border px-4 py-2">
+        <div className="min-w-0"><h2 className="truncate text-2xl font-black">{item.name}</h2>{item.description ? <p className="truncate text-sm text-wayne-muted">{item.description}</p> : null}</div>
         <button aria-label="Close item" className="h-12 w-12 shrink-0 rounded-full border text-xl" onClick={onClose}>×</button>
       </div>
-      <div className="overflow-y-auto p-5">
+      <FitToSpace innerClassName="px-4 pb-3 pt-3" label="Item options" min={0.7}>
         <ComesWithPanel included={included} onToggle={(group, choiceId, on) => setChoiceCount(group, choiceId, on ? 1 : 0)} selectedChoices={selectedChoices} />
         {halvesChoiceIds.size ? <PizzaHalves groups={item.modifier_groups.filter((group) => group.allow_halves)} selectedChoices={selectedChoices} sides={sides} /> : null}
         <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-wayne-muted"><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-wayne-ok" /> on the item</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-wayne-red" /> comes with it, taken off</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-wayne-border bg-white" /> not on it</span><span>Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.</span></p>
-        {item.variants.length ? <fieldset className="mt-5"><legend className="font-black">Size{pickGroup && !sizeTapped ? <span className="ml-2 font-bold text-wayne-red">tap the size first — the item adds itself once its {pickGroup.customer_label.toLowerCase()} {pickGroup.max_select === 1 ? "is" : "are"} picked</span> : null}</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{item.variants.map((variant) => <button className={`min-h-14 rounded-xl border p-3 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => chooseSize(variant.id)} type="button"><span className="block font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
+        {item.variants.length ? <fieldset className="mt-3"><legend className="font-black">Size{pickGroup && !sizeTapped ? <span className="ml-2 font-bold text-wayne-red">tap the size first — the item adds itself once its {pickGroup.customer_label.toLowerCase()} {pickGroup.max_select === 1 ? "is" : "are"} picked</span> : null}</legend><div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 9rem), 1fr))` }}>{item.variants.map((variant) => <button className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => chooseSize(variant.id)} type="button"><span className="font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
         {item.modifier_groups.length ? item.modifier_groups.map((group) => {
           const rule = ruleFor(group);
           const allowance = rule ? groupAllowanceLines(group, rule, variantId, Object.entries(selectedChoices).map(([choice_id, quantity]) => ({ choice_id, quantity }))) : [];
           const used = rule ? countedPortions(group, selectedChoices) : 0;
-          return <fieldset className="mt-5" key={group.id}><legend className="font-black">{group.customer_label} <span className="font-normal text-wayne-muted">({group.min_select}–{groupMaxPortions(group, rule)})</span></legend>
+          return <fieldset className="mt-3" key={group.id}><legend className="font-black">{group.customer_label} <span className="font-normal text-wayne-muted">({group.min_select}–{groupMaxPortions(group, rule)})</span></legend>
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
             {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
-          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{[...group.choices].sort((a, b) => Number(isIncludedChoice(b)) - Number(isIncludedChoice(a))).map((choice) => {
+          {/* As many options per row as the width allows (wider for the Left / Whole / Right buttons). */}
+          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "15rem" : "12rem"}), 1fr))` }}>{[...group.choices].sort((a, b) => Number(isIncludedChoice(b)) - Number(isIncludedChoice(a))).map((choice) => {
           const count = selectedChoices[choice.id] ?? 0;
           const delta = choicePriceDeltaCents(choice, variantId);
           const comesWith = isIncludedChoice(choice);
@@ -182,10 +190,10 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           </div>;
         })}</div></fieldset>;
         }) : <div className="mt-5 rounded-xl border-2 border-dashed border-wayne-border bg-wayne-cream p-5"><strong>No modifier group is assigned to this item yet.</strong><p className="mt-1 text-sm text-wayne-muted">The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.</p></div>}
-        <label className="mt-5 grid gap-2 font-bold">Item notes<textarea className="rounded-xl border p-3 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={2} value={instructions} /></label>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-wayne-border p-5"><div className="flex items-center gap-2"><button aria-label="Decrease item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.max(1, quantity - 1))} type="button">−</button><strong>{quantity}</strong><button aria-label="Increase item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.min(20, quantity + 1))} type="button">+</button></div><Button className="min-h-14" onClick={add}>{initialLine ? "Save changes" : "Add to ticket"} · {formatCents(cartLineUnitCents(draftMenu, draftLine) * quantity)}</Button></div>
-      {error ? <p aria-live="polite" className="mx-5 mb-5 rounded-lg bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{error}</p> : null}
+        <label className="mt-3 grid gap-1 font-bold">Item notes<textarea className="rounded-xl border p-2 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={1} value={instructions} /></label>
+      </FitToSpace>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-wayne-border px-4 py-2"><div className="flex items-center gap-2"><button aria-label="Decrease item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.max(1, quantity - 1))} type="button">−</button><strong>{quantity}</strong><button aria-label="Increase item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.min(20, quantity + 1))} type="button">+</button></div><Button className="min-h-14" onClick={add}>{initialLine ? "Save changes" : "Add to ticket"} · {formatCents(cartLineUnitCents(draftMenu, draftLine) * quantity)}</Button></div>
+      {error ? <p aria-live="polite" className="mx-4 mb-3 shrink-0 rounded-lg bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{error}</p> : null}
     </section>
   </div>;
 }

@@ -41,11 +41,13 @@ describe("New Order card (owner, 2026-09-30)", () => {
     expect(blankDraft().isTest).toBe(false);
   });
 
-  it("needs a name on a phone order only when caller ID gave none (owner, 2026-10-27)", () => {
+  it("never needs a name, phone orders included — Jump to take order always works (owner, 2026-10-29)", () => {
     const phone = blankDraft({ customerMode: "identified", source: "phone", phone: "(508) 555-0199" });
-    expect(startProblem(phone, "pickup", settings)).toMatch(/caller's name/);
-    expect(startProblem(phone, "delivery", { ...settings }) ).toMatch(/caller's name/);
-    // Caller ID filled it in: nothing to type.
+    expect(startProblem(phone, "pickup", settings)).toBe("");
+    // A delivery still needs its address, nothing more.
+    expect(startProblem(phone, "delivery", { ...settings })).toMatch(/street address/);
+    expect(startProblem({ ...phone, address: { ...phone.address, address1: "12 Main St" } }, "delivery", { ...settings })).toBe("");
+    // Caller ID filled it in: still fine.
     expect(startProblem({ ...phone, firstName: "David Strub" }, "pickup", settings)).toBe("");
     // Walk-ins and counter orders never need a name.
     expect(startProblem(phone, "walkin", settings)).toBe("");

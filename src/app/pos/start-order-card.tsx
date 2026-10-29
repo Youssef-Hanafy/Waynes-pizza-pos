@@ -15,6 +15,7 @@ import { draftFromCall } from "@/lib/orders/drafts";
 import { callerCardInfo, customerName } from "@/lib/phone/caller-display";
 import { callOnLine, type PhoneCallView } from "@/lib/phone/phone-state";
 import { phoneActions, usePhoneState } from "@/stores/phone-store";
+import { FitToSpace } from "./fit-to-space";
 import { useCustomerSearch } from "./use-customer-search";
 import { customerDetailsPatch, deliveryZip, editCustomerDetails, orderKind, orderTypePatch, outsideDeliveryArea, phoneDigits, startProblem, type OrderKind } from "@/lib/orders/start-order";
 
@@ -63,8 +64,8 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
    * One tap starts the order (owner, 2026-10-28, same as 2026-10-13): type the
    * name (optional), then Walk-in / Pickup / Delivery opens the menu.  Only
    * what can't be skipped stops it: a delivery with no address shows the
-   * address box (then Continue), a phone order with no caller ID name asks for
-   * the name, a half-typed phone number.  "Jump to take order" still skips it all.
+   * address box (then Continue), a half-typed phone number.  The name is never
+   * required (owner, 2026-10-29).  "Jump to take order" still skips it all.
    * Editing an order that has items only changes the type.
    */
   function choose(next: OrderKind) {
@@ -82,7 +83,7 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     }
     update(patch);
     // Delivery with no address yet: the street box appears beside the tiles, no error.
-    if (next === "delivery" && settings.delivery_enabled && !draft.addressId && !draft.address.address1.trim() && !problem.startsWith("Enter a 10-digit") && !problem.startsWith("Type the caller")) {
+    if (next === "delivery" && settings.delivery_enabled && !draft.addressId && !draft.address.address1.trim() && !problem.startsWith("Enter a 10-digit")) {
       window.setTimeout(() => document.getElementById("start-address1")?.focus(), 50);
       return;
     }
@@ -160,7 +161,8 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
    */
   const needsStreet = kind === "delivery" && !draft.started && settings.delivery_enabled;
 
-  return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2">
+  // Fits the screen (owner, 2026-10-29): grows smaller together as matches / the address appear, scrolls only when tiny.
+  return <FitToSpace className="flex-1 bg-wayne-cream-deep" innerClassName="flex justify-center p-2" min={0.72}>
     <section aria-labelledby="start-order-title" className={`w-full min-w-0 rounded-3xl border border-wayne-border bg-white p-3 shadow-xl sm:px-5 sm:py-3 ${needsStreet ? "max-w-6xl" : "max-w-4xl"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -251,12 +253,13 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
       </div>
 
       {error ? <p className="mt-3 rounded-xl bg-wayne-alert-soft p-2.5 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-wayne-border pt-3">
+      {/* Stays on screen even when the card has to scroll. */}
+      <div className="sticky bottom-0 mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-wayne-border bg-white pb-1 pt-3">
         <p className="max-w-md text-xs text-wayne-muted">Customer details are saved with the order. A phone number links their orders and visit history.</p>
         <Button onClick={() => start()} size="lg">{editing ? "Back to the order →" : "Continue to take order →"}</Button>
       </div>
     </section>
-  </div>;
+  </FitToSpace>;
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {

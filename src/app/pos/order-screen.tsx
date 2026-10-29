@@ -17,6 +17,7 @@ import { getHardwareRuntime } from "@/stores/hardware-store";
 import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
 import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
+import { FitToSpace } from "./fit-to-space";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt, type Done } from "./payments-screen";
@@ -328,7 +329,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
     const paidAlready = created.order.paid_cents ?? 0;
-    return <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-wayne-cream-deep p-2">
+    return <FitToSpace className="flex-1 bg-wayne-cream-deep" innerClassName="p-2" min={0.75}>
       {/* The whole width of the screen (owner, 2026-10-20: "about 2 inches of dead space on either side"), so cash fits with no scrolling. */}
       <section aria-label="Take payment" className="w-full rounded-3xl border border-wayne-border bg-white px-4 py-3 shadow-xl">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl bg-wayne-ok-soft px-3 py-1.5">
@@ -345,7 +346,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
         {created.fresh ? <p className="mt-2 border-t border-wayne-border pt-1.5 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
       </section>
-    </div>;
+    </FitToSpace>;
   }
 
   const summary = addTo
@@ -444,7 +445,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
       <aside aria-label="Current ticket" className="flex flex-col border-t border-wayne-border bg-white md:min-h-0 md:border-l md:border-t-0">
         <div className="flex shrink-0 items-center justify-between px-3 pt-1.5"><h2 className="text-lg font-black">Ticket{itemCount ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</h2><button className="min-h-10 px-2 text-sm font-bold text-wayne-red underline" onBlur={() => setConfirmClear(false)} onClick={clearTicket} type="button">{confirmClear ? "Tap again to clear" : "Clear"}</button></div>
         {/* One compact row per item so a whole order fits without scrolling; tap a row for −/+/Edit/Remove (owner, 2026-10-16). */}
-        <div className="flex-1 px-1.5 md:min-h-0 md:overflow-y-auto" ref={ticketListRef}>{existingLines.length ? <ul aria-label="Items already on the order" className="divide-y divide-wayne-border">{existingLines.map((line) => removedIds.has(line.id)
+        {/* The list shrinks together as the order grows, so the whole ticket stays in view; it scrolls only once it is very long (owner, 2026-10-29). */}
+        <FitToSpace className="flex-1 px-1.5" label="Ticket items" min={0.7} scrollRef={ticketListRef}>{existingLines.length ? <ul aria-label="Items already on the order" className="divide-y divide-wayne-border">{existingLines.map((line) => removedIds.has(line.id)
           ? <li className="flex items-center gap-2 py-1 text-wayne-muted" key={line.id}><span className="min-w-0 flex-1 truncate line-through">{line.quantity}× {line.variant ? `${line.variant} ` : ""}{line.name}</span><button className="min-h-10 rounded-lg border border-wayne-border px-3 text-sm font-bold text-wayne-ink" onClick={() => update((current) => ({ addTo: current.addTo ? { ...current.addTo, removed: current.addTo.removed.filter((id) => id !== line.id) } : null }))} type="button">Put back</button></li>
           : <TicketLine cents={line.unitCents * existingQuantity(line)} detail={line.variant ?? ""} key={line.id} modifiers={line.modifiers.map((label) => ({ kind: /^NO /i.test(label) ? "removed" : "added", label }))} note={line.instructions}
             onEdit={() => { if (!line.line) { setError(`${line.name} is no longer on the menu: use − / + or ✕ on it.`); return; } setReplacing(line.id); const ringUp = { ...line.line, quantity: existingQuantity(line) }; if (line.line.open_item) setOpenItem(ringUp); else { const item = findMenuItem(menu, line.line.menu_item_id); if (item) { setEditingLine(ringUp); setSelectedItem(item); } } }}
@@ -456,7 +458,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           const item = findMenuItem(menu, line.menu_item_id);
           const variant = item?.variants.find((candidate) => candidate.id === line.variant_id);
           return <TicketLine cents={cartLineUnitCents(menu, line) * line.quantity} detail={line.open_item ? "Open item" : variant?.name ?? ""} key={line.line_id} modifiers={describeLineModifiers(item, line)} note={line.special_instructions} onEdit={() => { if (line.open_item) setOpenItem(line); else if (item) { setEditingLine(line); setSelectedItem(item); } }} onQuantity={(quantity) => setCart(updateQuantity(cart, line.line_id, quantity))} onRemove={() => { setCart(cart.filter((candidate) => candidate.line_id !== line.line_id)); }} quantity={line.quantity} title={line.open_item ? line.open_item.name : item ? `${isSpecialItem(item) ? "⭐ " : ""}${item.name}` : "Item no longer on the menu"} />;
-        })}</ul> : existingLines.length ? null : <p className="m-1.5 rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</div>
+        })}</ul> : existingLines.length ? null : <p className="m-1.5 rounded-xl bg-wayne-cream p-5 text-center text-wayne-muted">Tap a menu item to add it.</p>}</FitToSpace>
         <div className="shrink-0 border-t border-wayne-border px-3 pb-3 pt-2">
           {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes &amp; promo code{draft.orderNote || draft.promoCode ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{draft.manualType ? <p className="mt-1 text-xs font-bold text-wayne-muted">A discount is on this ticket — remove it to use a promotion code.</p> : null}</details>}
           {discount ? <div className="mt-2 flex items-center gap-2 rounded-xl bg-wayne-red-soft px-2 py-1 text-sm font-bold text-wayne-red"><button className="min-h-9 min-w-0 flex-1 truncate text-left" onClick={() => setDiscountOpen(true)} type="button">Discount · {discount.reason || "Discount"} · {discount.type === "percent" ? `${discount.value}% off` : `$${discount.value} off`}</button><button aria-label="Remove the discount" className="grid size-9 place-items-center rounded-lg text-lg font-black hover:bg-white" onClick={() => update({ manualType: "", manualValue: "", manualReason: "", presetDiscountId: "" })} type="button">✕</button></div> : null}
