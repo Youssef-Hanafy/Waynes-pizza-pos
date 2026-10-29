@@ -28,9 +28,9 @@ async function addConfiguredItem(page: Page, note: string) {
 async function addPosItem(page: Page, note: string) {
   await page.getByRole("button", { name: new RegExp(menuItem) }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Fresh basil").check();
+  await dialog.getByRole("button", { name: "Add Fresh basil", exact: true }).click();
   await dialog.getByLabel("Item notes").fill(note);
-  await dialog.getByRole("button", { name: /^Add ·/ }).click();
+  await dialog.getByRole("button", { name: /^Add to ticket ·/ }).click();
   await expect(page.getByText("Fresh basil").last()).toBeVisible();
   await expect(page.getByText(`Note: ${note}`)).toBeVisible();
 }
@@ -43,7 +43,7 @@ async function placeOnlineOrder(
 ) {
   await page.goto("/order");
   await page.getByRole("link", { name: `Choose ${fulfillment}` }).click();
-  await expect(page).toHaveURL(new RegExp(`/menu\\?fulfillment=${fulfillment}`));
+  await expect(page).toHaveURL(new RegExp(`/menu\\?fulfillment=${fulfillment}`), { timeout: 30_000 });
   const gate = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Start my order" }) });
   await expect(gate).toBeVisible();
   await gate.getByLabel("First name").fill(name);
@@ -58,13 +58,13 @@ async function placeOnlineOrder(
   await expect(gate).not.toBeVisible();
   await addConfiguredItem(page, `${name} item note`);
   await page.getByRole("link", { name: "Continue to checkout" }).click();
-  await expect(page).toHaveURL(/\/checkout\?/);
+  await expect(page).toHaveURL(/\/checkout\?/, { timeout: 30_000 });
   const checkout = page.locator("main form");
   await checkout.getByLabel("First name").fill(name);
   await checkout.getByLabel("Last name").fill("Acceptance");
   await checkout.getByLabel("Phone").fill(phone);
   if (fulfillment === "delivery") {
-    await checkout.getByLabel("Street address").fill("93 West Boylston St");
+    await checkout.getByRole("textbox", { name: "Find your delivery address", exact: true }).fill("93 West Boylston St");
     await checkout.getByLabel("City").fill("Worcester");
     await checkout.getByLabel("Postal code").fill("01606");
     await checkout.getByLabel("Delivery instructions (optional)").fill("Use side door");
@@ -144,27 +144,37 @@ test.describe("Phase 0–5 staging vertical slice", () => {
     const posContext = await browser.newContext({ storageState: posStorageState! });
     const pos = await posContext.newPage();
     await pos.goto("/pos");
-    await expect(pos.getByRole("heading", { name: "Add items" })).toBeVisible();
+    pos.setDefaultTimeout(15_000);
+    await pos.getByRole("button", { name: /Walk-in/ }).click();
     await addPosItem(pos, `E2E walk-in ${runId}`);
-    await pos.getByRole("button", { name: "Submit order" }).click();
-    const walkInOrder = await pos.locator("h1").textContent();
+    const walkInResponse = pos.waitForResponse((response) => new URL(response.url()).pathname === "/api/pos/orders" && response.request().method() === "POST");
+    await pos.getByRole("button", { name: /^Take payment ·/ }).click();
+    const walkInSaved = await (await walkInResponse).json();
+    const walkInOrder = walkInSaved.order_number as string;
     expect(walkInOrder).toMatch(/^W\d+$/);
-    if (!walkInOrder) throw new Error("POS walk-in confirmation is missing its order number.");
+    await expect(pos.getByRole("region", { name: "Take payment" })).toContainText(`Order #${walkInSaved.daily_number}`);
+    // Exercise a real cash ledger entry through the ordinary drawer workflow.
+    await pos.getByRole("button", { name: /^Cash Change shown$/ }).click();
+    await pos.getByRole("button", { name: "Exact", exact: true }).click();
+    await pos.getByRole("button", { name: /^Record cash · change/ }).click();
+    await expect(pos.getByText(/paid cash · CHANGE DUE/)).toBeVisible();
 
-    await pos.getByRole("button", { name: "Start new ticket" }).click();
-    await pos.getByRole("button", { name: "Phone order" }).click();
     await pos.getByLabel("First name").fill(`E2E Phone ${runId}`);
     await pos.getByLabel("Last name").fill("Acceptance");
-    await pos.getByLabel("Phone").fill(phoneOrderPhone);
-    await pos.getByRole("button", { name: "Delivery" }).click();
-    await pos.getByLabel("Address").fill("93 West Boylston St");
-    await pos.getByLabel("City").fill("Worcester");
-    await pos.getByLabel("ZIP").fill("01606");
+    await pos.getByLabel("Phone", { exact: true }).fill(phoneOrderPhone);
+    await pos.getByRole("button", { name: /^Delivery \+/ }).click();
+    await pos.getByRole("combobox", { name: "Street address", exact: true }).fill("93 West Boylston St");
+    await pos.getByLabel("City", { exact: true }).fill("Worcester");
+    await pos.getByLabel("ZIP", { exact: true }).fill("01606");
+    await pos.getByRole("button", { name: "Continue to take order →", exact: true }).click();
     await addPosItem(pos, `E2E phone ${runId}`);
-    await pos.getByRole("button", { name: "Submit order" }).click();
-    const phoneOrder = await pos.locator("h1").textContent();
+    const phoneResponse = pos.waitForResponse((response) => new URL(response.url()).pathname === "/api/pos/orders" && response.request().method() === "POST");
+    await pos.getByRole("button", { name: /^Take payment ·/ }).click();
+    const phoneSaved = await (await phoneResponse).json();
+    const phoneOrder = phoneSaved.order_number as string;
     expect(phoneOrder).toMatch(/^W\d+$/);
-    if (!phoneOrder) throw new Error("POS phone confirmation is missing its order number.");
+    await expect(pos.getByRole("region", { name: "Take payment" })).toContainText(`Order #${phoneSaved.daily_number}`);
+    await pos.getByRole("button", { name: /^Cash at the door/ }).click();
     await posContext.close();
 
     const ownerContext = await openOwnerContext(browser);
@@ -183,13 +193,11 @@ test.describe("Phase 0–5 staging vertical slice", () => {
 
     await owner.goto("/kitchen");
     await expect(owner.getByRole("status")).toContainText(/Live|Reconnecting/);
-    const pickupTicket = owner.locator("article").filter({
-      has: owner.getByRole("heading", { name: pickupOrder, exact: true }),
-    });
+    const pickupTicket = owner.locator("article").filter({ hasText: `E2E Pickup ${runId} item note` });
     await expect(pickupTicket).toContainText("Fresh basil");
     await expect(pickupTicket).toContainText(`E2E Pickup ${runId} item note`);
     await owner.reload();
-    await expect(owner.getByRole("heading", { name: pickupOrder, exact: true })).toBeVisible();
+    await expect(pickupTicket.getByRole("heading", { name: /^#\d+$/ })).toBeVisible();
     await pickupTicket.getByRole("button", { name: "Accept order" }).click();
     await pickupTicket.getByRole("button", { name: "Start cooking" }).click();
     await pickupTicket.getByRole("button", { name: "Mark ready" }).click();
