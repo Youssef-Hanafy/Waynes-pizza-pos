@@ -58,16 +58,26 @@ async function placeOnlineOrder(
   await expect(gate).not.toBeVisible();
   await addConfiguredItem(page, `${name} item note`);
   await page.getByRole("link", { name: "Continue to checkout" }).click();
-  await page.getByLabel("First name").fill(name);
-  await page.getByLabel("Last name").fill("Acceptance");
-  await page.getByLabel("Phone").fill(phone);
+  await expect(page).toHaveURL(/\/checkout\?/);
+  const checkout = page.locator("main form");
+  await checkout.getByLabel("First name").fill(name);
+  await checkout.getByLabel("Last name").fill("Acceptance");
+  await checkout.getByLabel("Phone").fill(phone);
   if (fulfillment === "delivery") {
-    await page.getByLabel("Street address").fill("93 West Boylston St");
-    await page.getByLabel("City").fill("Worcester");
-    await page.getByLabel("Postal code").fill("01606");
-    await page.getByLabel("Delivery instructions (optional)").fill("Use side door");
+    await checkout.getByLabel("Street address").fill("93 West Boylston St");
+    await checkout.getByLabel("City").fill("Worcester");
+    await checkout.getByLabel("Postal code").fill("01606");
+    await checkout.getByLabel("Delivery instructions (optional)").fill("Use side door");
   }
-  const placeOrder = page.getByRole("button", { name: "Place test order" });
+  const testOrder = page.getByRole("button", { name: "Place test order" });
+  const cardOrder = page.getByRole("button", { name: /^Pay \$.*and place order$/ });
+  if (await cardOrder.isVisible()) {
+    const card = page.locator('[aria-label="Card details"]').frameLocator("iframe").first();
+    await card.getByRole("textbox", { name: "Credit or debit card number" }).fill("4242424242424242");
+    await card.getByPlaceholder("MM / YY").fill("1230");
+    await card.getByPlaceholder("CVC").fill("123");
+  }
+  const placeOrder = (await cardOrder.isVisible()) ? cardOrder : testOrder;
   // Two click events exercise the browser-side retry key. The authoritative
   // database transaction must still create exactly one order.
   await Promise.all([
@@ -110,6 +120,7 @@ test.describe("Phase 0–5 staging vertical slice", () => {
   );
 
   test.beforeAll(() => {
+    expect(new URL(process.env.E2E_BASE_URL ?? "https://waynes-pos-staging.vercel.app").hostname).toBe("waynes-pos-staging.vercel.app");
     expect(ownerStorageState, "E2E_OWNER_STORAGE_STATE is required").toBeTruthy();
     expect(posStorageState, "E2E_POS_STORAGE_STATE is required").toBeTruthy();
     expect(menuItem, "E2E_MENU_ITEM is required").toBeTruthy();
