@@ -44,14 +44,14 @@ reset role;
 set local role anon;
 select is((public.wayne_public_store_settings() ->> 'store_name'), 'Wayne''s Pizza', 'anonymous visitor gets canonical business settings');
 select is((public.wayne_public_store_settings() -> 'special_hours' -> 0 ->> 'label'), 'Test closure', 'anonymous visitor gets special hours through public function');
-select is((public.wayne_public_menu() -> 0 -> 'items' -> 0 ->> 'name'), 'Phase 1 Pizza', 'anonymous visitor sees public menu item');
-select is((public.wayne_public_menu() -> 0 -> 'items' -> 0 ->> 'sold_out')::boolean, true, 'sold-out item remains visible and labeled');
+select is(((select item->>'name' from jsonb_array_elements(public.wayne_public_menu()) category cross join lateral jsonb_array_elements(category->'items') item where item->>'name'='Phase 1 Pizza')), 'Phase 1 Pizza', 'anonymous visitor sees public menu item');
+select is(((select item->>'sold_out' from jsonb_array_elements(public.wayne_public_menu()) category cross join lateral jsonb_array_elements(category->'items') item where item->>'name'='Phase 1 Pizza'))::boolean, true, 'sold-out item remains visible and labeled');
 select throws_ok($$insert into public.menu_categories (name) values ('Unauthorized')$$, '42501', 'permission denied for table menu_categories', 'anonymous visitor cannot create category');
 
 reset role;
 update public.menu_items set archived_at = now() where name = 'Phase 1 Pizza';
 set local role anon;
-select is(jsonb_array_length(public.wayne_public_menu() -> 0 -> 'items'), 0, 'archived item disappears from public menu');
+select is((select count(*) from jsonb_array_elements(public.wayne_public_menu()) category cross join lateral jsonb_array_elements(category->'items') item where item->>'name'='Phase 1 Pizza'), 0::bigint, 'archived item disappears from public menu');
 reset role;
 select is((select count(*) from public.menu_item_variants variant join public.menu_items item on item.id = variant.menu_item_id where item.name = 'Phase 1 Pizza'), 2::bigint, 'archiving retains variants for historical safety');
 

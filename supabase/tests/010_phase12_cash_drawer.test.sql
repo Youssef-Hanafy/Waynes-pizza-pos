@@ -57,14 +57,14 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000002',true);
 select throws_ok(format($$select public.wayne_open_shift(%L::jsonb)$$,
   jsonb_build_object('register_id',current_setting('phase12.register_id'))::text),
- '22023','Count the opening cash','a drawer cannot open without counting the float');
+ '22023','Count the opening cash before opening the drawer','a drawer cannot open without counting the float');
 select lives_ok(format($$select set_config('phase12.shift',public.wayne_open_shift(%L::jsonb)::text,true)$$,
   jsonb_build_object('register_id',current_setting('phase12.register_id'),'opening_cash_cents',15000)::text),
  'the cashier opens the drawer with a counted float');
 select set_config('phase12.shift_id',(current_setting('phase12.shift')::jsonb->>'id'),true);
 select throws_ok(format($$select public.wayne_open_shift(%L::jsonb)$$,
   jsonb_build_object('register_id',current_setting('phase12.register_id'),'opening_cash_cents',10000)::text),
- '40001','already has an open drawer','one register never has two open drawers');
+ '40001','That register already has an open drawer','one register never has two open drawers');
 reset role;
 select is(((public.wayne_shift_cash_totals(current_setting('phase12.shift_id')::uuid))->>'expected_cash_cents'),'15000','a fresh drawer expects exactly its float');
 set local role authenticated;
@@ -88,11 +88,11 @@ select set_config('phase12.order_id',(current_setting('phase12.order')::jsonb->>
 select throws_ok(format($$select public.wayne_take_cash_payment(%L::jsonb)$$,
   jsonb_build_object('order_id',current_setting('phase12.order_id'),'shift_id',current_setting('phase12.shift_id'),
     'idempotency_key','phase12-tender-short-'||txid_current(),'tendered_cents',1000)::text),
- '22023','less than the amount due','cash short of the total is refused');
+ '22023','The cash handed over is less than the amount due','cash short of the total is refused');
 select throws_ok(format($$select public.wayne_take_cash_payment(%L::jsonb)$$,
   jsonb_build_object('order_id',current_setting('phase12.order_id'),'shift_id',current_setting('phase12.shift_id'),
     'idempotency_key','phase12-tender-huge-'||txid_current(),'tendered_cents',900000)::text),
- '22023','far more cash than the amount due','an obviously mistyped tender is refused');
+ '22023','That is far more cash than the amount due. Check the figure.','an obviously mistyped tender is refused');
 select lives_ok(format($$select set_config('phase12.payment',public.wayne_take_cash_payment(%L::jsonb)::text,true)$$,
   jsonb_build_object('order_id',current_setting('phase12.order_id'),'shift_id',current_setting('phase12.shift_id'),
     'idempotency_key','phase12-tender-'||txid_current(),'tendered_cents',5000)::text),
@@ -114,13 +114,13 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000002',true);
 select throws_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_out','amount_cents',500,'reason','')::text),
- '22023','reason of at least 3 characters','no cash moves without a reason');
+ '22023','A reason of at least 3 characters is required for every cash movement','no cash moves without a reason');
 select throws_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_out','amount_cents',0,'reason','Napkins')::text),
- '22023','greater than zero','a zero movement is refused');
+ '22023','Enter an amount greater than zero','a zero movement is refused');
 select throws_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_out','amount_cents',99000,'reason','Emptying the till')::text),
- '22023','more cash than the drawer is holding','cash cannot leave a drawer that does not hold it');
+ '22023','That is more cash than the drawer is holding','cash cannot leave a drawer that does not hold it');
 select lives_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_out','amount_cents',1200,'reason','Napkins from the corner shop')::text),
  'a paid-out is recorded');
@@ -144,11 +144,11 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000003',true);
 select throws_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_out','amount_cents',500,'reason','Helping myself')::text),
- '42501','Only the person on this drawer or a manager','another cashier cannot move cash in someone else''s drawer');
+ '42501','Only the person on this drawer or a manager can move cash','another cashier cannot move cash in someone else''s drawer');
 select is((select count(*)::integer from public.register_shifts where id=current_setting('phase12.shift_id')::uuid),0,'another cashier cannot even see the drawer');
 select throws_ok(format($$select public.wayne_close_shift(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'counted_cash_cents',17800)::text),
- '42501','Only the person on this drawer or a manager','another cashier cannot close it either');
+ '42501','Only the person on this drawer or a manager can close it','another cashier cannot close it either');
 reset role;
 
 -- ============================================================================
@@ -158,10 +158,10 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000002',true);
 select throws_ok(format($$select public.wayne_close_shift(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'))::text),
- '22023','Count the drawer','a drawer cannot close without a count');
+ '22023','Count the drawer before closing it','a drawer cannot close without a count');
 select throws_ok(format($$select public.wayne_close_shift(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'counted_cash_cents',16000)::text),
- '22023','Explain the difference','a drawer out by more than five dollars must be explained');
+ '22023','The drawer is out by more than five dollars. Explain the difference before closing.','a drawer out by more than five dollars must be explained');
 select lives_ok(format($$select set_config('phase12.closed',public.wayne_close_shift(%L::jsonb)::text,true)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'counted_cash_cents',17750,'close_note','Fifty cents short, miscount on change')::text),
  'the cashier closes the drawer with a count and a note');
@@ -179,11 +179,11 @@ select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000002'
 select is(((select public.wayne_close_shift(jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'counted_cash_cents',17750)))->>'duplicate'),'true','closing a closed drawer changes nothing');
 select throws_ok(format($$select public.wayne_record_cash_movement(%L::jsonb)$$,
   jsonb_build_object('shift_id',current_setting('phase12.shift_id'),'kind','paid_in','amount_cents',100,'reason','Too late')::text),
- '22023','already closed','no cash moves in a closed drawer');
+ '22023','That drawer is already closed','no cash moves in a closed drawer');
 select throws_ok(format($$select public.wayne_take_cash_payment(%L::jsonb)$$,
   jsonb_build_object('order_id',current_setting('phase12.order_id'),'shift_id',current_setting('phase12.shift_id'),
     'idempotency_key','phase12-after-close-'||txid_current(),'tendered_cents',2000)::text),
- '22023','already closed','no cash is taken into a closed drawer');
+ '22023','That drawer is already closed','no cash is taken into a closed drawer');
 -- The register is free again once its drawer is closed.
 select lives_ok(format($$select public.wayne_open_shift(%L::jsonb)$$,
   jsonb_build_object('register_id',current_setting('phase12.register_id'),'opening_cash_cents',15000)::text),

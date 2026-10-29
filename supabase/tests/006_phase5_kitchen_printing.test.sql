@@ -1,6 +1,14 @@
 begin;
 set local search_path = public, extensions;
 select plan(45);
+create function pg_temp.try_direct_kitchen_update() returns bigint language plpgsql as $$
+declare changed bigint;
+begin
+  update public.kitchen_tickets set status='ready';
+  get diagnostics changed = row_count;
+  return changed;
+end;
+$$;
 
 -- All assertions target this transaction's fixtures, never existing store counts.
 select ok((select relrowsecurity from pg_class where oid='public.kitchen_tickets'::regclass),'kitchen projection enables RLS');
@@ -64,7 +72,7 @@ select is((select count(*) from public.orders where id=(current_setting('phase5.
 select ok((select not(payload ?| array['public_access_token','customer_phone','customer_email','delivery_address_snapshot','payment_status']) from public.kitchen_tickets where order_id=(current_setting('phase5.online')::jsonb->>'id')::uuid),'kitchen projection omits private customer and payment fields');
 select is((select count(*) from public.print_jobs where order_id=(current_setting('phase5.online')::jsonb->>'id')::uuid),0::bigint,'kitchen role cannot read print management records');
 select is(public.wayne_kitchen_board(),public.wayne_kitchen_board(),'refresh restores the same current board');
-select throws_ok($$update public.kitchen_tickets set status='ready'$$,'42501','permission denied for table kitchen_tickets','kitchen cannot bypass transition RPC');
+select is(pg_temp.try_direct_kitchen_update(),0::bigint,'kitchen cannot bypass transition RPC: RLS permits zero direct updates');
 select throws_ok($$select public.wayne_claim_print_job(current_setting('phase5.destination'),'unauthorized-worker')$$,'42501','Print processing permission required','kitchen cannot process print jobs');
 select set_config('request.jwt.claim.sub','4a000000-0000-4000-8000-000000000003',true);
 select throws_ok($$select public.wayne_kitchen_board()$$,'42501','Kitchen access required','cashier cannot open kitchen board');

@@ -59,7 +59,7 @@ select throws_ok(format($$select public.wayne_driver_update_delivery(%L,'accept'
 
 -- The cashier dispatches the order to driver A.
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000004',true);
-select throws_ok(format($$select public.wayne_assign_delivery(%L,%L)$$,current_setting('phase10.order_id'),'5a000000-0000-4000-8000-000000000005'),'22023','does not have driver access','a kitchen account cannot be assigned a delivery');
+select throws_ok(format($$select public.wayne_assign_delivery(%L,%L)$$,current_setting('phase10.order_id'),'5a000000-0000-4000-8000-000000000005'),'22023','That staff member does not have driver access','a kitchen account cannot be assigned a delivery');
 select lives_ok(format($$select public.wayne_assign_delivery(%L,%L)$$,current_setting('phase10.order_id'),'5a000000-0000-4000-8000-000000000002'),'dispatch assigns the delivery to driver A');
 select is((select status from public.delivery_assignments where order_id=current_setting('phase10.order_id')::uuid and status<>'released'),'assigned','assignment starts in assigned');
 select is((select amount_due_cents from public.delivery_assignments where order_id=current_setting('phase10.order_id')::uuid and status<>'released'),
@@ -70,7 +70,7 @@ select ok((select (public.wayne_delivery_dispatch()->'orders') @> jsonb_build_ar
 select lives_ok(format($$select public.wayne_assign_delivery(%L,%L)$$,current_setting('phase10.order_id'),'5a000000-0000-4000-8000-000000000003'),'dispatch reassigns the delivery to driver B');
 select is((select count(*)::integer from public.delivery_assignments where order_id=current_setting('phase10.order_id')::uuid and status='released'),1,'the previous assignment is released');
 select is((select count(*)::integer from public.delivery_assignments where order_id=current_setting('phase10.order_id')::uuid and status<>'released'),1,'only one active assignment per order');
-select throws_ok(format($$select public.wayne_release_delivery(%L,'no')$$,current_setting('phase10.order_id')),'22023','release reason','releasing requires a reason');
+select throws_ok(format($$select public.wayne_release_delivery(%L,'no')$$,current_setting('phase10.order_id')),'22023','A release reason of at least 3 characters is required','releasing requires a reason');
 select lives_ok(format($$select public.wayne_assign_delivery(%L,%L)$$,current_setting('phase10.order_id'),'5a000000-0000-4000-8000-000000000002'),'dispatch hands the delivery back to driver A');
 
 -- Driver B must not see or touch another driver's delivery.
@@ -83,7 +83,7 @@ select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000002'
 select is((select count(*)::integer from public.delivery_assignments where order_id=current_setting('phase10.order_id')::uuid and status<>'released'),1,'a driver reads their own assignment');
 select lives_ok(format($$select public.wayne_driver_update_delivery(%L,'accept')$$,current_setting('phase10.order_id')),'driver accepts the assignment');
 select is(((select public.wayne_driver_update_delivery(current_setting('phase10.order_id')::uuid,'accept'))->>'duplicate'),'true','accepting twice is a no-op');
-select throws_ok(format($$select public.wayne_driver_update_delivery(%L,'picked_up')$$,current_setting('phase10.order_id')),'22023','not marked this order ready','a driver cannot take an order the kitchen has not finished');
+select throws_ok(format($$select public.wayne_driver_update_delivery(%L,'picked_up')$$,current_setting('phase10.order_id')),'22023','The kitchen has not marked this order ready yet','a driver cannot take an order the kitchen has not finished');
 
 reset role;
 set local role authenticated;
@@ -98,7 +98,7 @@ reset role;
 select is((select status from public.orders where id=current_setting('phase10.order_id')::uuid),'out_for_delivery','pickup moves the order out for delivery');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000002',true);
-select throws_ok(format($$select public.wayne_driver_update_delivery(%L,'delivered')$$,current_setting('phase10.order_id')),'22023','Record the cash collected','delivery without recording cash is refused while money is owed');
+select throws_ok(format($$select public.wayne_driver_update_delivery(%L,'delivered')$$,current_setting('phase10.order_id')),'22023','Record the cash collected at the door before completing this delivery','delivery without recording cash is refused while money is owed');
 select lives_ok(format($$select public.wayne_driver_update_delivery(%L,'delivered',%s,'Handed to the customer')$$,current_setting('phase10.order_id'),current_setting('phase10.total')),'driver completes the delivery with cash');
 
 reset role;

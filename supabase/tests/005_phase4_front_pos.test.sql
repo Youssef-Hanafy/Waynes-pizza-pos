@@ -19,7 +19,7 @@ insert into public.menu_items (id,category_id,name,base_price_cents,customer_vis
 set local role authenticated;
 select set_config('request.jwt.claim.sub','48000000-0000-4000-8000-000000000002',true);
 select ok(public.wayne_has_permission('pos.access'), 'cashier has POS access');
-select is(public.wayne_pos_menu()->0->'items'->0->>'name','Counter Pizza','POS menu includes POS-visible item');
+select is((select item->>'name' from jsonb_array_elements(public.wayne_pos_menu()) category cross join lateral jsonb_array_elements(category->'items') item where item->>'id'='48000000-0000-4000-8000-000000000011'),'Counter Pizza','POS menu includes POS-visible item');
 select lives_ok($$select public.wayne_create_pos_order('{
   "idempotency_key":"hosted-phase4-phone-001","customer_mode":"identified","customer_id":"","source":"phone","fulfillment_type":"delivery","payment_method":"cash",
   "first_name":"Pat","last_name":"Customer","phone":"508-555-0144","email":"","address_id":"",
@@ -40,10 +40,11 @@ reset role;
 select is((select order_count from public.customers where phone_normalized='+15085550144'),1,'customer order count updates');
 set local role authenticated;
 reset role;
-select is((select lifetime_spend_cents from public.customers where phone_normalized='+15085550144'),2019::bigint,'customer lifetime spend updates');
+-- Delivery fee is not taxed: 1600 item + 100 tax + 300 fee = 2000.
+select is((select lifetime_spend_cents from public.customers where phone_normalized='+15085550144'),2000::bigint,'customer lifetime spend updates');
 set local role authenticated;
 reset role;
-select is((select average_order_value_cents from public.customers where phone_normalized='+15085550144'),2019,'customer average order value updates');
+select is((select average_order_value_cents from public.customers where phone_normalized='+15085550144'),2000,'customer average order value updates');
 set local role authenticated;
 select is(jsonb_array_length(public.wayne_pos_customer_search('Pat Customer')),1,'customer search finds name');
 select is(jsonb_array_length(public.wayne_pos_customer_search('(508) 555-0144')),1,'customer search finds formatted phone');
@@ -102,13 +103,13 @@ select throws_ok($$select public.wayne_create_pos_order('{
 
 reset role;
 set local role anon;
-select is(jsonb_array_length(public.wayne_public_menu()),0,'hidden POS-only item is absent from public menu');
+select is((select count(*) from jsonb_array_elements(public.wayne_public_menu()) category cross join lateral jsonb_array_elements(category->'items') item where item->>'id'='48000000-0000-4000-8000-000000000011'),0::bigint,'hidden POS-only item is absent from public menu');
 select throws_ok($$select public.wayne_pos_menu()$$,'42501','permission denied for function wayne_pos_menu','anonymous cannot open POS menu');
 reset role;
 
-select is((select count(*) from public.orders where source in ('phone','pos')),3::bigint,'all successful POS orders share canonical orders table');
-select is((select count(*) from public.order_items item join public.orders order_row on order_row.id=item.order_id where order_row.source in ('phone','pos')),3::bigint,'all successful POS orders share canonical order items table');
-select is((select count(*) from public.order_events event join public.orders order_row on order_row.id=event.order_id where order_row.source in ('phone','pos') and event.event_type='order.placed'),3::bigint,'all successful POS orders write placed timeline events');
+select is((select count(*) from public.orders where idempotency_key in ('hosted-phase4-phone-001','hosted-phase4-walkin-01','hosted-phase4-owner-disc1')),3::bigint,'all successful POS orders share canonical orders table');
+select is((select count(*) from public.order_items item join public.orders order_row on order_row.id=item.order_id where order_row.idempotency_key in ('hosted-phase4-phone-001','hosted-phase4-walkin-01','hosted-phase4-owner-disc1')),3::bigint,'all successful POS orders share canonical order items table');
+select is((select count(*) from public.order_events event join public.orders order_row on order_row.id=event.order_id where order_row.idempotency_key in ('hosted-phase4-phone-001','hosted-phase4-walkin-01','hosted-phase4-owner-disc1') and event.event_type='order.placed'),3::bigint,'all successful POS orders write placed timeline events');
 
 select * from finish();
 rollback;
