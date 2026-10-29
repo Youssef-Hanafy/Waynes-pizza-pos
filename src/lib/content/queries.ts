@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { logger } from "@/lib/logging/logger";
 import { getWorkspaceAccess } from "@/lib/auth/access";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getPublicSupabaseEnvironment } from "@/lib/supabase/env";
@@ -47,9 +48,16 @@ const getStorefrontForHost = cache(async (host: string): Promise<Storefront> => 
     client.rpc("hanafy_public_workspace", { target_hostname: host }),
     client.rpc("hanafy_public_store_settings", { target_hostname: host }),
   ]);
-  const workspace = workspaceResult.error ? null : publicWorkspaceSchema.safeParse(workspaceResult.data).data ?? null;
-  const settings = settingsResult.error || settingsResult.data === null ? null : storeSettingsSchema.safeParse(settingsResult.data).data ?? null;
-  if (!workspace || !settings) return { known: false, workspace: null, settings: defaultSettings, services: [] };
+  const workspaceParse = publicWorkspaceSchema.safeParse(workspaceResult.data);
+  const settingsParse = storeSettingsSchema.safeParse(settingsResult.data);
+  const workspace = workspaceResult.error || !workspaceParse.success ? null : workspaceParse.data;
+  const settings = settingsResult.error || !settingsParse.success ? null : settingsParse.data;
+  if (!workspace || !settings) {
+    logger.warn("storefront.resolve_failed", { host, workspace_error: workspaceResult.error?.code ?? null, settings_error: settingsResult.error?.code ?? null,
+      workspace_fields: workspaceParse.success ? [] : workspaceParse.error.issues.map((issue) => issue.path.join(".")),
+      settings_fields: settingsParse.success ? [] : settingsParse.error.issues.map((issue) => issue.path.join(".")) });
+    return { known: false, workspace: null, settings: defaultSettings, services: [] };
+  }
   return { known: true, workspace, settings, services: workspace.enabled_services };
 });
 

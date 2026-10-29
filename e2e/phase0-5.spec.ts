@@ -128,6 +128,8 @@ test.describe("Phase 0–5 staging vertical slice", () => {
 
   test("creates, reconciles, and operates one online and POS order for each core path", async ({ browser, page }) => {
     test.setTimeout(180_000);
+    page.setDefaultTimeout(15_000);
+    page.setDefaultNavigationTimeout(30_000);
     // Dismiss the actual rewards dialog through its normal close control.
     await page.addLocatorHandler(page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Close", exact: true }) }), async (dialog) => {
       await dialog.getByRole("button", { name: "Close", exact: true }).click();
