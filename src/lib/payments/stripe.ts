@@ -15,7 +15,7 @@ export type StripeConfig = { secretKey: string; webhookSecret: string };
 
 type StripeCard = { brand?: string; last4?: string };
 type StripePaymentIntent = {
-  id?: string; status?: string; amount?: number; client_secret?: string;
+  id?: string; status?: string; amount?: number; amount_received?: number; client_secret?: string;
   last_payment_error?: { code?: string; message?: string };
   payment_method?: { id?: string; card?: StripeCard } | string | null;
   customer?: string | { id?: string } | null;
@@ -53,11 +53,13 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     providerPaymentId: intent.id ?? null,
     status: stripeStatus(intent.status),
     providerStatus: intent.status ?? "",
-    amountCents: typeof intent.amount === "number" ? intent.amount : null,
+    amountCents: intent.status === "succeeded" && typeof intent.amount_received === "number"
+      ? intent.amount_received : typeof intent.amount === "number" ? intent.amount : null,
     cardBrand: card?.brand ?? null,
     cardLast4: card?.last4 ?? null,
     receiptUrl: charge?.receipt_url ?? intent.charges?.data?.[0]?.receipt_url ?? null,
     failureReason: intent.last_payment_error ? "The card was declined. Try another card." : null,
+    metadata: intent.metadata ?? {},
     maxCapturableCents,
     paymentMethodId: typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id ?? null,
     customerId: typeof intent.customer === "string" ? intent.customer : intent.customer?.id ?? null,
@@ -200,16 +202,22 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       }, "The card could not be charged.");
       return mapIntent(intent);
     },
-    async chargeSavedCard({ customerId, paymentMethodId, amountCents, idempotencyKey, note, metadata }) {
+    async createSavedCardIntent({ customerId, paymentMethodId, amountCents, idempotencyKey, note, metadata }) {
       const extra: Record<string, string> = {};
       for (const [key, value] of Object.entries(metadata ?? {})) extra[`metadata[${key}]`] = value;
       const intent = await call<StripePaymentIntent>("/v1/payment_intents", {
         method: "POST", idempotencyKey,
         body: form({
           amount: Math.round(amountCents), currency: "usd", customer: customerId, payment_method: paymentMethodId,
-          off_session: true, confirm: true, description: note.slice(0, 500), "expand[]": "latest_charge", ...extra,
+          confirm: false, "payment_method_types[]": "card", description: note.slice(0, 500), "expand[]": "latest_charge", ...extra,
         }),
       }, "The card could not be charged for the tip.");
+      return mapIntent(intent);
+    },
+    async confirmSavedCardIntent(providerPaymentId, idempotencyKey) {
+      const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/confirm`, {
+        method: "POST", idempotencyKey, body: form({ off_session: true, "expand[]": "latest_charge" }),
+      }, "The saved card could not be confirmed. Its outcome must be checked before another payment.");
       return mapIntent(intent);
     },
     async releaseHold(providerPaymentId, replacedBy) {

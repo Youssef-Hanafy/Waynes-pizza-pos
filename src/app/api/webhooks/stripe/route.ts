@@ -1,3 +1,4 @@
+import { isStripePaymentIntentWebhook } from "@/lib/payments/stripe-webhook";
 import { logger } from "@/lib/logging/logger";
 import { resolveWebhookProvider } from "@/lib/payments/config";
 import { applyProviderWebhook } from "@/lib/payments/registry";
@@ -22,7 +23,16 @@ export async function POST(request: Request) {
     return new Response(null, { status: 500 });
   }
   const stored = recorded as { duplicate: boolean; id?: string } | null;
-  if (!stored || stored.duplicate) return new Response(null, { status: 200 });
+  if (!stored) return new Response(null, { status: 500 });
+  if (stored.duplicate) {
+    if (!envelope.signatureVerified || !isStripePaymentIntentWebhook(envelope.eventType, envelope.payload)) return new Response(null, { status: 200 });
+    // A prior delivery may have been recorded before its database write failed.
+    const { data: previous, error: lookupError } = await supabase.from("payment_webhook_events")
+      .select("id").eq("workspace_id", resolved.connection.workspace_id).eq("provider", "stripe").eq("event_id", envelope.eventId).maybeSingle();
+    if (lookupError || !previous) return new Response(null, { status: 500 });
+    stored.id = previous.id;
+  }
+  if (!stored.id) return new Response(null, { status: 500 });
   if (!envelope.signatureVerified) {
     await supabase.rpc("wayne_finish_payment_webhook", { target_id: stored.id, error_message: "Signature did not verify" });
     logger.warn("stripe_webhook.bad_signature", { event_type: envelope.eventType });

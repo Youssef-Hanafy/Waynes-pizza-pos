@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { logger } from "@/lib/logging/logger";
-import { captureHeldCards } from "@/lib/payments/tip-capture";
+import { captureHeldCards, type TipRequest } from "@/lib/payments/tip-capture";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 /**
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
   const { data: rows, error } = await service.from("payments")
-    .select("order_id, authorized_at, created_at, workspace_id, location_id")
+    .select("id, order_id, authorized_at, created_at, workspace_id, location_id")
     .eq("status", "authorized").eq("method", "card").in("provider", ["stripe", "test"])
     .lt("created_at", cutoff).limit(500);
   if (error) {
@@ -35,11 +35,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "Held cards could not be loaded." }, { status: 503 });
   }
 
-  const groups = new Map<string, { workspaceId: string; locationId: string | null; orders: string[] }>();
-  for (const row of rows ?? []) {
+  // An unfinished operation keeps its original tip, even when recovery comes
+  // from the zero-tip nightly job. Completed charges can still need hold release.
+  const { data: recovery, error: recoveryError } = await service.from("pos_tip_operations")
+    .select("payment_id, order_id, workspace_id, location_id, requested_tip_cents")
+    .or("state.eq.pending,release_pending.eq.true").order("updated_at").limit(500);
+  if (recoveryError) return Response.json({ error: "Tip recovery could not be loaded." }, { status: 503 });
+  const groups = new Map<string, { workspaceId: string; locationId: string | null; payments: Map<string, TipRequest> }>();
+  for (const row of [...(rows ?? []).map((row) => ({ ...row, payment_id: row.id, requested_tip_cents: 0 })), ...(recovery ?? [])]) {
     const key = `${row.workspace_id}:${row.location_id ?? ""}`;
-    const group = groups.get(key) ?? { workspaceId: row.workspace_id as string, locationId: (row.location_id as string | null) ?? null, orders: [] };
-    group.orders.push(row.order_id as string);
+    const group = groups.get(key) ?? { workspaceId: row.workspace_id as string, locationId: (row.location_id as string | null) ?? null, payments: new Map<string, TipRequest>() };
+    group.payments.set(row.payment_id as string, { payment_id: row.payment_id as string, order_id: row.order_id as string, tip_cents: row.requested_tip_cents as number });
     groups.set(key, group);
   }
 
@@ -48,13 +54,10 @@ export async function POST(request: Request) {
   for (const group of groups.values()) {
     const result = await captureHeldCards({
       service, workspaceId: group.workspaceId, locationId: group.locationId,
-      requests: group.orders.map((orderId) => ({ order_id: orderId, tip_cents: 0 })), keyPrefix: "auto",
+      requests: [...group.payments.values()], keyPrefix: "auto",
     });
     problems.push(...result.problems);
-    if (!result.captures.length) continue;
-    const { data, error: applyError } = await service.rpc("wayne_pos_apply_card_tips", { captures: result.captures, via: "auto_nightly" });
-    if (applyError) { logger.error("payments.tip_auto_apply_failed", applyError, { workspace_id: group.workspaceId }); problems.push(applyError.message); continue; }
-    charged += (data as { count?: number } | null)?.count ?? result.captures.length;
+    charged += result.captures.length;
   }
   if (problems.length) logger.warn("payments.tip_auto_problems", { count: problems.length, first: problems.slice(0, 5).join(" | ") });
   return Response.json({ charged, waiting: rows?.length ?? 0, problems }, { headers: { "Cache-Control": "no-store" } });
