@@ -44,6 +44,8 @@ import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos
 import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
 import { RingingBanner } from "./ringing-banner";
+import { usePosHistory } from "./use-pos-history";
+import { describeStep, useHistoryState } from "@/stores/pos-history";
 import { useStore } from "@/stores/create-store";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
@@ -129,6 +131,9 @@ export function PosApp(props: Props) {
       setOpening(false);
     }
   }
+  // Back / Forward on every screen (owner, 2026-10-29).  Before the close-out below, so a ticket's last state is recorded first.
+  const history = usePosHistory(section, setSection);
+  const historyState = useHistoryState();
   const sectionRef = useRef<Section>(section);
   useEffect(() => {
     // Leaving New Order closes out a ticket that was not sent, and its phone call,
@@ -312,6 +317,13 @@ export function PosApp(props: Props) {
     <PosKeyboard />
     <PosAutoRefresh isSafe={idleForRefresh} />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
+      {/* Back / Forward: undo and redo the last steps anywhere on the POS — the screen, and on New Order the ticket (order type, customer, address, items). */}
+      <div aria-label="Back and forward" className="flex items-center gap-1" role="group">
+        {([["back", "‹", historyState.back.at(-1)], ["forward", "›", historyState.forward[0]]] as const).map(([direction, arrow, step]) => {
+          const label = `${direction === "back" ? "Back" : "Forward"}${step ? ` to ${describeStep(step, sectionName)}` : ""}`;
+          return <button aria-label={label} className="grid h-11 w-12 place-items-center rounded-xl bg-white/15 text-3xl font-black leading-none text-wayne-cream transition hover:bg-white/25 active:scale-95 disabled:opacity-30" disabled={!step} key={direction} onClick={direction === "back" ? history.back : history.forward} title={label} type="button">{arrow}</button>;
+        })}
+      </div>
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
       <PrintStationBadge />
@@ -366,6 +378,15 @@ export function PosApp(props: Props) {
     {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
     {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
+}
+
+/** A screen's name on the Back / Forward buttons. */
+function sectionName(section: string) {
+  const names: Record<string, string> = {
+    order: "New Order", phone: "Phone", pay: "Payments", orders: "Orders", today: "Today's Orders", customers: "Customers",
+    delivery: "Deliveries", tips: "Tips", closeout: "Close Out", more: "More",
+  };
+  return names[section] ?? section;
 }
 
 const deviceNames: Record<string, string> = {

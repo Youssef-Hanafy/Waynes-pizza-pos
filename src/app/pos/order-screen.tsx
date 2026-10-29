@@ -18,6 +18,7 @@ import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts
 import { showOnCustomerScreen } from "@/stores/customer-display-link";
 import { FitGrid } from "./fit-grid";
 import { FitToSpace } from "./fit-to-space";
+import { takenBack, useHistoryRestores } from "@/stores/pos-history";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { PosItemDialog } from "./item-dialog";
 import { PaymentPrompt, type Done } from "./payments-screen";
@@ -69,6 +70,17 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   /** The order just sent, shown with the payment prompt until it is paid or left to pay later. */
   // fresh: sent from this screen and not settled yet — leaving without a payment or Pay later closes it out (owner, 2026-10-19).
   const [created, setCreated] = useState<{ order: OpenOrder; duplicate: boolean; delivery: boolean; added?: "merged" | "add_on"; fresh: boolean } | null>(null);
+  /*
+   * Back / Forward (owner, 2026-10-29) changed the ticket under this screen:
+   * the details card re-reads it, and the payment box closes when Back took
+   * that order back to change it (it was cancelled on the server first).
+   */
+  const restores = useHistoryRestores();
+  const [seenRestores, setSeenRestores] = useState(restores);
+  if (restores !== seenRestores) {
+    setSeenRestores(restores);
+    if (created && created.order.id === takenBack.orderId) setCreated(null);
+  }
   const [printNote, setPrintNote] = useState("");
   const [paidFlash, setPaidFlash] = useState("");
   useEffect(() => {
@@ -381,7 +393,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
 
   if (!draft.started) return <div className="flex min-h-0 flex-1 flex-col">
     {topBar}
-    <StartOrderCard draft={draft} key={draft.id} onOpenPhone={fromCall ? onOpenPhone : undefined} settings={settings} />
+    <StartOrderCard draft={draft} key={`${draft.id}-${restores}`} onOpenPhone={fromCall ? onOpenPhone : undefined} settings={settings} />
   </div>;
 
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0) + existingLines.filter((line) => !removedIds.has(line.id)).reduce((sum, line) => sum + existingQuantity(line), 0);

@@ -6,6 +6,7 @@ import { draftSync } from "./draft-sync";
 import { orderStore } from "./order-store";
 import { phoneActions, phoneStore } from "./phone-store";
 import { ACTIVE_STATUSES } from "@/lib/phone/phone-state";
+import { noteClosedUnsent } from "./pos-history";
 
 /**
  * Tickets are never held (owner, 2026-10-19): "the phone line automatically
@@ -55,6 +56,8 @@ export function closeOutUnsentTickets(options: { keepActive?: boolean } = {}) {
     void draftSync.discard(draft);
   }
   orderStore.set((now) => closing.reduce((next, draft) => removeDraft(next, draft.id), now));
+  // Never sent: Back / Forward may put these back (owner, 2026-10-29).
+  noteClosedUnsent(closing.map((draft) => draft.id));
 }
 
 /** Bring back the last ticket closed out (a new ticket with the same items and customer). */
