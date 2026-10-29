@@ -21,6 +21,9 @@ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_co
 update public.profiles set role_id=(select id from public.roles where code='owner'),active=true where id='7a000000-0000-4000-8000-000000000001';
 update public.profiles set role_id=(select id from public.roles where code='cashier'),active=true where id in ('7a000000-0000-4000-8000-000000000002','7a000000-0000-4000-8000-000000000003');
 
+select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000001',true);
+select set_config('phase12.closeout_before',public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)::text,true);
+
 update public.store_settings set ordering_open=true,test_ordering_enabled=true,pickup_enabled=true,delivery_enabled=true,
  pickup_minimum_cents=0,delivery_minimum_cents=0,tax_rate_basis_points=0,
  business_hours='{"sunday":{"closed":false,"open":"00:00","close":"24:00"},"monday":{"closed":false,"open":"00:00","close":"24:00"},"tuesday":{"closed":false,"open":"00:00","close":"24:00"},"wednesday":{"closed":false,"open":"00:00","close":"24:00"},"thursday":{"closed":false,"open":"00:00","close":"24:00"},"friday":{"closed":false,"open":"00:00","close":"24:00"},"saturday":{"closed":false,"open":"00:00","close":"24:00"}}';
@@ -47,7 +50,7 @@ select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000001'
 select throws_ok($$select public.wayne_save_register('{"label":"  "}'::jsonb)$$,'22023','Name the register','a register needs a name');
 select lives_ok($$select set_config('phase12.register',public.wayne_save_register('{"label":"Phase 12 Front counter","location_note":"By the door"}'::jsonb)::text,true)$$,'the owner creates a register');
 select set_config('phase12.register_id',(current_setting('phase12.register')::jsonb->>'id'),true);
-select ok((select count(*)>0 from public.audit_log where entity_type='registers'),'creating a register is audited');
+select ok((select count(*)>0 from public.audit_log where entity_type='registers' and entity_id=current_setting('phase12.register_id')),'creating a register is audited');
 reset role;
 
 -- ============================================================================
@@ -105,7 +108,7 @@ select is((select payment_method from public.orders where id=current_setting('ph
 select is((select amount_cents from public.payments where order_id=current_setting('phase12.order_id')::uuid),2000,'the ledger records the amount due, not the tender');
 select is((select shift_id from public.payments where order_id=current_setting('phase12.order_id')::uuid),current_setting('phase12.shift_id')::uuid,'the payment is tied to the drawer it passed through');
 select is(((public.wayne_shift_cash_totals(current_setting('phase12.shift_id')::uuid))->>'expected_cash_cents'),'17000','the drawer now expects the float plus the sale');
-select is((select count(*)::integer from public.audit_log where action='cash.payment_taken'),1,'taking cash is audited');
+select is((select count(*)::integer from public.audit_log where action='cash.payment_taken' and entity_id=current_setting('phase12.order_id')),1,'taking cash is audited');
 
 -- ============================================================================
 -- Paid-ins, paid-outs and drops
@@ -137,7 +140,7 @@ reset role;
 select is(((public.wayne_shift_cash_totals(current_setting('phase12.shift_id')::uuid))->>'expected_cash_cents'),'17800','every movement changes what the drawer should hold');
 set local role authenticated;
 reset role;
-select is((select count(*)::integer from public.audit_log where action in ('cash.paid_in','cash.paid_out','cash.drop','cash.driver_cash')),4,'every cash movement is audited');
+select is((select count(*)::integer from public.audit_log where action in ('cash.paid_in','cash.paid_out','cash.drop','cash.driver_cash') and entity_id=current_setting('phase12.shift_id')),4,'every cash movement is audited');
 set local role authenticated;
 
 -- A second cashier must not touch this drawer.
@@ -172,7 +175,7 @@ select is((select counted_cash_cents from public.register_shifts where id=curren
 select is((select variance_cents from public.register_shifts where id=current_setting('phase12.shift_id')::uuid),-50,'the variance is the difference, and it is negative when short');
 select is((select cash_sales_cents from public.register_shifts where id=current_setting('phase12.shift_id')::uuid),2000,'cash sales are snapshotted at close');
 select is((select paid_out_cents from public.register_shifts where id=current_setting('phase12.shift_id')::uuid),2200,'paid-outs and drops are snapshotted together');
-select is((select count(*)::integer from public.audit_log where action='cash.shift_closed'),1,'closing a drawer is audited');
+select is((select count(*)::integer from public.audit_log where action='cash.shift_closed' and entity_id=current_setting('phase12.shift_id')),1,'closing a drawer is audited');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000002',true);
@@ -196,10 +199,10 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000001',true);
 select lives_ok($$select public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)$$,'the owner reads the closeout report');
-select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'shift_count'),'2','the closeout counts every drawer of the day');
-select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'variance_cents'),'-50','the closeout totals the variance');
-select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'short_count'),'1','the closeout counts short drawers');
-select ok((jsonb_array_length((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'movements') = 4),'the closeout lists every cash movement with its reason');
+select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'shift_count'),((current_setting('phase12.closeout_before')::jsonb->'totals'->>'shift_count')::bigint+(2))::text,'the closeout counts every drawer of the day');
+select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'variance_cents'),((current_setting('phase12.closeout_before')::jsonb->'totals'->>'variance_cents')::bigint+(-50))::text,'the closeout totals the variance');
+select is(((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'totals'->>'short_count'),((current_setting('phase12.closeout_before')::jsonb->'totals'->>'short_count')::bigint+(1))::text,'the closeout counts short drawers');
+select ok((jsonb_array_length((public.wayne_cash_closeout((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date))->'movements') = jsonb_array_length(current_setting('phase12.closeout_before')::jsonb->'movements') + 4),'the closeout lists every cash movement with its reason');
 select set_config('request.jwt.claim.sub','7a000000-0000-4000-8000-000000000003',true);
 select throws_ok($$select public.wayne_cash_closeout(current_date,current_date)$$,'42501','Cash management permission required','a cashier cannot read the closeout report');
 reset role;

@@ -25,6 +25,9 @@ update public.profiles set role_id=(select id from public.roles where code='driv
 update public.profiles set role_id=(select id from public.roles where code='cashier'),active=true where id='5a000000-0000-4000-8000-000000000004';
 update public.profiles set role_id=(select id from public.roles where code='kitchen'),active=true where id='5a000000-0000-4000-8000-000000000005';
 
+select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000001',true);
+select set_config('phase10.metrics_before',public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)::text,true);
+
 update public.store_settings set ordering_open=true,test_ordering_enabled=true,pickup_enabled=true,delivery_enabled=true,
  pickup_minimum_cents=0,delivery_minimum_cents=0,delivery_postal_codes=array['01606'],
  business_hours='{"sunday":{"closed":false,"open":"00:00","close":"24:00"},"monday":{"closed":false,"open":"00:00","close":"24:00"},"tuesday":{"closed":false,"open":"00:00","close":"24:00"},"wednesday":{"closed":false,"open":"00:00","close":"24:00"},"thursday":{"closed":false,"open":"00:00","close":"24:00"},"friday":{"closed":false,"open":"00:00","close":"24:00"},"saturday":{"closed":false,"open":"00:00","close":"24:00"}}';
@@ -113,7 +116,7 @@ select ok((select count(*)>=4 from public.order_events where order_id=current_se
 set local role authenticated;
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000001',true);
 select is(((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'delivered_count')),'1','owner metrics count the delivery');
-select ok(((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'cash_collected_cents')::bigint > 0),'owner metrics report cash collected');
+select is((public.wayne_delivery_metrics((now() at time zone 'America/New_York')::date,(now() at time zone 'America/New_York')::date)->'totals'->>'cash_collected_cents')::bigint,(current_setting('phase10.metrics_before')::jsonb->'totals'->>'cash_collected_cents')::bigint+current_setting('phase10.total')::bigint,'owner metrics add exactly this delivery cash to the retained ledger');
 select set_config('request.jwt.claim.sub','5a000000-0000-4000-8000-000000000002',true);
 select throws_ok($$select public.wayne_delivery_metrics(current_date,current_date)$$,'42501','Report viewing permission required','a driver cannot read delivery analytics');
 reset role;
