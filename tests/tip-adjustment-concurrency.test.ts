@@ -257,6 +257,9 @@ describe("tip adjustment across independent PostgreSQL sessions", () => {
     expect(after.abandoned_tip_id).toBe(before.tip_intent_id);
     expect(charges).toEqual([payment.originalId]);
     expect(intents.get(before.tip_intent_id)?.status).toBe("voided");
+    const service=await db.service();
+    await expect(applyStripeWebhookEvent(service.api,"payment_intent.canceled",{data:{object:{id:before.tip_intent_id}}},workspaceId,async(id)=>({...intents.get(id)!,metadata:{wayne_tip_operation:after.id}}))).resolves.toBeUndefined();
+    expect((await operation(payment.paymentId)).result.tip_cents).toBe(0);
   });
   it("recovers a separately charged tip after the order capture loses its answer, across worker restart", async () => {
     const payment = await fixture();
