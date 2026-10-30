@@ -9,7 +9,9 @@ The owner selected: order amount first; tip refund only when explicitly entered;
 record driver recovery due for refunded tips already paid out. The total refund
 includes the entered tip component. A request exceeding the remaining order
 amount without selecting its tip fails. A held authorization must be voided, not
-refunded. Captured replacement and split payments preserve their original receipts.
+refunded. Voids use the stored provider identity, reserve under the coordinator
+fence, and resume the same cancellation after uncertainty. An active tip operation
+must be reconciled first. Captured replacement and split payments preserve their original receipts.
 
 Every Stripe refund is allocated transactionally before calling the provider. A
 split uses one durable refund row for each intent. Pending and completed rows
@@ -31,6 +33,15 @@ cashout. The timeline and admin order show the due. Original captured amounts,
 tips and cashouts remain historical evidence. A due is neither cash received nor
 a wage deduction; collection and any payroll treatment require normal authorized
 accounting procedures. No automatic collection is implemented.
+
+## Verified production identity (read-only)
+
+Production project: `prj_yuDZ5rpq4jOmRo2KINX6W3KeJM80`; team:
+`team_1GeWDK04pXDS0X3jGsLUxN1h`; previous deployment:
+`dpl_HoiQny3guq9948WYfLcAtFfhhNDW`; application:
+`https://app.hanafymedia.com`; Supabase: `vxpkdmtornkeoedkawkt`.
+The staging project is a separate project: `prj_Bg0RzItCkAPgzTaWM71M98RY2PiV`,
+Supabase `pkjrdvtdygiprmsojdqg`. Never substitute one for the other.
 
 ## Exact production migration scope
 

@@ -163,3 +163,45 @@ begin
 end $$;
 revoke all on function public.wayne_observe_refund(jsonb) from public,anon,authenticated;
 grant execute on function public.wayne_observe_refund(jsonb) to service_role;
+
+-- Original authorizations are voided, never refunded. Reserve the intent under
+-- the same fence as tip capture; keep its button available for uncertain retries.
+create or replace function public.wayne_prepare_payment_void(target_payment_id uuid,target_order_id uuid)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare p public.payments%rowtype;
+begin
+ if not public.wayne_has_permission('payments.manage') then raise exception 'Payment management permission required' using errcode='42501'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(target_payment_id::text,731));
+ select * into p from public.payments where id=target_payment_id for update;
+ if not found or p.order_id<>target_order_id or not coalesce(public.hanafy_can_access_workspace_data(p.workspace_id,array['payments.manage']),false) then raise exception 'Payment not found or not allowed' using errcode='42501'; end if;
+ if p.status='voided' then return jsonb_build_object('duplicate',true); end if;
+ if p.status<>'authorized' or p.provider_payment_id is null then raise exception 'Only an authorization can be voided' using errcode='22023'; end if;
+ if exists(select 1 from public.pos_tip_operations where payment_id=p.id) then raise exception 'Reconcile the existing tip operation before voiding' using errcode='40001'; end if;
+ update public.payments set metadata=metadata||jsonb_build_object('void_requested',true) where id=p.id;
+ return jsonb_build_object('provider_payment_id',p.provider_payment_id,'provider',p.provider,'workspace_id',p.workspace_id,'duplicate',false);
+end $$;
+revoke all on function public.wayne_prepare_payment_void(uuid,uuid) from public,anon;
+grant execute on function public.wayne_prepare_payment_void(uuid,uuid) to authenticated;
+
+create or replace function public.wayne_finish_payment_void(target_payment_id uuid,provider_id text)
+returns void language plpgsql security definer set search_path='' as $$
+declare p public.payments%rowtype;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(target_payment_id::text,731));
+ select * into p from public.payments where id=target_payment_id for update;
+ if not found or p.provider_payment_id is distinct from provider_id then raise exception 'Void payment binding changed' using errcode='40001'; end if;
+ if p.status='voided' then return; end if;
+ if p.status<>'authorized' or not coalesce((p.metadata->>'void_requested')::boolean,false) or exists(select 1 from public.pos_tip_operations where payment_id=p.id) then raise exception 'Void payment state changed; reconcile it' using errcode='40001'; end if;
+ perform public.wayne_settle_payment(jsonb_build_object('payment_id',p.id,'status','voided','provider_status','canceled'));
+end $$;
+revoke all on function public.wayne_finish_payment_void(uuid,text) from public,anon,authenticated;
+grant execute on function public.wayne_finish_payment_void(uuid,text) to service_role;
+
+do $$ declare definition text; anchor text:='perform pg_advisory_xact_lock(hashtextextended(target_payment_id::text, 731));'; begin
+ definition:=pg_get_functiondef('public.wayne_claim_tip_operation(uuid,uuid,integer,uuid,text)'::regprocedure);
+ if position('void_requested' in definition)=0 then
+  if position(anchor in definition)=0 then raise exception 'Review tip coordinator void fence before migration'; end if;
+  definition:=replace(definition,anchor,anchor||E'\n  if exists(select 1 from public.payments where id=target_payment_id and coalesce((metadata->>''void_requested'')::boolean,false)) then return jsonb_build_object(''acquired'',false,''busy'',true); end if;');
+  execute definition;
+ end if;
+end $$;

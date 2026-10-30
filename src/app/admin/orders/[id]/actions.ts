@@ -132,20 +132,26 @@ export async function voidOrderPayment(form: FormData) {
   const path = `/admin/orders/${orderId.data}`;
   const access = await requirePermission("payments.manage", path);
   const paymentId = z.uuid().safeParse(form.get("payment_id"));
-  const providerPaymentId = String(form.get("provider_payment_id") ?? "");
-  if (!paymentId.success || !providerPaymentId) redirect(`${path}?error=${encodeURIComponent("That payment cannot be voided.")}`);
+  if (!paymentId.success) redirect(`${path}?error=${encodeURIComponent("That payment cannot be voided.")}`);
 
   const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) redirect(`${path}?error=${encodeURIComponent("The payment processor is not available.")}`);
+  const staff = await createServerSupabaseClient();
+  const prepared = await staff.rpc("wayne_prepare_payment_void", { target_payment_id: paymentId.data, target_order_id: orderId.data });
+  if (prepared.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(prepared.error))}`);
+  const bound = prepared.data as { duplicate: boolean; provider: string; provider_payment_id: string };
+  if (bound.duplicate) redirect(`${path}?saved=voided`);
+  if (bound.provider !== resolved.value.provider.code) redirect(`${path}?error=Payment%20processor%20does%20not%20match`);
   const service = createServiceSupabaseClient();
   try {
-    const result = await resolved.value.provider.voidPayment(providerPaymentId);
-    await service.rpc("wayne_settle_payment", {
-      payload: { payment_id: paymentId.data, status: result.status === "voided" ? "voided" : result.status, provider_status: result.providerStatus },
-    });
+    const current = await resolved.value.provider.getPaymentStatus(bound.provider_payment_id);
+    const result = current.status === "voided" ? current : await resolved.value.provider.voidPayment(bound.provider_payment_id);
+    if (result.status !== "voided" || result.providerPaymentId !== bound.provider_payment_id) throw new Error("The provider has not confirmed this authorization was voided.");
+    const saved = await service.rpc("wayne_finish_payment_void", { target_payment_id: paymentId.data, provider_id: bound.provider_payment_id });
+    if (saved.error) throw new Error("The canceled authorization needs receipt recovery. Retry this void; do not create a charge.");
   } catch (cause) {
     logger.error("void.provider_failed", cause, { order_id: orderId.data });
-    redirect(`${path}?error=${encodeURIComponent(cause instanceof PaymentProviderError ? cause.message : "The payment could not be voided.")}`);
+    redirect(`${path}?error=${encodeURIComponent(cause instanceof Error ? cause.message : "The payment could not be voided.")}`);
   }
   revalidatePath(path);
   redirect(`${path}?saved=voided`);

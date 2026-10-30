@@ -225,7 +225,7 @@ test.describe("Phase 0–5 staging vertical slice", () => {
       await page.getByRole("textbox", { name: "Total refund", exact: true }).fill("18.00");
       await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Synthetic browser split refund");
       await page.getByRole("button", { name: "Refund", exact: true }).click();
-      await expect(page.getByRole("alert")).toContainText("select tip explicitly");
+      await expect(page.getByRole("alert").filter({ hasText: "select tip explicitly" })).toBeVisible();
       await page.getByRole("textbox", { name: "Total refund", exact: true }).fill("18.00");
       await page.getByRole("textbox", { name: "Tip included in refund (explicit amount)", exact: true }).fill("5.00");
       await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Synthetic browser split refund");

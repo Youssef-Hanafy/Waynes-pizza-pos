@@ -1,6 +1,6 @@
 begin;
 set local search_path=public,extensions;
-select plan(16);
+select plan(20);
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data)
  values('7b000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','refund-owner@test.local','',now(),'{}','{}');
 update public.profiles set active=true,role_id=(select id from public.roles where code='owner') where id='7b000000-0000-4000-8000-000000000001';
@@ -33,5 +33,20 @@ select is((select payment_status from public.orders where id='7b000000-0000-4000
 select is((select tip_refunded_cents from public.orders where id='7b000000-0000-4000-8000-000000000010'),500,'tip entitlement reduced exactly once');
 select is((select amount_cents from public.payments where id='7b000000-0000-4000-8000-000000000020'),2500,'captured financial history retained');
 select is((select count(*) from public.driver_tip_recovery_dues where order_id='7b000000-0000-4000-8000-000000000010'),0::bigint,'unpaid driver tip creates no recovery due');
+insert into public.orders(id,order_number,source,fulfillment_type,status,payment_status,payment_method,subtotal_cents,total_cents,customer_name_snapshot,customer_phone_snapshot,pricing_snapshot,idempotency_key,is_test)
+ values('7b000000-0000-4000-8000-000000000011','VOID-PGTAP','pos','pickup','placed','authorized','card',2000,2000,'Synthetic void','+15085550100','{}','void-pgtap-order',true);
+insert into public.payments(id,order_id,provider,provider_payment_id,method,amount_cents,status)
+ values('7b000000-0000-4000-8000-000000000021','7b000000-0000-4000-8000-000000000011','stripe','pi_pgtap_void_original','card',2000,'authorized');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','7b000000-0000-4000-8000-000000000001',true);
+select is(public.wayne_prepare_payment_void('7b000000-0000-4000-8000-000000000021','7b000000-0000-4000-8000-000000000011')->>'provider_payment_id','pi_pgtap_void_original','void uses the bound provider identity');
+select throws_ok($$select public.wayne_begin_allocated_refund('{"payment_id":"7b000000-0000-4000-8000-000000000021","order_id":"7b000000-0000-4000-8000-000000000011","amount_cents":100,"reason":"Synthetic held refund","idempotency_key":"refund-pgtap-held-denied"}')$$,'22023','Only a captured Stripe payment can be refunded','original authorization is not refundable');
+reset role;
+set local role service_role;
+select set_config('request.jwt.claim.sub','',true);
+select is((public.wayne_claim_tip_operation('7b000000-0000-4000-8000-000000000021','40000000-0000-4000-8000-000000000001',500,gen_random_uuid(),'pgtap-void-race')->>'acquired')::boolean,false,'void reservation fences tip capture');
+select public.wayne_finish_payment_void('7b000000-0000-4000-8000-000000000021','pi_pgtap_void_original');
+reset role;
+select is((select status from public.payments where id='7b000000-0000-4000-8000-000000000021'),'voided','bound authorization cancellation settles safely');
 select * from finish();
 rollback;

@@ -98,6 +98,26 @@ describe("allocated refunds on real PostgreSQL", () => {
   const before=await ownerTips();const r=await begin(f,200,200);await settle(r.legs[0].id);
   expect(await ownerTips()).toBe(before-200);
  });
+ async function prepareVoid(f:Awaited<ReturnType<typeof db.fixture>>,orderId=f.orderId){
+  const c=await db.connect();await c.query('begin;set local role authenticated');await c.query("select set_config('request.jwt.claim.sub',$1,true)",[ownerId]);
+  try {const r=(await c.query('select public.wayne_prepare_payment_void($1,$2) value',[f.paymentId,orderId])).rows[0].value;await c.query('commit');return r;}catch(e){await c.query('rollback');throw e;}
+ }
+ it('binds authorization voids to their actual order and intent',async()=>{
+  const f=await db.fixture();await expect(prepareVoid(f,randomUUID())).rejects.toThrow('not allowed');expect(await prepareVoid(f)).toMatchObject({provider_payment_id:f.originalId,duplicate:false});
+  const api=(await db.service()).api;expect((await api.rpc('wayne_finish_payment_void',{target_payment_id:f.paymentId,provider_id:'pi_someone_else'})).error).not.toBeNull();
+  expect((await api.rpc('wayne_finish_payment_void',{target_payment_id:f.paymentId,provider_id:f.originalId})).error).toBeNull();expect((await prepareVoid(f)).duplicate).toBe(true);
+ });
+ it('blocks tip capture after a durable void reservation',async()=>{
+  const f=await db.fixture();await prepareVoid(f);const api=(await db.service()).api;const r=await api.rpc('wayne_claim_tip_operation',{target_payment_id:f.paymentId,target_workspace_id:'40000000-0000-4000-8000-000000000001',requested_tip:500,worker_token:randomUUID(),origin:'void-race'});expect(r.error).toBeNull();expect(r.data).toMatchObject({acquired:false,busy:true});
+ });
+ it('blocks voids once a tip operation has claimed the authorization',async()=>{
+  const f=await db.fixture();await db.admin.query('update public.pos_tip_capture_control set execution_enabled=true');const api=(await db.service()).api;const r=await api.rpc('wayne_claim_tip_operation',{target_payment_id:f.paymentId,target_workspace_id:'40000000-0000-4000-8000-000000000001',requested_tip:500,worker_token:randomUUID(),origin:'void-race'});expect(r.error).toBeNull();await expect(prepareVoid(f)).rejects.toThrow('existing tip operation');
+ });
+ it('allows only one winner when void and tip capture race across PostgreSQL sessions',async()=>{
+  const f=await db.fixture();await db.admin.query('update public.pos_tip_capture_control set execution_enabled=true');const api=(await db.service()).api;
+  const [voided,claimed]=await Promise.allSettled([prepareVoid(f),api.rpc('wayne_claim_tip_operation',{target_payment_id:f.paymentId,target_workspace_id:'40000000-0000-4000-8000-000000000001',requested_tip:500,worker_token:randomUUID(),origin:'void-race'})]);
+  const voidWon=voided.status==='fulfilled';const tipWon=claimed.status==='fulfilled'&&Boolean((claimed.value.data as {acquired?:boolean})?.acquired);expect(Number(voidWon)+Number(tipWon)).toBe(1);
+ });
  it('preserves completed refunds, recovery dues and capture control on migration reapplication',async()=>{
   const before=(await db.admin.query('select count(*)::int n from public.refunds')).rows[0].n;
   await db.admin.query('update public.pos_tip_capture_control set execution_enabled=false');
