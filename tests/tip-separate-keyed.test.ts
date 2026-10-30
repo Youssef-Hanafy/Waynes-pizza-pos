@@ -61,8 +61,7 @@ describe("keyed delivery card: tip charged separately (durable coordinator)", ()
     const fixture = await db.fixture();
     intents.set(fixture.originalId, { providerPaymentId: fixture.originalId, status: "authorized", providerStatus: "requires_capture", amountCents: fixture.amount, maxCapturableCents: fixture.amount + room,
       paymentMethodId: room ? null : "pm_keyed", customerId: room ? null : "cus_keyed", cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null } as ProviderPayment);
-    const { api } = await db.service();
-    const run = (tip: number) => captureHeldCards({ service: api, workspaceId, locationId: null, requests: [{ order_id: fixture.orderId, tip_cents: tip }], keyPrefix: "driver-cashout" });
+    const run = async (tip: number) => captureHeldCards({ service: (await db.service()).api, workspaceId, locationId: null, requests: [{ order_id: fixture.orderId, tip_cents: tip }], keyPrefix: "driver-cashout" });
     return { ...fixture, run };
   }
 
@@ -119,10 +118,17 @@ describe("keyed delivery card: tip charged separately (durable coordinator)", ()
   });
   it("serializes new separate-tip plans across driver cash-out, Tips and scheduled capture", async () => {
     const order = await keyed();
+    let enter!: () => void, resume!: () => void;
+    const entered = new Promise<void>(resolve => { enter = resolve; });
+    const paused = new Promise<void>(resolve => { resume = resolve; });
+    const prepare = provider.createSavedCardIntent.getMockImplementation()!;
+    provider.createSavedCardIntent.mockImplementationOnce(async input => { enter(); await paused; return prepare(input); });
     const first = order.run(300);
+    await entered;
     const { api } = await db.service();
     const scheduled = captureHeldCards({ service: api, workspaceId, locationId: null, requests: [{ order_id: order.orderId, tip_cents: 0 }], keyPrefix: "auto" });
-    await Promise.all([first, scheduled, order.run(300)]);
+    await Promise.all([scheduled, order.run(300)]);
+    resume(); await first;
     await order.run(300);
     expect(created.map(c => c.amount)).toEqual([300]);
     expect(charges.map(c => c.amount).sort()).toEqual([300, order.amount].sort());

@@ -14,7 +14,7 @@ const stripe = {
   getPaymentStatus: vi.fn(async (id: string) => ({ ...intents.get(id)! })),
   createSavedCardIntent: vi.fn(async (input: { amountCents: number }) => {
     const id = `pi_tip_${randomUUID()}`;
-    const tip = { providerPaymentId: id, status: "pending" as const, providerStatus: "requires_confirmation", amountCents: input.amountCents };
+    const tip = { providerPaymentId: id, status: "pending" as const, providerStatus: "requires_confirmation", amountCents: input.amountCents, cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null };
     intents.set(id, tip); return { ...tip };
   }),
   confirmSavedCardIntent: vi.fn(async (id: string) => {
@@ -37,10 +37,10 @@ describe("live Order #36 acceptance through durable receipts", () => {
     // Exact amounts from Order #36, using only synthetic local records.
     await db.admin.query("update public.payments set amount_cents=4603 where id=$1", [f.paymentId]);
     await db.admin.query("update public.orders set subtotal_cents=4603,total_cents=4603,tax_cents=0,daily_number=36 where id=$1", [f.orderId]);
-    intents.set(f.originalId, { providerPaymentId: f.originalId, status: "authorized", providerStatus: "requires_capture", amountCents: 4603, maxCapturableCents: 4603, paymentMethodId: "pm_keyed", customerId: "cus_keyed" });
+    intents.set(f.originalId, { providerPaymentId: f.originalId, status: "authorized", providerStatus: "requires_capture", amountCents: 4603, maxCapturableCents: 4603, paymentMethodId: "pm_keyed", customerId: "cus_keyed", cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null });
     const tipId = `pi_legacy_${randomUUID()}`;
     if (legacyTip) {
-      intents.set(tipId, { providerPaymentId: tipId, status: "captured", providerStatus: "succeeded", amountCents: 300 });
+      intents.set(tipId, { providerPaymentId: tipId, status: "captured", providerStatus: "succeeded", amountCents: 300, cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null });
       await db.admin.query("update public.payments set metadata=metadata||$2::jsonb where id=$1", [f.paymentId, JSON.stringify({ tip_charge_intent: tipId, tip_charge_cents: 300, tip_charged_separately: true })]);
     }
     const run = async (tip = 300) => captureHeldCards({ service: (await db.service()).api, workspaceId, locationId: null, requests: [{ order_id: f.orderId, tip_cents: tip }], keyPrefix: "driver-cashout" });
