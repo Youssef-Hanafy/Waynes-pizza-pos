@@ -42,3 +42,32 @@ export async function applyStripeWebhookEvent(
     throw new Error("Tip operation is not yet bound; retry reconciliation");
   }
 }
+
+/** Refund duplicates re-read Stripe; webhook payload status is never authoritative. */
+export function isStripeRefundWebhook(eventType: string, payload: Record<string, unknown>) {
+  return eventType.startsWith("refund.") && typeof readStripeWebhookObject(payload).id === "string";
+}
+export function isStripeReconciliationWebhook(eventType: string, payload: Record<string, unknown>) {
+  return isStripePaymentIntentWebhook(eventType, payload) || isStripeRefundWebhook(eventType, payload);
+}
+export async function applyStripeRefundWebhook(
+  supabase: ServiceClient, eventType: string, payload: Record<string, unknown>, workspaceId: string,
+  provider: import("./provider").PaymentProvider,
+) {
+  if (!isStripeRefundWebhook(eventType, payload)) return;
+  const object = readStripeWebhookObject(payload) as { metadata?: Record<string,string> };
+  const key = object.metadata?.wayne_refund_leg;
+  if (!key) return; // External/manual refunds require separate ledger reconciliation.
+  const { data: leg, error } = await supabase.from("refunds").select("id,provider_payment_id,amount_cents,idempotency_key,status")
+    .eq("workspace_id", workspaceId).eq("idempotency_key",key).maybeSingle();
+  if (error || !leg || !provider.findRefund) throw new Error("Refund leg is not bound; retry reconciliation");
+  const current = await provider.findRefund({ providerPaymentId: leg.provider_payment_id, amountCents: leg.amount_cents, idempotencyKey: leg.idempotency_key });
+  if (!current?.providerRefundId) throw new Error("Refund outcome is uncertain; retry reconciliation");
+  if (current.status === "pending") {
+    const observed = await supabase.rpc("wayne_observe_refund", { payload: { refund_id: leg.id, provider_refund_id: current.providerRefundId, provider_status: current.providerStatus } });
+    if (observed.error) throw new Error(observed.error.message);
+    return;
+  }
+  const settled = await supabase.rpc("wayne_settle_refund", { payload: { refund_id: leg.id, status: current.status, provider_refund_id: current.providerRefundId, provider_status: current.providerStatus, failure_reason: current.failureReason } });
+  if (settled.error) throw new Error(settled.error.message);
+}

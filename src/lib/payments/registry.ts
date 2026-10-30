@@ -5,7 +5,7 @@ import type { PaymentProvider } from "./provider";
 import { createSquareProvider, squareApiBase, SQUARE_API_VERSION } from "./square";
 import { applySquareWebhookEvent, type ServiceClient } from "./square-webhook";
 import { createStripeProvider } from "./stripe";
-import { applyStripeWebhookEvent } from "./stripe-webhook";
+import { applyStripeRefundWebhook, applyStripeWebhookEvent } from "./stripe-webhook";
 
 /**
  * Provider adapter registry (Phase 9, §20.4/20.5).  The only place that maps
@@ -114,6 +114,7 @@ export async function applyProviderWebhook(connection: PaymentConnection, supaba
   if (connection.provider === "stripe") {
     const provider = buildWebhookProvider(connection);
     if (!provider) throw new Error("Stripe webhook credentials are unavailable");
+    await applyStripeRefundWebhook(supabase, eventType, payload, connection.workspace_id, provider);
     await applyStripeWebhookEvent(supabase, eventType, payload, connection.workspace_id, (id) => provider.getPaymentStatus(id));
     return;
   }

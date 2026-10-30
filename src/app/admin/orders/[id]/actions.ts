@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/access";
 import { logger } from "@/lib/logging/logger";
 import { orderTransitionSchema, transitionErrorMessage } from "@/lib/orders/status";
 import { resolvePaymentProvider } from "@/lib/payments/config";
+import { reconcileRefundLegs, type RefundLeg } from "@/lib/payments/refund-operation";
 import { PaymentProviderError } from "@/lib/payments/provider";
 import { parseAmountInput, paymentErrorMessage, refundRequestSchema } from "@/lib/payments/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
@@ -53,7 +54,11 @@ export async function refundOrderPayment(form: FormData) {
 
   const amount = parseAmountInput(String(form.get("amount") ?? ""));
   if (!amount.ok) redirect(`${path}?error=${encodeURIComponent(amount.error)}`);
+  const tipInput = String(form.get("tip_amount") ?? "0").trim();
+  const tip = /^0(?:\.0{1,2})?$/.test(tipInput) ? { ok: true as const, cents: 0 } : parseAmountInput(tipInput);
+  if (!tip.ok) redirect(`${path}?error=${encodeURIComponent(tip.error)}`);
   const parsed = refundRequestSchema.safeParse({
+    tip_cents: tip.ok ? tip.cents : 0,
     payment_id: form.get("payment_id"),
     amount_cents: amount.ok ? amount.cents : 0,
     reason: form.get("reason"),
@@ -62,6 +67,25 @@ export async function refundOrderPayment(form: FormData) {
   if (!parsed.success) redirect(`${path}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the refund details.")}`);
 
   const supabase = await createServerSupabaseClient();
+  const { data: payment, error: paymentError } = await supabase.from("payments").select("provider,order_id").eq("id",parsed.data.payment_id).single();
+  if (paymentError || payment?.order_id !== orderId.data) redirect(`${path}?error=Payment%20does%20not%20belong%20to%20this%20order`);
+  if (payment.provider === "stripe") {
+    const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
+    if (!resolved.ok || resolved.value.provider.code !== "stripe") redirect(`${path}?error=Stripe%20is%20not%20available`);
+    const begun = await supabase.rpc("wayne_begin_allocated_refund", { payload: { ...parsed.data, order_id: orderId.data } });
+    if (begun.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(begun.error))}`);
+    let pending: boolean;
+    try {
+      const result = await reconcileRefundLegs(createServiceSupabaseClient(), resolved.value.provider, (begun.data as { legs: RefundLeg[] }).legs);
+      pending = result.pending;
+    } catch (cause) {
+      logger.error("refund.reconciliation_pending", cause, { order_id: orderId.data });
+      redirect(`${path}?error=${encodeURIComponent(cause instanceof Error ? cause.message : "Resume the existing refund request.")}`);
+    }
+    revalidatePath(path); revalidatePath("/admin/payments");
+    redirect(`${path}?saved=${pending ? "refund_pending" : "refunded"}`);
+  }
+  if (parsed.data.tip_cents > 0) redirect(`${path}?error=Explicit%20tip%20refunds%20require%20Stripe`);
   const { data, error } = await supabase.rpc("wayne_begin_refund", { payload: parsed.data });
   if (error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(error))}`);
   const begun = data as { refund_id: string; duplicate: boolean; provider_payment_id: string | null };

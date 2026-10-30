@@ -81,6 +81,11 @@ describe.each(routes)("$name", ({ invoke }) => {
     expect(service.rpc).toHaveBeenLastCalledWith("wayne_finish_payment_webhook", { target_id: "local-webhook-row", error_message: null });
     expect(filters).toContainEqual({ table: "payment_webhook_events", method: "eq", args: ["workspace_id", workspaceId] });
   });
+  it("reconciles a verified duplicate refund event on this route", async () => {
+    duplicate = true; envelope.eventType = "refund.updated";
+    expect((await invoke()).status).toBe(200);
+    expect(applyProviderWebhook).toHaveBeenCalledTimes(1);
+  });
   it("does not apply unsigned duplicate payloads", async () => {
     duplicate = true; envelope.signatureVerified = false;
     expect((await invoke()).status).toBe(200);

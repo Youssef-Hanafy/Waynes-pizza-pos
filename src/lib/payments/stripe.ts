@@ -31,7 +31,10 @@ type StripePaymentIntent = {
     };
   } | null;
 };
-type StripeRefund = { id?: string; status?: string; failure_reason?: string | null };
+type StripeRefund = { id?: string; status?: string; failure_reason?: string | null; amount?: number; payment_intent?: string; metadata?: Record<string,string> };
+function mapRefund(refund: StripeRefund): ProviderRefund {
+  return { providerRefundId: refund.id ?? null, status: refund.status === "succeeded" ? "completed" : ["pending", "requires_action"].includes(refund.status ?? "") ? "pending" : "failed", providerStatus: refund.status ?? "", failureReason: refund.failure_reason ?? null };
+}
 type StripeErrorBody = { error?: { type?: string; code?: string; message?: string } };
 
 function stripeStatus(status: string | undefined): ProviderPayment["status"] {
@@ -234,14 +237,24 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
     async refundPayment({ providerPaymentId, amountCents, idempotencyKey, reason }): Promise<ProviderRefund> {
       const refund = await call<StripeRefund>("/v1/refunds", {
         method: "POST", idempotencyKey,
-        body: form({ payment_intent: providerPaymentId, amount: amountCents, reason: "requested_by_customer", "metadata[wayne_reason]": reason.slice(0, 500) }),
+        body: form({ payment_intent: providerPaymentId, amount: amountCents, reason: "requested_by_customer", "metadata[wayne_reason]": reason.slice(0, 500), "metadata[wayne_refund_leg]": idempotencyKey }),
       }, "The refund could not be sent to the card network.");
-      return {
-        providerRefundId: refund.id ?? null,
-        status: refund.status === "succeeded" ? "completed" : refund.status === "pending" ? "pending" : "failed",
-        providerStatus: refund.status ?? "",
-        failureReason: refund.failure_reason ?? null,
-      };
+      return mapRefund(refund);
+    },
+    async findRefund({ providerPaymentId, amountCents, idempotencyKey }) {
+      let cursor = "";
+      for (let page = 0; page < 100; page++) {
+        const list = await call<{ data: StripeRefund[]; has_more: boolean }>(`/v1/refunds?payment_intent=${encodeURIComponent(providerPaymentId)}&limit=100${cursor ? `&starting_after=${encodeURIComponent(cursor)}` : ""}`, { method: "GET" }, "The refund outcome could not be checked.");
+        const found = list.data.find((item) => item.metadata?.wayne_refund_leg === idempotencyKey);
+        if (found) {
+          if (found.payment_intent !== providerPaymentId || found.amount !== amountCents) throw new PaymentProviderError("The refund identity or amount does not match. Review it before retrying.", "REFUND_IDENTITY", true);
+          return mapRefund(found);
+        }
+        if (!list.has_more) return null;
+        cursor = list.data.at(-1)?.id ?? "";
+        if (!cursor) break;
+      }
+      throw new PaymentProviderError("The refund history needs manual review.", "REFUND_HISTORY", true);
     },
     async getPaymentStatus(providerPaymentId) {
       return mapIntent(await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}?expand[]=latest_charge`, { method: "GET" }, "The payment status could not be read."));

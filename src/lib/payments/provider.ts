@@ -78,6 +78,8 @@ export interface PaymentProvider {
   /** Cancel an approval that a fresh charge replaced, marked so its webhook is ignored. */
   releaseHold?(providerPaymentId: string, replacedBy: string): Promise<ProviderPayment>;
   refundPayment(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string; reason: string }): Promise<ProviderRefund>;
+  /** Authoritative lookup by durable refund-leg metadata, including after a lost response. */
+  findRefund?(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string }): Promise<ProviderRefund | null>;
   getPaymentStatus(providerPaymentId: string): Promise<ProviderPayment>;
   /** Verifies the signature and normalises the envelope. Never trusts an unsigned body. */
   handleWebhook(input: { rawBody: string; signature: string | null }): WebhookEnvelope;

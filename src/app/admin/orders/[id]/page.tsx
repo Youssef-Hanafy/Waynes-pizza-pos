@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,6 +28,7 @@ const savedMessages: Record<string, string> = {
   out_for_delivery: "Order marked out for delivery.",
   cancelled: "Order cancelled. The reason is saved in the timeline and audit log.",
   refunded: "Refund sent. It is recorded on the order and in the audit log.",
+  refund_pending: "Refund pending at Stripe. Resume this request to check its outcome.",
   refund_duplicate: "That refund was already submitted.",
   voided: "Payment voided.",
 };
@@ -37,6 +40,10 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const [order, settings, payments] = await Promise.all([getAdminOrderDetail(id), getWorkspaceStoreSettings(), getOrderPayments(id)]);
   if (!order) notFound();
   const canManagePayments = hasPermission(access, "payments.manage");
+  const refundClient = canManagePayments ? await createServerSupabaseClient() : null;
+  const refundResult = refundClient ? await refundClient.rpc("wayne_order_refund_requests", { target_order_id: id }) : null;
+  if (refundResult?.error) throw new Error("Refund recovery records could not be loaded.");
+  const refundRecords = refundResult?.data as { requests: { id: string; payment_id: string; idempotency_key: string; amount_cents: number; tip_cents: number; reason: string; pending: boolean }[]; driver_recovery_due_cents: number } | null;
   const address = order.delivery_address_snapshot as Record<string, string> | null;
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
@@ -49,6 +56,13 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
       {notice.error ? <p role="alert" className="mt-5 rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{notice.error}</p> : null}
       {isOpenOrderStatus(order.status) ? <StatusActions canCancel={hasPermission(access, "orders.cancel")} canManage={hasPermission(access, "orders.manage")} fulfillment={order.fulfillment_type} orderId={order.id} status={order.status} /> : null}
       {order.status === "cancelled" ? <CancellationNotice events={order.events} /> : null}
+      {refundRecords && refundRecords.driver_recovery_due_cents > 0 ? <p role="status" className="mt-5 rounded-xl bg-wayne-alert-soft p-4">Driver tip recovery due: {formatCents(refundRecords.driver_recovery_due_cents)}. This records money due; no cash receipt or payroll deduction has been made.</p> : null}
+      {refundRecords?.requests.filter((request) => request.pending).map((request) => <form action={refundOrderPayment} className="mt-4 rounded-xl border p-4" key={request.id}>
+        <input type="hidden" name="order_id" value={id} /><input type="hidden" name="payment_id" value={request.payment_id} />
+        <input type="hidden" name="idempotency_key" value={request.idempotency_key} /><input type="hidden" name="amount" value={(request.amount_cents / 100).toFixed(2)} />
+        <input type="hidden" name="tip_amount" value={(request.tip_cents / 100).toFixed(2)} /><input type="hidden" name="reason" value={request.reason} />
+        <p>Existing refund request: {formatCents(request.amount_cents)}, including {formatCents(request.tip_cents)} tip.</p><Button type="submit" variant="secondary">Resume existing refund</Button>
+      </form>)}
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="grid gap-6">
           <Card className="p-6"><h2 className="text-2xl font-black">Items</h2><div className="mt-4 divide-y divide-wayne-border">{order.items.map((item) => <div className="py-4" key={item.id}><div className="flex justify-between gap-4"><div><strong>{item.quantity}× {item.item_name_snapshot}</strong>{item.variant_name_snapshot ? <p className="text-sm text-wayne-muted">{item.variant_name_snapshot}</p> : null}</div><strong>{formatCents(item.line_total_cents)}</strong></div>{item.modifiers.length ? <ul className="mt-2 text-sm text-wayne-muted">{item.modifiers.map((modifier) => <li key={modifier.id}>{modifier.quantity > 1 ? `${modifier.quantity}× ` : ""}{modifier.modifier_name_snapshot} ({formatCents(modifier.price_delta_cents)})</li>)}</ul> : null}{item.special_instructions ? <p className="mt-2 text-sm"><strong>Item note:</strong> {item.special_instructions}</p> : null}</div>)}</div></Card>
@@ -127,9 +141,10 @@ function PaymentsCard({ canManage, orderId, payments, timeZone }: { canManage: b
                   <form action={refundOrderPayment} className="mt-4 grid gap-3 rounded-xl border border-wayne-border bg-wayne-cream p-4">
                     <input name="order_id" type="hidden" value={orderId} />
                     <input name="payment_id" type="hidden" value={payment.id} />
-                    <input name="idempotency_key" type="hidden" value={`refund-${payment.id}-${payment.refunded_cents}-${refundable}`} />
+                    <input name="idempotency_key" type="hidden" value={`refund-${randomUUID()}`} />
                     <p className="text-sm font-bold">Refund up to {formatCents(refundable)}</p>
-                    <Input defaultValue={(refundable / 100).toFixed(2)} id={`refund-amount-${payment.id}`} inputMode="decimal" label="Amount" name="amount" required />
+                    <Input defaultValue={(refundable / 100).toFixed(2)} id={`refund-amount-${payment.id}`} inputMode="decimal" label="Total refund" name="amount" required />
+                    {payment.provider === "stripe" ? <><Input defaultValue="0.00" id={`refund-tip-${payment.id}`} inputMode="decimal" label="Tip included in refund (explicit amount)" name="tip_amount" required /><p className="text-sm">The rest refunds the order amount. Tips already paid to a driver are recorded as recovery due.</p></> : null}
                     <Input id={`refund-reason-${payment.id}`} label="Reason" maxLength={1000} name="reason" placeholder="Order was wrong" required />
                     <Button type="submit" variant="danger">Refund</Button>
                   </form>
