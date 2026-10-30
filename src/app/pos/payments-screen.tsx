@@ -17,6 +17,7 @@ import { uuid } from "@/lib/uuid";
 import { ticketLabel, ticketNumber } from "@/lib/orders/ticket-number";
 import { showOnCustomerScreen, useCustomerScreen } from "@/stores/customer-display-link";
 import { CustomerSignStep, CustomerTipStep, thankCustomer } from "./customer-steps";
+import { tipRoute } from "@/lib/pos/checkout-steps";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -249,7 +250,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       </div>
       {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "terminal" ? (screen.screenOnline && !tipAsked && !paidBefore
+      {mode === "terminal" ? (tipRoute({ screenOnline: screen.screenOnline, tipAsked, paidBefore }) === "screen"
         ? <CustomerTipStep onDone={tipDone} order={order} />
         // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
         : order.is_test ? <TestCardTender autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />

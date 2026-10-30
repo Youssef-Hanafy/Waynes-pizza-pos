@@ -112,6 +112,12 @@ export function showOnCustomerScreen(next: Partial<DisplayState>) {
   dirty = true;
 }
 
+/** After a payment: "Thank you" (and the change) on the customer screen, then back to the welcome screen. */
+export function thankCustomer(changeCents: number | null = null) {
+  showOnCustomerScreen({ phase: "thanks", change_cents: changeCents });
+  window.setTimeout(() => showOnCustomerScreen({ phase: "idle" }), 8000);
+}
+
 /**
  * Ask the customer something on the screen and wait for the answer.  Resolves
  * null if cancelled (the cashier skipped it).
@@ -138,6 +144,11 @@ export function clearCustomerRequest() {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
+}
+
+/** The link's current state, outside React. */
+export function customerScreenSnapshot(): LinkState {
+  return snapshot;
 }
 
 /** Whether a customer screen is facing this register right now. */
