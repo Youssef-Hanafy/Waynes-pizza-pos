@@ -9,13 +9,13 @@ it("tip and signature lifecycles hold an update guard until explicitly finished"
 });
 it("a real native printer promise blocks updates through its native acknowledgement",async()=>{
  let callId="";const target={} as Window;
- const android={printerSend:(id:string)=>{callId=id;}} as WaynesAndroidInterface;
+ const android:WaynesAndroidInterface={info:()=>"{}",callerIdStart:vi.fn(),callerIdStop:vi.fn(),callerIdStatus:()=>"{}",printerSend:(id:string)=>{callId=id;}};
  const hardware=createAndroidHardware(android,target);const printed=hardware.printer!.send({host:"192.0.2.1",port:9100,data:""});
  expect(updateSafety().blockers).toContain("native hardware operation is in progress");target.__waynesNativeResult!(callId,true,"","");await printed;expect(updateSafety().blockers).toEqual([]);
 });
 it("a native timeout remains unsafe until a definitive late acknowledgement",async()=>{
  vi.useFakeTimers();try{
-  let id="";const target={} as Window;const hardware=createAndroidHardware({printerSend:(callId:string)=>{id=callId;}} as WaynesAndroidInterface,target);
+  let id="";const target={} as Window;const hardware=createAndroidHardware({info:()=>"{}",callerIdStart:vi.fn(),callerIdStop:vi.fn(),callerIdStatus:()=>"{}",printerSend:(callId:string)=>{id=callId;}},target);
   const promise=hardware.printer!.send({host:"192.0.2.1",port:9100,data:"",timeoutMs:1});const rejected=expect(promise).rejects.toThrow("did not answer");await vi.advanceTimersByTimeAsync(5002);await rejected;
   expect(updateSafety().blockers.join()).toContain("no confirmed outcome");target.__waynesNativeResult!(id,true,"","");expect(updateSafety().blockers).toEqual([]);
  }finally{vi.useRealTimers();}
