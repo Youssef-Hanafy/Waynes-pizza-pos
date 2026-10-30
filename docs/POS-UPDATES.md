@@ -8,7 +8,9 @@ Two reproduced defects: the old update timer reloads 900 ms after an idle check 
 
 These are verified software paths, not proof of what occurred on the physical Elo. No device trace establishes whether a particular incident loaded older JavaScript, restored older application state, or involved another register/display. More → This app and privacy-safe `app.update_state`, `app.reload`, `app.update_confirmed`, `app.asset_load_failed`, and `app.competing_instance` logs now distinguish these events. No order contents, payment credentials, signatures, URL query values or customer identities are added to these logs.
 
-Android review: one singleTask activity/WebView; no restoreState; release URL fixed to https://app.hanafymedia.com/pos; no resume/reconnect reload; LOAD_DEFAULT cache and APK-version-only cache clearing. Back/forward can restore a previous document, so pageshow also verifies the live build. Native Java/APK changes are unnecessary for the reproduced defects. Physical lifecycle, reader, caller ID and printer acceptance remains unperformed.
+Android review: one singleTask activity/WebView; no restoreState; release URL fixed to https://app.hanafymedia.com/pos; no resume/reconnect reload; LOAD_DEFAULT cache and APK-version-only cache clearing. Back/forward can restore a previous document, so pageshow also verifies the live build. Native Java/APK changes are unnecessary for the reproduced defects. The native main-frame error page does retain an existing ten-second retry to the release URL after a navigation fails; it is not a resume/reconnect handler and does not fire inside a successfully loaded document. It can reopen an offline copy after a failed navigation, so target receipts and the software retry limit must be checked on the device. Physical lifecycle, reader, caller ID and printer acceptance remains unperformed.
+
+The existing PostCSS build transform flattens Tailwind cascade layers for older WebViews. There is no separate legacy stylesheet now; this transform and CSS are unchanged. No device trace proves a CSS regression in the reported incidents.
 
 ## Running sessions
 

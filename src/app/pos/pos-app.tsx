@@ -319,7 +319,7 @@ export function PosApp(props: Props) {
       </div>
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
-      {!["current", "checking"].includes(update.status) ? <span className="text-xs" title={update.message}>{update.status === "blocked" ? "Update needs attention · More → This app" : "Update available · waiting for safe idle"}</span> : null}
+      {!["current", "checking"].includes(update.status) ? <span className="text-xs" title={update.message}>{update.status === "blocked" ? "Update needs attention · More → This app" : update.status === "offline" ? "Version check offline · More → This app" : update.status === "reloading" ? "Loading verified update…" : "Update available · waiting for safe idle"}</span> : null}
       <PrintStationBadge />
       <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />

@@ -65,6 +65,7 @@ test("real alias transition updates only after idle and confirms the new build w
   await page.evaluate(()=>{window.dispatchEvent(new Event("online"));window.dispatchEvent(new Event("pageshow"));});
   await page.getByRole("button",{name:"More",exact:true}).click();
   await expect(page.getByText(/current: This register is on the verified live build/)).toBeVisible();
+  await expect(page.getByText("Server is on",{exact:true}).locator("..").locator("dd")).toContainText(target.build);
   expect(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("wayne.pos.update-journal.v1")??"{}").attempts)).toBe(1);
   writeFileSync(join(dir!,"browser-confirmed.json"),JSON.stringify({from,to:target.build,journal}));
  }finally{await context.close();}
