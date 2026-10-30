@@ -5,7 +5,7 @@ import type { PaymentProvider } from "./provider";
 import { createSquareProvider, squareApiBase, SQUARE_API_VERSION } from "./square";
 import { applySquareWebhookEvent, type ServiceClient } from "./square-webhook";
 import { createStripeProvider } from "./stripe";
-import { applyStripeWebhookEvent } from "./stripe-webhook";
+import { applyStripeRefundWebhook, applyStripeWebhookEvent } from "./stripe-webhook";
 
 /**
  * Provider adapter registry (Phase 9, §20.4/20.5).  The only place that maps
@@ -106,14 +106,20 @@ export async function testPaymentConnection(connection: PaymentConnection): Prom
 }
 
 /** Applies a verified provider webhook event to the ledger, through the provider's own mapping. */
-const webhookAppliers: Record<string, (supabase: ServiceClient, eventType: string, payload: Record<string, unknown>) => Promise<void>> = {
+const webhookAppliers: Record<string, (supabase: ServiceClient, eventType: string, payload: Record<string, unknown>, workspaceId?: string) => Promise<void>> = {
   square: applySquareWebhookEvent,
-  stripe: applyStripeWebhookEvent,
 };
 
 export async function applyProviderWebhook(connection: PaymentConnection, supabase: ServiceClient, eventType: string, payload: Record<string, unknown>) {
+  if (connection.provider === "stripe") {
+    const provider = buildWebhookProvider(connection);
+    if (!provider) throw new Error("Stripe webhook credentials are unavailable");
+    await applyStripeRefundWebhook(supabase, eventType, payload, connection.workspace_id, provider);
+    await applyStripeWebhookEvent(supabase, eventType, payload, connection.workspace_id, (id) => provider.getPaymentStatus(id));
+    return;
+  }
   const apply = webhookAppliers[connection.provider];
-  if (apply) await apply(supabase, eventType, payload);
+  if (apply) await apply(supabase, eventType, payload, connection.workspace_id);
 }
 
 /** The header each provider signs its webhooks in. */

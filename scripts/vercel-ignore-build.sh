@@ -8,6 +8,14 @@
 #     database migrations, scripts, tests, notes) doesn't rebuild the site.
 # When in doubt it builds.
 
+# Explicit staging builds are allowed only with both isolated destinations.
+# Automatic branch deployments remain disabled in vercel.json.
+if [ "$NEXT_PUBLIC_APP_URL" = "https://waynes-pos-staging.vercel.app" ] &&
+   [ "$NEXT_PUBLIC_SUPABASE_URL" = "https://pkjrdvtdygiprmsojdqg.supabase.co" ]; then
+  echo "Building isolated staging candidate."
+  exit 1
+fi
+
 if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then
   echo "Skipping: only main is deployed (branch ${VERCEL_GIT_COMMIT_REF:-unknown})."
   exit 0

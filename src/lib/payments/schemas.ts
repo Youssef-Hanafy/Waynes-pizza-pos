@@ -128,6 +128,7 @@ export const terminalActionSchema = z.object({
 });
 
 export const refundRequestSchema = z.object({
+  tip_cents: z.number().int().nonnegative().max(10_000_000).default(0),
   payment_id: z.uuid(),
   amount_cents: z.number().int().positive().max(10_000_000),
   reason: z.string().trim().min(3).max(1000),

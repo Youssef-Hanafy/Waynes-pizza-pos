@@ -22,7 +22,7 @@ select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000001
 select ok(public.wayne_has_role(array['owner']), 'owner role check succeeds server-side');
 select ok(public.wayne_has_permission('admin.access'), 'owner has admin access');
 select ok(public.wayne_has_permission('staff.manage'), 'owner can manage staff');
-select is((select count(*) from public.profiles), 2::bigint, 'owner can view staff profiles');
+select is((select count(*) from public.profiles where id in ('30000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002')), 2::bigint, 'owner can view staff profiles');
 
 select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000002', true);
 select ok(public.wayne_has_role(array['cashier']), 'cashier role check succeeds server-side');

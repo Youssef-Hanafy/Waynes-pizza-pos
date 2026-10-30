@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/access";
 import { logger } from "@/lib/logging/logger";
 import { orderTransitionSchema, transitionErrorMessage } from "@/lib/orders/status";
 import { resolvePaymentProvider } from "@/lib/payments/config";
+import { reconcileRefundLegs, type RefundLeg } from "@/lib/payments/refund-operation";
 import { PaymentProviderError } from "@/lib/payments/provider";
 import { parseAmountInput, paymentErrorMessage, refundRequestSchema } from "@/lib/payments/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
@@ -53,7 +54,11 @@ export async function refundOrderPayment(form: FormData) {
 
   const amount = parseAmountInput(String(form.get("amount") ?? ""));
   if (!amount.ok) redirect(`${path}?error=${encodeURIComponent(amount.error)}`);
+  const tipInput = String(form.get("tip_amount") ?? "0").trim();
+  const tip = /^0(?:\.0{1,2})?$/.test(tipInput) ? { ok: true as const, cents: 0 } : parseAmountInput(tipInput);
+  if (!tip.ok) redirect(`${path}?error=${encodeURIComponent(tip.error)}`);
   const parsed = refundRequestSchema.safeParse({
+    tip_cents: tip.ok ? tip.cents : 0,
     payment_id: form.get("payment_id"),
     amount_cents: amount.ok ? amount.cents : 0,
     reason: form.get("reason"),
@@ -62,6 +67,25 @@ export async function refundOrderPayment(form: FormData) {
   if (!parsed.success) redirect(`${path}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the refund details.")}`);
 
   const supabase = await createServerSupabaseClient();
+  const { data: payment, error: paymentError } = await supabase.from("payments").select("provider,order_id").eq("id",parsed.data.payment_id).single();
+  if (paymentError || payment?.order_id !== orderId.data) redirect(`${path}?error=Payment%20does%20not%20belong%20to%20this%20order`);
+  if (payment.provider === "stripe") {
+    const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
+    if (!resolved.ok || resolved.value.provider.code !== "stripe") redirect(`${path}?error=Stripe%20is%20not%20available`);
+    const begun = await supabase.rpc("wayne_begin_allocated_refund", { payload: { ...parsed.data, order_id: orderId.data } });
+    if (begun.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(begun.error))}`);
+    let pending: boolean;
+    try {
+      const result = await reconcileRefundLegs(createServiceSupabaseClient(), resolved.value.provider, (begun.data as { legs: RefundLeg[] }).legs);
+      pending = result.pending;
+    } catch (cause) {
+      logger.error("refund.reconciliation_pending", cause, { order_id: orderId.data });
+      redirect(`${path}?error=${encodeURIComponent(cause instanceof Error ? cause.message : "Resume the existing refund request.")}`);
+    }
+    revalidatePath(path); revalidatePath("/admin/payments");
+    redirect(`${path}?saved=${pending ? "refund_pending" : "refunded"}`);
+  }
+  if (parsed.data.tip_cents > 0) redirect(`${path}?error=Explicit%20tip%20refunds%20require%20Stripe`);
   const { data, error } = await supabase.rpc("wayne_begin_refund", { payload: parsed.data });
   if (error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(error))}`);
   const begun = data as { refund_id: string; duplicate: boolean; provider_payment_id: string | null };
@@ -108,20 +132,26 @@ export async function voidOrderPayment(form: FormData) {
   const path = `/admin/orders/${orderId.data}`;
   const access = await requirePermission("payments.manage", path);
   const paymentId = z.uuid().safeParse(form.get("payment_id"));
-  const providerPaymentId = String(form.get("provider_payment_id") ?? "");
-  if (!paymentId.success || !providerPaymentId) redirect(`${path}?error=${encodeURIComponent("That payment cannot be voided.")}`);
+  if (!paymentId.success) redirect(`${path}?error=${encodeURIComponent("That payment cannot be voided.")}`);
 
   const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) redirect(`${path}?error=${encodeURIComponent("The payment processor is not available.")}`);
+  const staff = await createServerSupabaseClient();
+  const prepared = await staff.rpc("wayne_prepare_payment_void", { target_payment_id: paymentId.data, target_order_id: orderId.data });
+  if (prepared.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(prepared.error))}`);
+  const bound = prepared.data as { duplicate: boolean; provider: string; provider_payment_id: string };
+  if (bound.duplicate) redirect(`${path}?saved=voided`);
+  if (bound.provider !== resolved.value.provider.code) redirect(`${path}?error=Payment%20processor%20does%20not%20match`);
   const service = createServiceSupabaseClient();
   try {
-    const result = await resolved.value.provider.voidPayment(providerPaymentId);
-    await service.rpc("wayne_settle_payment", {
-      payload: { payment_id: paymentId.data, status: result.status === "voided" ? "voided" : result.status, provider_status: result.providerStatus },
-    });
+    const current = await resolved.value.provider.getPaymentStatus(bound.provider_payment_id);
+    const result = current.status === "voided" ? current : await resolved.value.provider.voidPayment(bound.provider_payment_id);
+    if (result.status !== "voided" || result.providerPaymentId !== bound.provider_payment_id) throw new Error("The provider has not confirmed this authorization was voided.");
+    const saved = await service.rpc("wayne_finish_payment_void", { target_payment_id: paymentId.data, provider_id: bound.provider_payment_id });
+    if (saved.error) throw new Error("The canceled authorization needs receipt recovery. Retry this void; do not create a charge.");
   } catch (cause) {
     logger.error("void.provider_failed", cause, { order_id: orderId.data });
-    redirect(`${path}?error=${encodeURIComponent(cause instanceof PaymentProviderError ? cause.message : "The payment could not be voided.")}`);
+    redirect(`${path}?error=${encodeURIComponent(cause instanceof Error ? cause.message : "The payment could not be voided.")}`);
   }
   revalidatePath(path);
   redirect(`${path}?saved=voided`);

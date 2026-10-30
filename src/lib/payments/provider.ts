@@ -14,6 +14,8 @@ export type ProviderPayment = {
   cardLast4: string | null;
   receiptUrl: string | null;
   failureReason: string | null;
+  /** Current provider metadata, read with the payment rather than from an old event. */
+  metadata?: Record<string, string>;
   /**
    * An authorised (not yet captured) card that may be captured for MORE than
    * was authorised — Stripe "overcapture", used to add a delivery tip after the
@@ -70,11 +72,14 @@ export interface PaymentProvider {
   /** Charge a held card. amountCents (≤ the hold) charges less than the hold and releases the rest. */
   capturePayment(providerPaymentId: string, options?: { amountCents?: number; idempotencyKey?: string }): Promise<ProviderPayment>;
   voidPayment(providerPaymentId: string): Promise<ProviderPayment>;
-  /** Charge a saved card once, off-session (order + tip at cash-out). Stripe only. */
-  chargeSavedCard?(input: { customerId: string; paymentMethodId: string; amountCents: number; idempotencyKey: string; note: string; metadata?: Record<string, string> }): Promise<ProviderPayment>;
+  /** Prepare without charging. Persist its ID before confirming it. Stripe only. */
+  createSavedCardIntent?(input: { customerId: string; paymentMethodId: string; amountCents: number; idempotencyKey: string; note: string; metadata?: Record<string, string> }): Promise<ProviderPayment>;
+  confirmSavedCardIntent?(providerPaymentId: string, idempotencyKey: string): Promise<ProviderPayment>;
   /** Cancel an approval that a fresh charge replaced, marked so its webhook is ignored. */
   releaseHold?(providerPaymentId: string, replacedBy: string): Promise<ProviderPayment>;
   refundPayment(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string; reason: string }): Promise<ProviderRefund>;
+  /** Authoritative lookup by durable refund-leg metadata, including after a lost response. */
+  findRefund?(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string }): Promise<ProviderRefund | null>;
   getPaymentStatus(providerPaymentId: string): Promise<ProviderPayment>;
   /** Verifies the signature and normalises the envelope. Never trusts an unsigned body. */
   handleWebhook(input: { rawBody: string; signature: string | null }): WebhookEnvelope;
