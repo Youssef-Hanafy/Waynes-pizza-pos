@@ -15,9 +15,9 @@ import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { uuid } from "@/lib/uuid";
 import { ticketLabel, ticketNumber } from "@/lib/orders/ticket-number";
-import { showOnCustomerScreen, useCustomerScreen } from "@/stores/customer-display-link";
+import { customerScreenRecentlyOnline, showOnCustomerScreen, useCustomerScreen } from "@/stores/customer-display-link";
 import { CustomerSignStep, CustomerTipStep, thankCustomer } from "./customer-steps";
-import { tipRoute } from "@/lib/pos/checkout-steps";
+import { tipRoute, type TipRoute } from "@/lib/pos/checkout-steps";
 
 const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
 type Terminal = z.infer<typeof terminalSchema>;
@@ -198,13 +198,15 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const paidBefore = openedOrder.payment_status === "paid" ? 0 : Math.max(0, openedOrder.paid_cents);
   const [order, setOrder] = useState<OpenOrder>(() => paidBefore ? { ...openedOrder, total_cents: openedOrder.total_cents - paidBefore } : openedOrder);
   const [tipAsked, setTipAsked] = useState(false);
+  // Chosen once, when Card reader is tapped (owner, 2026-10-29): a connection blip can't skip an unanswered tip, and a card already sent to the reader isn't swapped back.
+  const [tipRouteTaken, setTipRouteTaken] = useState<TipRoute | null>(null);
   const [signing, setSigning] = useState<Done | null>(null);
   useEffect(() => {
     if (openedOrder.payment_status !== "paid") showOnCustomerScreen({ phase: "pay", order_number: ticketNumber(openedOrder), total_cents: openedOrder.total_cents - paidBefore });
   }, [openedOrder, paidBefore]);
   const tipDone = useCallback((next: OpenOrder) => { setOrder(next); setTipAsked(true); }, []);
   const onPaid = useCallback((done: Done) => {
-    if (done.method === "card" && !done.held && screen.screenOnline) { setSigning(done); return; }
+    if (done.method === "card" && !done.held && (screen.screenOnline || customerScreenRecentlyOnline())) { setSigning(done); return; }
     if (!done.held) thankCustomer(done.method === "cash" ? done.changeCents : null);
     finishPayment(done);
   }, [finishPayment, screen.screenOnline]);
@@ -225,7 +227,10 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const buttonCount = (onPayLater ? 4 : 3) + (onAddItems && compact ? 1 : 0);
   const buttonColumns = buttonCount === 5 ? "md:grid-cols-5" : buttonCount === 4 ? "md:grid-cols-4" : "md:grid-cols-3";
   const option = (value: Exclude<Mode, "choose">, icon: string, title: string, note: string, disabled = false) => (
-    <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => { setMode(value); setError(""); }} type="button">
+    <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => {
+      if (value === "terminal" && !tipRouteTaken) setTipRouteTaken(tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: customerScreenRecentlyOnline(), tipAsked, paidBefore, current: null }));
+      setMode(value); setError("");
+    }} type="button">
       <span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{icon}</span>
       <strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{title}</strong>
       {compact ? null : <span className="text-xs font-bold text-wayne-muted">{note}</span>}
@@ -250,7 +255,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       </div>
       {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "terminal" ? (tipRoute({ screenOnline: screen.screenOnline, tipAsked, paidBefore }) === "screen"
+      {mode === "terminal" ? (tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: false, tipAsked, paidBefore, current: tipRouteTaken }) === "screen"
         ? <CustomerTipStep onDone={tipDone} order={order} />
         // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
         : order.is_test ? <TestCardTender autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />

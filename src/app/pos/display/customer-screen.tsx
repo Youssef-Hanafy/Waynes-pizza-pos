@@ -122,7 +122,10 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
       : state.phase === "tip" && !waitingOnRegister ? <TipChooser onAnswer={(tip) => { void respond({ request_id: state.request_id, kind: "tip", tip_cents: tip }); }} state={state} />
       : state.phase === "sign" && !waitingOnRegister ? <SignaturePad onAnswer={(svg) => { void respond({ request_id: state.request_id, kind: "signature", signature_svg: svg }); }} state={state} />
       : state.phase === "thanks" ? <Thanks state={state} storeName={storeName} />
-      : waitingOnRegister ? <Centered><p className="text-4xl font-black">Thank you!</p><p className="mt-3 text-2xl">{state.phase === "tip" ? "Please follow the card reader." : "One moment…"}</p></Centered>
+      : waitingOnRegister ? <Centered>{state.phase === "tip"
+        ? <><p className="text-4xl font-black">Thank you!</p><p className="mt-3 text-2xl">Please follow the card reader.</p></>
+        // The register says Thank you once the signature is actually saved (owner, 2026-10-29).
+        : <p className="text-4xl font-black">One moment…</p>}</Centered>
       : <OrderView state={state} />}
   </div>;
 }
