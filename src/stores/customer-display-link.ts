@@ -59,6 +59,7 @@ let snapshot: LinkState = { screenOnline: false, key: "", showing: true };
 let lastSentOk = 0;
 let lastScreenOnline = 0;
 let thanksShown = 0;
+let thanksUntil = 0;
 const listeners = new Set<() => void>();
 
 function emit(next: Partial<LinkState>) {
@@ -122,6 +123,9 @@ export function stopCustomerDisplayLink() {
 
 /** Show this on the customer screen (anything left out keeps its default). */
 export function showOnCustomerScreen(next: Partial<DisplayState>) {
+  // Finishing a checkout resets the register to an empty ticket. Preserve the
+  // confirmed thanks until its timer expires; an actual next order still wins.
+  if (current.phase === "thanks" && next.phase === "idle" && Date.now() < thanksUntil) return;
   // A request in progress (tip / signature) isn't replaced by ticket updates.
   if (waiter && next.phase !== "tip" && next.phase !== "sign" && next.request_id !== current.request_id) return;
   const parsed = displayStateSchema.safeParse({ ...next });
@@ -137,6 +141,7 @@ export function showOnCustomerScreen(next: Partial<DisplayState>) {
  * (owner, 2026-10-29: the timer blanked the next customer's ticket).
  */
 export function thankCustomer(changeCents: number | null = null) {
+  thanksUntil = Date.now() + 8000;
   showOnCustomerScreen({ phase: "thanks", change_cents: changeCents });
   const shown = ++thanksShown;
   window.setTimeout(() => { if (shown === thanksShown && current.phase === "thanks") showOnCustomerScreen({ phase: "idle" }); }, 8000);

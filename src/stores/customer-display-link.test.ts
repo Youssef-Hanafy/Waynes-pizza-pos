@@ -106,6 +106,15 @@ describe("two registers with the same name", () => {
 });
 
 describe("screen transitions", () => {
+  it("an empty ticket after signature completion cannot erase Thank you before it is published", async () => {
+    link.thankCustomer(250);
+    link.showOnCustomerScreen({ phase: "idle" }); // the register resets its completed ticket
+    await advance(600);
+    expect(lastState()).toMatchObject({ phase: "thanks", change_cents: 250 });
+    await advance(8_000);
+    expect(lastState()).toMatchObject({ phase: "idle" });
+  });
+
   it("the 'Thank you' timer never blanks the next order's ticket", async () => {
     link.thankCustomer(null);
     await advance(600);
