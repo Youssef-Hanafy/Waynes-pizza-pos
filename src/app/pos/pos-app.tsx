@@ -22,7 +22,7 @@ import { connectStripeReader, describeNativeApp, keepStripeReaderConnected, star
 import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
 import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
-import { dismissNotice, notify, useSyncState } from "@/stores/draft-sync";
+import { dismissNotice, notify, useSyncState, syncStore, isDraftSyncBusy } from "@/stores/draft-sync";
 import { posOrderLinesSchema } from "@/lib/pos/schemas";
 import { existingLinesFrom } from "@/lib/orders/edit-order";
 import { useDraftSync } from "@/stores/use-draft-sync";
@@ -49,14 +49,17 @@ import { describeStep, useHistoryState } from "@/stores/pos-history";
 import { useStore } from "@/stores/create-store";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
+import { useAppUpdateState } from "@/stores/app-update";
 import { useAppUpdate } from "@/stores/use-app-update";
-import { configureOfflineOrders, startOfflineOrders } from "@/stores/offline-orders";
+import { configureOfflineOrders, startOfflineOrders, offlineDrafts } from "@/stores/offline-orders";
 import { useConnectivity, watchConnectivity } from "@/stores/connectivity";
 import { OfflineOrdersBar } from "./offline-orders-bar";
 import { PosAutoRefresh } from "./pos-auto-refresh";
 import { AppInfoPanel } from "./app-info-panel";
 import { askOfflineWorker, useAppBuild } from "@/stores/app-build";
-import { loadTipDrafts } from "@/stores/tip-drafts";
+import { printStationStore } from "@/stores/print-station";
+import { unsyncedTipDrafts } from "@/lib/tips/drafts";
+import { loadTipDrafts, tipDraftStore } from "@/stores/tip-drafts";
 
 type Section = "order" | "phone" | "pay" | "orders" | "today" | "customers" | "delivery" | "tips" | "closeout" | "more";
 
@@ -89,7 +92,8 @@ type Props = {
  * the cashier away from what they are doing (§6, §34.1).
  */
 export function PosApp(props: Props) {
-  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, canCloseOut, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = props;
+  const [runtime, setRuntime] = useState(props);
+  const { menu, settings, hardware, staffName, profileId, canManageDiscount, canManageOrders, canOpenAdmin, canManageHardware, canCloseOut, callerIdEnabled, deliveryEnabled, workspaceName, keyedCardConfig } = runtime;
   // Coming back to the register locks Admin again: the next person has to type
   // a manager PIN to get in (owner, 2026-10-12).
   useEffect(() => { void fetch("/api/admin-lock", { method: "POST" }).catch(() => undefined); }, []);
@@ -185,43 +189,32 @@ export function PosApp(props: Props) {
     const timer = window.setTimeout(() => closeOutUnsentTickets({ keepActive: true }), 0);
     return () => window.clearTimeout(timer);
   }, []);
-  // A newer deploy is live: reload onto it the next time this register is idle on New Order (owner, 2026-10-20).
-  const idleOnNewOrder = () => {
-    const state = orderStore.get();
-    return sectionRef.current === "order" && isDraftIdle(activeDraft(state)) && !paymentPromptStore.get()
-      && !state.drafts.some((draft) => draft.submitPending) && !unsettledOrder.id;
-  };
-  /*
-   * When a newer build is live, also reload from the order lists or an empty
-   * Phone screen (owner, 2026-10-29: "make sure the POS is running one page
-   * and is not bouncing between old and new").  The register used to update
-   * only from an empty New Order — but every ring opens the Phone screen by
-   * itself and it stays there, so on 10/28 the counter tablet ran the build it
-   * opened with all day while the server moved on: old screens talking to the
-   * new server.  Never with a call on a line, a payment, a ticket sending or
-   * an unsettled order, and only once nobody has touched the screen for a minute.
-   */
+  // Read live stores at the final reload boundary, regardless of visible section.
   const lastTouch = useRef(0);
   useEffect(() => {
+    lastTouch.current = Date.now();
     const touched = () => { lastTouch.current = Date.now(); };
     window.addEventListener("pointerdown", touched, true);
     window.addEventListener("keydown", touched, true);
     return () => { window.removeEventListener("pointerdown", touched, true); window.removeEventListener("keydown", touched, true); };
   }, []);
   const idleForUpdate = () => {
-    if (idleOnNewOrder()) return true;
-    const current = sectionRef.current;
-    if (current !== "today" && current !== "orders" && current !== "phone") return false;
     const state = orderStore.get();
-    if (paymentPromptStore.get() || state.drafts.some((draft) => draft.submitPending) || unsettledOrder.id) return false;
+    if (!isDraftIdle(activeDraft(state)) || state.drafts.some(d => d.submitPending) || paymentPromptStore.get() || unsettledOrder.id) return false;
+    if (isDraftSyncBusy() || syncStore.get().sending.length || offlineDrafts().length) return false;
+    const tips = tipDraftStore.get();
+    if (!tips.loaded || tips.syncing || tips.lastError || unsyncedTipDrafts(tips.drafts).length) return false;
+    const station = printStationStore.get();
+    if (station.enabled && Object.values(station.lanes).some(l => ["printing", "waiting_printer", "error"].includes(l.state))) return false;
     const phone = phoneStore.get();
-    if (phone.lines.some((line) => callOnLine(phone, line.line) !== null)) return false;
-    return Date.now() - lastTouch.current > 60_000;
+    if (phone.lines.some(line => callOnLine(phone,line.line) !== null)) return false;
+    // Screens with local forms must be explicitly left before an update.
+    return ["order", "orders", "today", "phone", "more"].includes(sectionRef.current) && Date.now() - lastTouch.current > 60_000;
   };
   useAppUpdate(idleForUpdate);
-  // The background menu refresh: only when nothing on screen could be lost (owner, 2026-10-28).
-  const idleForRefresh = () => idleOnNewOrder() || sectionRef.current === "today" || sectionRef.current === "orders";
+  const idleForRefresh = idleForUpdate;
   const appBuild = useAppBuild();
+  const update = useAppUpdateState();
   const { notices } = useSyncState();
   const pendingCount = drafts.filter((draft) => draft.submitPending).length;
 
@@ -315,7 +308,7 @@ export function PosApp(props: Props) {
   // --pos-kb-h: the on-screen keyboard's height, so the page sits above it.
   return <div className={`flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden ${section === "order" ? "md:h-screen md:overflow-hidden" : ""}`} style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
     <PosKeyboard />
-    <PosAutoRefresh isSafe={idleForRefresh} />
+    <PosAutoRefresh isSafe={idleForRefresh} onData={setRuntime} />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
       {/* Back / Forward: undo and redo the last steps anywhere on the POS — the screen, and on New Order the ticket (order type, customer, address, items). */}
       <div aria-label="Back and forward" className="flex items-center gap-1" role="group">
@@ -326,6 +319,7 @@ export function PosApp(props: Props) {
       </div>
       <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
+      {!["current", "checking"].includes(update.status) ? <span className="text-xs" title={update.message}>{update.status === "blocked" ? "Update needs attention · More → This app" : "Update available · waiting for safe idle"}</span> : null}
       <PrintStationBadge />
       <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />

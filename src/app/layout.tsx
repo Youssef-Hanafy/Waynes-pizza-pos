@@ -1,3 +1,4 @@
+import { currentRelease } from "@/lib/pos/release";
 import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
 import { StorefrontBrandProvider } from "@/components/site/storefront-brand";
@@ -29,6 +30,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const theme = primary ? ({ "--color-wayne-red": primary, "--color-wayne-red-dark": `color-mix(in srgb, ${primary} 80%, black)`, "--color-wayne-red-soft": `color-mix(in srgb, ${primary} 12%, white)` } as React.CSSProperties) : undefined;
   return (
     <html className={`${inter.variable} ${archivo.variable}`} lang="en">
+      <head><meta name="wayne-build" content={currentRelease().build} /><meta name="wayne-built-at" content={currentRelease().builtAt} /></head>
       <body className="font-sans antialiased" style={theme}><StorefrontBrandProvider brand={{ ...brandNames(settings), services, city: settings.city, state: settings.state }}>{children}</StorefrontBrandProvider><StaffKeyboard /></body>
     </html>
   );

@@ -44,7 +44,7 @@ async function navigate(worker: ReturnType<typeof loadWorker>, url: string, clie
   let responded: Promise<Response> | null = null;
   const request = new Request(url, { headers: { accept: "text/html" } });
   Object.defineProperty(request, "mode", { value: "navigate" });
-  worker.listeners.fetch![0]!({ request, resultingClientId: clientId, respondWith: (promise: Promise<Response>) => { responded = promise; } });
+  worker.listeners.fetch![0]!({ request, resultingClientId: clientId, waitUntil: () => undefined, respondWith: (promise: Promise<Response>) => { responded = promise; } });
   if (!responded) throw new Error("the worker did not answer the POS page");
   return responded as Promise<Response>;
 }
@@ -81,7 +81,7 @@ describe("POS offline worker", () => {
     const answer = await ask(worker, "second");
     expect(answer.offline).toBe(true);
     expect(answer.savedAt).toBeTruthy();
-    expect(answer.version).toContain("pos-sw 2");
+    expect(answer.version).toContain("pos-sw 3");
   });
 
   it("a server error page is shown as it is — never swapped for an older saved copy", async () => {
@@ -96,6 +96,34 @@ describe("POS offline worker", () => {
     // …and the error page is not saved over the good copy.
     await settle();
     expect(await worker.stores.get("wayne-pos-v1-pages")!.get("https://app.example.com/pos")!.clone().text()).toBe("<html>build A</html>");
+  });
+
+  it("delayed old HTML cannot overwrite the newer offline build", async () => {
+    let finishOld!: (response:Response)=>void;
+    let calls=0;
+    const stamped=(build:string,day:number)=>new Response(`<html>${build}</html>`,{headers:{"content-type":"text/html","x-wayne-server-build":build,"x-wayne-server-built-at":`2026-10-${day}T00:00:00Z`}});
+    const worker=loadWorker(async()=>{calls++;if(calls===1)return new Promise<Response>(resolve=>{finishOld=resolve;});return stamped("B",22);});
+    const old=navigate(worker,"https://app.example.com/pos");
+    await navigate(worker,"https://app.example.com/pos");await settle();
+    finishOld(stamped("A",21));await old;await settle();
+    expect(await worker.stores.get("wayne-pos-v1-pages")!.get("https://app.example.com/pos")!.clone().text()).toBe("<html>B</html>");
+  });
+
+  it("verified target navigation cannot fall back to older offline HTML", async () => {
+    let online=true;
+    const worker=loadWorker(async()=>{if(!online)throw Error("offline");return new Response("<html>A</html>",{headers:{"content-type":"text/html","x-wayne-server-build":"A"}});});
+    await navigate(worker,"https://app.example.com/pos");await settle();online=false;
+    await expect(navigate(worker,"https://app.example.com/pos?wayne_update=B")).rejects.toThrow("offline");
+  });
+
+  it("never caches HTML masquerading as a JavaScript or CSS asset", async () => {
+    const worker=loadWorker(async()=>{const r=page("bad asset");Object.defineProperty(r,"type",{value:"basic"});return r;});
+    for(const file of ["chunk.js","layout.css"]){
+      let pending!:Promise<Response>;
+      worker.listeners.fetch![0]!({waitUntil:()=>undefined,request:new Request(`https://app.example.com/_next/static/${file}?dpl=B`),respondWith:(p:Promise<Response>)=>{pending=p;}});
+      await pending;await settle();
+    }
+    expect(worker.stores.get("wayne-pos-v1-static")?.size).toBe(0);
   });
 
   it("keeps the v1 cache names, so updating the worker keeps the offline copy", () => {

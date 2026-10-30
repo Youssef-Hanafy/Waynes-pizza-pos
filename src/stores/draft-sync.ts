@@ -113,6 +113,7 @@ function dropLocal(id: string) {
 
 let timer: number | null = null;
 let syncing = false;
+export function isDraftSyncBusy() { return syncing; }
 
 export const draftSync = {
   /** Save changed tickets shortly after the cashier stops typing. */

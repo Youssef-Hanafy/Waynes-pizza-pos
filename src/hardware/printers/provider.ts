@@ -1,3 +1,4 @@
+import { beginCriticalWork } from "@/lib/pos/update-activity";
 import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, printDocumentSchema, textSizeFrom, type PrintDocument, type PrintLayout, type TextSize } from "@/lib/printing/document";
 import { status, type HardwareStatus, type PrintResult } from "../types";
 import { encodeEscPos } from "./escpos";
@@ -134,6 +135,7 @@ export class BrowserPrintProvider extends LayoutPrinter {
 
   protected async output(layout: PrintLayout): Promise<PrintResult> {
     if (typeof document === "undefined") return { ok: false, reason: "Printing needs a screen.", notSent: true };
+    const done = beginCriticalWork("browser print dialog");
     const frame = document.createElement("iframe");
     frame.setAttribute("aria-hidden", "true");
     frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
@@ -141,9 +143,10 @@ export class BrowserPrintProvider extends LayoutPrinter {
     document.body.appendChild(frame);
     await new Promise<void>((resolve) => { frame.onload = () => resolve(); window.setTimeout(resolve, 1500); });
     try {
+      frame.contentWindow?.addEventListener("afterprint",done,{once:true});
       frame.contentWindow?.focus();
       frame.contentWindow?.print();
-    } finally {
+    } catch (error) { done(); throw error; } finally {
       window.setTimeout(() => frame.remove(), 60_000);
     }
     return { ok: true, jobId: "print-dialog" };

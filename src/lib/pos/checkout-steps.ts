@@ -1,3 +1,4 @@
+import { beginCriticalWork } from "./update-activity";
 /**
  * The customer-screen steps of a card checkout (owner, 2026-10-11): a tip before
  * the card is run, a signature after it is approved.  Kept free of React so the
@@ -63,11 +64,13 @@ export function startTipStep(options: TipStepOptions): TipStep {
   let alive = true;
   let saving = false;
   let lastTried: number | null = null;
+  const done = beginCriticalWork("customer tip or signature collection");
   const request = options.ask();
 
   const settle = (totalCents: number, payTipCents: number | null) => {
     if (settled) return;
     settled = true;
+    done();
     request.cancel();
     if (payTipCents !== null) options.showPay(totalCents, payTipCents);
     options.onDone(totalCents);
@@ -81,10 +84,13 @@ export function startTipStep(options: TipStepOptions): TipStep {
     try {
       const body = await options.saveTip(tip);
       saving = false;
+      if (!alive) done();
+      if (!alive) done();
       // Settled even if the step has left the screen: the order on the server now holds this total.
       settle(body.total_cents, tip);
     } catch (cause) {
       saving = false;
+      if (!alive) done();
       if (settled) return;
       options.onView({ stage: "failed", tipCents: tip, error: cause instanceof Error ? cause.message : "The tip could not be added." });
     }
@@ -109,7 +115,7 @@ export function startTipStep(options: TipStepOptions): TipStep {
     skip: withoutTip,
     chargeWithoutTip: withoutTip,
     retry() { if (lastTried !== null) void save(lastTried); },
-    stop() { alive = false; request.cancel(); },
+    stop() { alive = false; request.cancel(); if (!saving) done(); },
   };
 }
 
@@ -139,11 +145,13 @@ export function startSignStep(options: SignStepOptions): SignStep {
   let alive = true;
   let saving = false;
   let signature: string | null = null;
+  const done = beginCriticalWork("customer tip or signature collection");
   const request = options.ask();
 
   const finish = () => {
     if (finished) return;
     finished = true;
+    done();
     request.cancel();
     options.thank();
     options.onFinished();
@@ -156,10 +164,13 @@ export function startSignStep(options: SignStepOptions): SignStep {
     try {
       await options.saveSignature(signature);
       saving = false;
+      if (!alive) done();
+      if (!alive) done();
       // Left the screen meanwhile (the cashier moved on): the signature is kept, but nothing is finished from here.
       if (alive) finish();
     } catch (cause) {
       saving = false;
+      if (!alive) done();
       if (!alive || finished) return;
       options.onView({ stage: "failed", error: cause instanceof Error ? cause.message : "The signature could not be saved." });
     }
@@ -174,6 +185,6 @@ export function startSignStep(options: SignStepOptions): SignStep {
   return {
     skip() { if (!saving) finish(); },
     retry() { void save(); },
-    stop() { alive = false; request.cancel(); },
+    stop() { alive = false; request.cancel(); if (!saving) done(); },
   };
 }

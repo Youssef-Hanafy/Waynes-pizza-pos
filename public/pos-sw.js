@@ -1,30 +1,8 @@
-/*
- * Wayne's POS — keeps the register screen available with no connection
- * (owner, 2026-10-24: "even when not connected to wifi it'll work and once it
- * reconnects it'll put everything that happened online").
- *
- * Only for the POS pages (registered with scope /pos):
- *   • the POS page itself: always fetched from the server first, exactly as
- *     before; the last good copy is kept, and shown only when the server
- *     can't be reached at all — so it is never an older build while online
- *   • the app's code files (/_next/static/…, which never change under the
- *     same name): kept once loaded, so the page can start offline
- * Everything else (orders, payments, the API) always goes to the server.
- * Tickets taken offline are kept by the page itself and sent when it is back.
- *
- * v2 (owner, 2026-10-28: "the POS would switch between older and newer
- * versions"): the saved copy is only ever the newest page this register
- * loaded, stamped with when it was saved, and a page opened from it is told so
- * (message "wayne-offline-copy") — the POS shows it and reloads onto the
- * current build the moment the server answers.  A server error page (5xx) is
- * passed through as before, never swapped for the saved copy; only "no answer
- * at all" (no connection, or nothing within 10 s) opens the copy.
+/* Offline HTML is network-first. Build stamps order cache writes, not response completion time.
+ * Keep existing cache namespaces and drafts; a worker activation never reloads a page.
  */
-// The cache names stay "v1": changing them would throw away the saved copy and the
-// app's code files on the update, leaving the register unable to open offline
-// until it was opened online again.  WORKER is this worker's own version.
 const VERSION = "wayne-pos-v1";
-const WORKER = "pos-sw 2 (2026-10-28)";
+const WORKER = "pos-sw 3 (2026-10-30)";
 const PAGES = `${VERSION}-pages`;
 const STATIC = `${VERSION}-static`;
 const MAX_STATIC = 400;
@@ -54,7 +32,8 @@ async function trimStatic() {
   for (let index = 0; index < keys.length - MAX_STATIC; index += 1) await cache.delete(keys[index]);
 }
 
-async function page(request, clientId) {
+let pageWrites = Promise.resolve();
+async function page(request, clientId, event) {
   const url = new URL(request.url);
   const key = `${url.origin}${url.pathname}`;
   const controller = new AbortController();
@@ -66,17 +45,30 @@ async function page(request, clientId) {
     const finalUrl = new URL(response.url || request.url);
     if (response.ok && !response.redirected && isPosPage(finalUrl) && (response.headers.get("content-type") || "").includes("text/html")) {
       const copy = response.clone();
-      copy.text().then((html) => {
+      // Serialize read/compare/write: a delayed old response must never replace a newer copy.
+      const save = pageWrites = pageWrites.catch(() => undefined).then(async () => {
+        const html = await copy.text();
         const headers = new Headers(copy.headers);
+        const htmlBuild = /name="wayne-build" content="([^"]+)"/.exec(html)?.[1];
+        const htmlAt = /name="wayne-built-at" content="([^"]+)"/.exec(html)?.[1];
+        if (htmlBuild && headers.get("x-wayne-server-build") && htmlBuild !== headers.get("x-wayne-server-build")) return;
+        const builtAt = htmlAt || headers.get("x-wayne-server-built-at") || "";
+        const build = htmlBuild || headers.get("x-wayne-server-build") || "";
+        const cache = await caches.open(PAGES);
+        const previous = await cache.match(key);
+        if ((Date.parse(previous?.headers.get("x-wayne-server-built-at") || "") || 0) > (Date.parse(builtAt) || 0)) return;
+        headers.set("x-wayne-server-built-at",builtAt); headers.set("x-wayne-server-build",build);
         headers.set(SAVED_AT, new Date().toISOString());
-        return caches.open(PAGES).then((cache) => cache.put(key, new Response(html, { status: 200, headers })));
-      }).catch(() => undefined);
+        await cache.put(key, new Response(html, { status: 200, headers }));
+      });
+      event.waitUntil(save.catch(() => undefined));
     }
     return response;
   } catch (error) {
     clearTimeout(timer);
     const saved = await caches.match(key, { cacheName: PAGES });
-    if (saved) {
+    // A requested verified update must never silently fall back to an older build.
+    if (saved && (!url.searchParams.has("wayne_update") || saved.headers.get("x-wayne-server-build") === url.searchParams.get("wayne_update"))) {
       if (clientId) {
         servedOffline.set(clientId, saved.headers.get(SAVED_AT) || "");
         if (servedOffline.size > 20) servedOffline.delete(servedOffline.keys().next().value);
@@ -87,13 +79,18 @@ async function page(request, clientId) {
   }
 }
 
-async function staticFile(request) {
+function validAsset(request,response) {
+ const mime = response.headers.get("content-type") || "";
+ return new URL(request.url).pathname.endsWith(".css") ? mime.includes("text/css") : new URL(request.url).pathname.endsWith(".js") ? /javascript/.test(mime) : !mime.includes("text/html");
+}
+async function staticFile(request,event) {
   const cache = await caches.open(STATIC);
   const saved = await cache.match(request);
-  if (saved) return saved;
+  if (saved && validAsset(request,saved)) return saved;
+  if (saved) await cache.delete(request);
   const response = await fetch(request);
-  if (response.ok && response.type === "basic") {
-    cache.put(request, response.clone()).then(trimStatic).catch(() => undefined);
+  if (response.ok && response.type === "basic" && validAsset(request,response)) {
+    event.waitUntil(cache.put(request, response.clone()).then(trimStatic).catch(() => undefined));
   }
   return response;
 }
@@ -105,8 +102,8 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // Server-component refreshes (?_rsc / RSC header) always go to the server.
   if (url.searchParams.has("_rsc") || request.headers.get("RSC") === "1") return;
-  if (request.mode === "navigate" && isPosPage(url)) { event.respondWith(page(request, event.resultingClientId)); return; }
-  if (url.pathname.startsWith("/_next/static/")) { event.respondWith(staticFile(request)); return; }
+  if (request.mode === "navigate" && isPosPage(url)) { event.respondWith(page(request, event.resultingClientId, event)); return; }
+  if (url.pathname.startsWith("/_next/static/")) { event.respondWith(staticFile(request,event)); return; }
 });
 
 // The POS asks once it has started: "was I opened from the saved copy?"

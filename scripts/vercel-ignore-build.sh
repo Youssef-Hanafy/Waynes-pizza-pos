@@ -21,6 +21,13 @@ if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then
   exit 0
 fi
 
+# Fail closed if the candidate does not contain the actual live commit.
+# Staging is handled above. This never changes production settings or data.
+if ! node scripts/verify-release.mjs --build-guard; then
+  echo "Skipping unsafe or unverifiable production promotion. Inspect the release identity."
+  exit 0
+fi
+
 BASE="${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}"
 if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
   echo "Building: previous deploy not in this checkout."

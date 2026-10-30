@@ -1,3 +1,4 @@
+import { beginCriticalWork } from "@/lib/pos/update-activity";
 import { PrinterUnavailableError, type PrinterAdapter, type PrinterJob, type PrinterReceipt } from "./adapter";
 
 export interface PrintQueueRepository {
@@ -46,6 +47,11 @@ function errorMessage(error: unknown): string {
  * delivery alone is at-least-once, so operator retries can produce duplicates.
  */
 export async function processNextPrintJob(options: PrintWorkerOptions): Promise<PrintWorkerResult> {
+  const done = beginCriticalWork("printing and acknowledgement");
+  try { return await runPrintJob(options); } finally { done(); }
+}
+
+async function runPrintJob(options: PrintWorkerOptions): Promise<PrintWorkerResult> {
   const { repository, adapter, destination, workerId, signal } = options;
   const timeoutMs = options.timeoutMs ?? 20_000;
   if (!destination.trim() || destination.trim().length > 120 || !workerId.trim() || workerId.trim().length > 100) throw new Error("Printer destination or worker ID is invalid.");

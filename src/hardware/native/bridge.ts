@@ -1,3 +1,4 @@
+import { beginCriticalWork, markUncertainWork, resolveUncertainWork } from "@/lib/pos/update-activity";
 import { parseWhozzCallingRecord } from "@/lib/phone/schemas";
 
 /**
@@ -169,6 +170,7 @@ export function createAndroidHardware(android: WaynesAndroidInterface, target: W
   const pending = new Map<string, { resolve: (message: string) => void; reject: (error: NativeError) => void }>();
   const packetListeners = new Set<(text: string, from: string, receivedAt: number) => void>();
   target.__waynesNativeResult = (callId, ok, code, message) => {
+    resolveUncertainWork(`native:${callId}`);
     const waiting = pending.get(callId);
     if (!waiting) return;
     pending.delete(callId);
@@ -181,20 +183,22 @@ export function createAndroidHardware(android: WaynesAndroidInterface, target: W
   const callFor = (start: (callId: string) => void, timeoutMs: number) => new Promise<string>((resolve, reject) => {
     sequence += 1;
     const callId = `c${Date.now().toString(36)}${sequence}`;
+    const done = beginCriticalWork("native hardware operation");
     const timer = setTimeout(() => {
       if (!pending.delete(callId)) return;
+      markUncertainWork(`native:${callId}`); done();
       // The app never answered: treat the outcome as unknown, not as "not sent".
       reject(Object.assign(new Error("The POS app did not answer in time."), { code: "TIMEOUT" }));
     }, timeoutMs);
     pending.set(callId, {
-      resolve: (message) => { clearTimeout(timer); resolve(message); },
-      reject: (error) => { clearTimeout(timer); reject(error); },
+      resolve: (message) => { clearTimeout(timer); done(); resolve(message); },
+      reject: (error) => { clearTimeout(timer); done(); reject(error); },
     });
     try {
       start(callId);
     } catch (error) {
       pending.delete(callId);
-      clearTimeout(timer);
+      clearTimeout(timer); done();
       reject(Object.assign(new Error(error instanceof Error ? error.message : "The app refused the request."), { code: "NOT_CONNECTED" }));
     }
   });

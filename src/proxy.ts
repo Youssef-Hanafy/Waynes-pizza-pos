@@ -1,10 +1,11 @@
+import { currentRelease, acceptsClientContract } from "@/lib/pos/release";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isProtectedPath } from "@/lib/auth/routes";
 import { routeByHost, softwareHost } from "@/lib/hosts";
 import { ACTIVE_WORKSPACE_COOKIE, activeWorkspaceCookieOptions, workspaceSlugFromPath } from "@/lib/tenancy/active-workspace";
 
-export async function proxy(request: NextRequest) {
+async function route(request: NextRequest) {
   // The software lives on the Hanafy address; each business's own address
   // only serves its customer website (see src/lib/hosts.ts).
   const decision = routeByHost({
@@ -55,6 +56,17 @@ function redirectToLogin(request: NextRequest, error?: string) {
   return NextResponse.redirect(target);
 }
 
-// Host routing only applies to pages. API handlers authenticate and authorize
-// themselves, while webhook and hardware traffic must not invoke Proxy.
-export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"] };
+/** Explicit API compatibility; provider webhooks remain outside this matcher. */
+export async function proxy(request: NextRequest) {
+  const release = currentRelease();
+  const mutation = request.nextUrl.pathname.startsWith("/api/pos/") && request.method !== "GET" && request.method !== "HEAD";
+  const response = mutation && !acceptsClientContract(request.headers.get("x-wayne-client-contract"),release)
+    ? NextResponse.json({ error: "This screen needs the current application version. Keep the ticket saved and check This app; no new operation was started.", code: "APP_UPDATE_REQUIRED" }, { status: 409 })
+    : await route(request);
+  response.headers.set("x-wayne-server-build", release.build);
+  response.headers.set("x-wayne-server-built-at", release.builtAt);
+  response.headers.set("x-wayne-server-contract", String(release.contract));
+  return response;
+}
+// Financial webhooks authenticate their signatures and do not invoke this proxy.
+export const config = { matcher: ["/api/pos/:path*", "/((?!api|_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"] };

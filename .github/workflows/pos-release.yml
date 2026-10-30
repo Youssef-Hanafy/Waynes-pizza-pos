@@ -1,0 +1,25 @@
+name: POS release regression
+on:
+  push:
+    branches: [main, claude/elo-screen-stability]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
+      VERCEL_DEPLOYMENT_ID: ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

@@ -67,7 +67,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   const [answered, setAnswered] = useState("");
   const [problem, setProblem] = useState("");
   const full = useFullscreen();
-  useAppUpdate(() => state.phase !== "tip" && state.phase !== "sign" && state.phase !== "pay");
+  useAppUpdate(() => state.phase === "idle" || state.phase === "thanks");
 
   useEffect(() => {
     const timer = window.setTimeout(() => { const saved = readKey(); setKey(saved); setChoosing(!saved); }, 0);
