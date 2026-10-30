@@ -10,10 +10,11 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
  * Cash a driver out (owner, 2026-10-11).
  *
  * 1. Every delivery card (keyed in over the phone, authorised for the order)
- *    is captured on Stripe — once — for the order total plus the tip written on
- *    the slip.  This is the restaurant "tip adjust": one charge, one card fee.
- *    Stripe says per card how far it can be captured (overcapture); a tip
- *    above that is left off the card and reported.
+ *    is charged on Stripe for the order on its approval, and the tip written
+ *    on the slip is charged on its own (owner, 2026-10-29): keyed cards can't
+ *    be overcaptured on Wayne's pricing, and a new "order + tip" charge needed
+ *    double the order free on the card (#36 was refused for $49.03).  A card
+ *    with overcapture room still takes order + tip in one capture.
  * 2. wayne_pos_driver_cashout records the cash orders, the tips, the drawer
  *    payout and the cash-out itself.
  *

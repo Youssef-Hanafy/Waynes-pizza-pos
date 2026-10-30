@@ -10,7 +10,9 @@ import { heldCardSchema, tipCaptureRequestSchema } from "@/lib/tips/schemas";
 /**
  * POS → Tips (owner, 2026-10-13).  GET: every card approved and still held
  * for the tip on its signed slip.  POST: the tips off the slips — each card
- * is captured once on Stripe for order + tip, then the orders are updated.
+ * is captured on Stripe (order + tip in one capture when the card has room;
+ * otherwise the tip is its own charge, see tip-capture.ts), then the orders
+ * are updated.
  */
 export const dynamic = "force-dynamic";
 
