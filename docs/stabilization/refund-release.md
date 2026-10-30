@@ -45,7 +45,7 @@ Supabase `pkjrdvtdygiprmsojdqg`. Never substitute one for the other.
 
 ## Exact production migration scope
 
-Apply only these six additive integration migrations, in order, after separate
+Apply only these seven additive integration migrations, in order, after separate
 production approval and the physical acceptance gate. Use the reviewed release
 manifest's SHA-256 hashes, not whichever files happen to be on a workstation:
 
@@ -55,6 +55,7 @@ manifest's SHA-256 hashes, not whichever files happen to be on a workstation:
 4. 20261118080000_retained_tip_attempt_webhooks.sql
 5. 20261119080000_customer_autosave_order_serialization.sql
 6. 20261120080000_allocated_stripe_refunds.sql
+7. 20261121080000_separate_tip_plan.sql
 
 Do not run an unrestricted `supabase db push`. Staging retains historical durable
 migration 20261107080000 and a staging-only owner-tip bridge 20261107080001;
@@ -73,7 +74,7 @@ appearing legacy refunds explicitly; never infer their tip allocation silently.
 
 The isolated rehearsal replays all 94 current-main migrations and the actual
 read-only production card-tip, customer-writer, refund, driver-cashout and closeout
-function definitions. It then applies and reapplies the six integration migrations,
+function definitions. It then applies and reapplies the seven integration migrations,
 checking partial split state, paused completion, duplicate receipts and containment.
 This verifies source/schema compatibility; it is not a full production backup
 restore. A restore drill remains a prerequisite if required by restaurant policy.

@@ -5,7 +5,7 @@ import { PaymentProviderError, type PaymentProvider, type ProviderPayment } from
 import type { TipCapture } from "./tip-capture";
 
 type Service = ReturnType<typeof createServiceSupabaseClient>;
-type Plan = { mode: "capture" | "replacement" | "test"; amount_cents: number; fallback_amount_cents: number; customer_id?: string; payment_method_id?: string };
+type Plan = { mode: "capture" | "replacement" | "separate_tip" | "test"; amount_cents: number; fallback_amount_cents: number; customer_id?: string; payment_method_id?: string };
 type Operation = {
   id: string; original_provider_id: string | null; authorized_cents: number; requested_tip_cents: number;
   state: "pending" | "succeeded"; plan: Plan | null; replacement_id: string | null;
@@ -13,6 +13,18 @@ type Operation = {
 };
 type Payment = { provider_payment_id?: string | null; amount_cents?: number; id: string; provider: string; card_brand: string | null; card_last4: string | null; metadata: Record<string, unknown> };
 const uncertain = () => new PaymentProviderError("This payment is still being reconciled. Retry this operation; do not charge the customer another way.", "TIP_UNCERTAIN", true);
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+/**
+ * Final answers the cashier can act on (owner, 2026-10-29). Not retryable: a retry reads the
+ * same bound Stripe identities back and gives the same answer; it never creates a new charge.
+ */
+const tipDeclined = (tip: number) => new PaymentProviderError(
+  `Stripe declined the ${dollars(tip)} tip. Nothing was charged; the order is still held on its approval. Set this tip to 0 to charge the order only and pay the driver the tip in cash.`,
+  "TIP_DECLINED", false);
+const originalNotChargeable = (status: string, tipCharged: number) => new PaymentProviderError(tipCharged > 0
+  ? `The ${dollars(tipCharged)} tip was charged on its own, but the order's card approval can't be charged (${status}). The order is NOT paid. Do not charge the tip again; collect the order total another way and check this order in Stripe.`
+  : `The order's card approval can't be charged (${status}). Nothing was charged. Collect payment another way.`,
+  "ORIGINAL_NOT_CAPTURABLE", false);
 
 /** A durable receipt, not the request's screen or newly entered amount, owns retries. */
 export async function runTipOperation(options: {
@@ -81,15 +93,25 @@ export async function runTipOperation(options: {
           if (!op.original_provider_id) throw uncertain();
           const stripe = await provider();
           const original = await stripe.getPaymentStatus(op.original_provider_id);
+          if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, 0);
           if (original.status !== "authorized" && original.status !== "captured") throw uncertain();
           const room = Math.max(0, (original.maxCapturableCents ?? op.authorized_cents) - op.authorized_cents);
           const fallback = op.authorized_cents + Math.min(op.requested_tip_cents, room);
-          const replacement = !op.tip_intent_id && original.status === "authorized" && op.requested_tip_cents > room && stripe.createSavedCardIntent && stripe.confirmSavedCardIntent && stripe.releaseHold && original.paymentMethodId && original.customerId;
+          /*
+           * Owner, 2026-10-29 (order #36 / W001228): a tip that doesn't fit on the approval
+           * (every keyed card — no overcapture without IC+) is charged ON ITS OWN, then the
+           * order is captured on its approval. New operations never plan the "order + tip"
+           * replacement: it needed double the order free while the approval held its money
+           * (#36: $49.03 refused, cashier saw "declined"). Operations already planned as
+           * "replacement" still resume through their bound identities below.
+           */
+          const separate = !op.tip_intent_id && original.status === "authorized" && op.requested_tip_cents > room && stripe.createSavedCardIntent && stripe.confirmSavedCardIntent && original.paymentMethodId && original.customerId;
           plan = {
-            mode: replacement ? "replacement" : "capture",
-            amount_cents: op.tip_intent_id ? op.authorized_cents + op.requested_tip_cents : original.status === "captured" ? original.amountCents! : replacement ? op.authorized_cents + op.requested_tip_cents : fallback,
-            fallback_amount_cents: op.tip_intent_id ? op.authorized_cents + op.requested_tip_cents : original.status === "captured" ? original.amountCents! : fallback,
-            ...(replacement ? { customer_id: original.customerId!, payment_method_id: original.paymentMethodId! } : {}),
+            mode: separate ? "separate_tip" : "capture",
+            amount_cents: op.tip_intent_id || separate ? op.authorized_cents + op.requested_tip_cents : original.status === "captured" ? original.amountCents! : fallback,
+            // separate_tip: what the original approval itself is captured for — the order alone.
+            fallback_amount_cents: separate ? op.authorized_cents : op.tip_intent_id ? op.authorized_cents + op.requested_tip_cents : original.status === "captured" ? original.amountCents! : fallback,
+            ...(separate ? { customer_id: original.customerId!, payment_method_id: original.paymentMethodId! } : {}),
           };
         }
         await update("plan", plan);
@@ -137,6 +159,10 @@ export async function runTipOperation(options: {
           // charge. Bind this second identity before confirmation as well.
           if (!op.tip_intent_id) {
             if (!claim.execution_enabled || !stripe.createSavedCardIntent) throw uncertain();
+            // Never charge a tip on its own unless the order can still be captured on its approval.
+            const original = await stripe.getPaymentStatus(op.original_provider_id!);
+            if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, 0);
+            if (original.status !== "authorized" && original.status !== "captured") throw uncertain();
             const prepared = await stripe.createSavedCardIntent({
               customerId: plan.customer_id!, paymentMethodId: plan.payment_method_id!, amountCents: op.requested_tip_cents,
               idempotencyKey: `tip-${op.id}-tip-prepare`, note: `POS separate tip ${op.id}`,
@@ -148,9 +174,14 @@ export async function runTipOperation(options: {
           let tip = await stripe.getPaymentStatus(op.tip_intent_id!);
           if (tip.providerStatus === "requires_confirmation") {
             if (!claim.execution_enabled || !stripe.confirmSavedCardIntent) throw uncertain();
+            // Last check before money moves: the order's approval must still be capturable.
+            const original = await stripe.getPaymentStatus(op.original_provider_id!);
+            if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, 0);
             try { tip = await stripe.confirmSavedCardIntent(op.tip_intent_id!, `tip-${op.id}-tip-confirm`); }
             catch { tip = await stripe.getPaymentStatus(op.tip_intent_id!); }
           }
+          // A definite decline with a tip still wanted: same bound intent, same answer on every retry.
+          if ((tip.status === "failed" || tip.status === "voided") && options.wanted !== 0) throw tipDeclined(op.requested_tip_cents);
           if ((tip.status === "failed" || tip.status === "voided") && options.wanted === 0) {
             if (!claim.execution_enabled) throw uncertain();
             const canceled = tip.status === "voided" ? tip : await stripe.voidPayment(op.tip_intent_id!);
@@ -164,12 +195,17 @@ export async function runTipOperation(options: {
         }
         if (!op.result && (plan.mode === "capture" || op.fallback_to_capture)) {
           let original = await stripe.getPaymentStatus(op.original_provider_id!);
+          if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, op.tip_intent_id ? op.requested_tip_cents : 0);
           if (original.status !== "captured") {
             if (!claim.execution_enabled || original.status !== "authorized") throw uncertain();
-            const amount = op.tip_intent_id ? op.authorized_cents : op.fallback_to_capture ? plan.fallback_amount_cents : plan.amount_cents;
+            // op.plan, not the local copy: omit_tip rewrites the saved plan to the order alone.
+            const saved = op.plan ?? plan;
+            const amount = op.tip_intent_id ? op.authorized_cents : op.fallback_to_capture ? saved.fallback_amount_cents : saved.amount_cents;
             try { original = await stripe.capturePayment(op.original_provider_id!, { amountCents: amount, idempotencyKey: `tip-${op.id}-capture` }); }
             catch { original = await stripe.getPaymentStatus(op.original_provider_id!); }
           }
+          // The approval is gone (expired / canceled): a definite answer, never "retry and maybe charge".
+          if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, op.tip_intent_id ? op.requested_tip_cents : 0);
           if (op.tip_intent_id) {
             if (original.status !== "captured") throw uncertain();
             const { data, error } = await service.rpc("wayne_record_tip_leg", { target_operation_id: op.id, provider_id: original.providerPaymentId, captured_cents: original.amountCents, card_brand: original.cardBrand, card_last4: original.cardLast4 });

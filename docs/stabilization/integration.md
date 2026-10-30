@@ -34,6 +34,19 @@ historical version numbers. Staging's old 20261107080000 coordinator conflicts
 with main's owner drawer-tip migration; the staging bridge records the latter
 as 20261107080001. Never rename or overwrite historical production migrations.
 
+## Keyed-card tips: separate tip by default (owner, 2026-10-29)
+
+After order #36 / W001228 showed "Declined" (the $49.03 order + tip replacement was refused
+while the $46.03 approval still held its money), new operations whose tip doesn't fit on the
+approval plan `separate_tip` instead of `replacement`: the tip is prepared, bound, confirmed
+and verified on its own, then the original approval is captured for the order alone.
+Migration 20261121080000 lets the plan enter the existing split path directly
+(fallback_to_capture is set atomically with the immutable plan; amount = order + tip,
+fallback = order alone). Operations already planned as `replacement` resume unchanged.
+The cashier gets a final answer (tip declined / approval can't be charged) instead of
+"still being reconciled" when Stripe's answer is definite; retries reuse the bound
+identities and never create or confirm another charge.
+
 ## Containment and rollback rehearsal
 
 Before any cutover, set the execution stop switch false, stop scheduling new
