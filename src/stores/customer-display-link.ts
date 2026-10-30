@@ -19,7 +19,21 @@ import { uuid } from "@/lib/uuid";
 type Answer = Record<string, unknown>;
 type Waiter = { requestId: string; resolve: (answer: Answer | null) => void };
 
-type LinkState = { screenOnline: boolean; key: string };
+type LinkState = {
+  screenOnline: boolean;
+  key: string;
+  /** False when another POS using the same register name has taken over this customer screen. */
+  showing: boolean;
+};
+
+/**
+ * A screen counts as offline only after this long without a successful send
+ * (owner, 2026-10-29: one dropped heartbeat on the Elo flipped the checkout
+ * past the tip).  The server still says at once when the screen stops polling.
+ */
+const OFFLINE_AFTER_MS = 10_000;
+/** A screen seen this recently is reconnecting, not missing: a card checkout still asks it for the tip. */
+const RECENTLY_ONLINE_MS = 2 * 60_000;
 
 /** The store's tip buttons (Admin → Settings), set once by the POS shell. */
 let tipOptions: { tip_percentages?: number[]; tip_amounts_cents?: number[] } = {};
@@ -41,12 +55,15 @@ let lastSent = 0;
 let timer: number | null = null;
 let sending = false;
 let waiter: Waiter | null = null;
-let snapshot: LinkState = { screenOnline: false, key: "" };
+let snapshot: LinkState = { screenOnline: false, key: "", showing: true };
+let lastSentOk = 0;
+let lastScreenOnline = 0;
+let thanksShown = 0;
 const listeners = new Set<() => void>();
 
 function emit(next: Partial<LinkState>) {
   const merged = { ...snapshot, ...next };
-  if (merged.screenOnline === snapshot.screenOnline && merged.key === snapshot.key) return;
+  if (merged.screenOnline === snapshot.screenOnline && merged.key === snapshot.key && merged.showing === snapshot.showing) return;
   snapshot = merged;
   for (const listener of listeners) listener();
 }
@@ -61,7 +78,9 @@ async function send() {
   lastSent = Date.now();
   try {
     const result = await publishCustomerDisplay({ kind: "publish", key, state: current, publisher: publisherId, changed });
-    emit({ screenOnline: result.screen_online, key });
+    lastSentOk = Date.now();
+    if (result.screen_online) lastScreenOnline = lastSentOk;
+    emit({ screenOnline: result.screen_online, key, showing: result.showing !== false });
     const answer = result.response;
     if (waiter && typeof answer.request_id === "string" && answer.request_id === waiter.requestId) {
       const done = waiter;
@@ -70,7 +89,7 @@ async function send() {
     }
   } catch {
     dirty = dirty || changed;
-    emit({ screenOnline: false });
+    if (Date.now() - lastSentOk > OFFLINE_AFTER_MS) emit({ screenOnline: false });
   } finally {
     sending = false;
   }
@@ -112,10 +131,25 @@ export function showOnCustomerScreen(next: Partial<DisplayState>) {
   dirty = true;
 }
 
-/** After a payment: "Thank you" (and the change) on the customer screen, then back to the welcome screen. */
+/**
+ * After a payment: "Thank you" (and the change) on the customer screen, then
+ * back to the welcome screen — unless the next order is already showing
+ * (owner, 2026-10-29: the timer blanked the next customer's ticket).
+ */
 export function thankCustomer(changeCents: number | null = null) {
   showOnCustomerScreen({ phase: "thanks", change_cents: changeCents });
-  window.setTimeout(() => showOnCustomerScreen({ phase: "idle" }), 8000);
+  const shown = ++thanksShown;
+  window.setTimeout(() => { if (shown === thanksShown && current.phase === "thanks") showOnCustomerScreen({ phase: "idle" }); }, 8000);
+}
+
+/** This register shows its screen again after another register with the same name took it over. */
+export function reclaimCustomerScreen() {
+  dirty = true;
+}
+
+/** Whether a customer screen answered this register in the last couple of minutes. */
+export function customerScreenRecentlyOnline() {
+  return lastScreenOnline > 0 && Date.now() - lastScreenOnline <= RECENTLY_ONLINE_MS;
 }
 
 /**

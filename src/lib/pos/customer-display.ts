@@ -58,6 +58,8 @@ export const displayReadSchema = z.object({
 export const displayPublishResultSchema = z.object({
   response: z.record(z.string(), z.unknown()).default({}),
   screen_online: z.boolean().default(false),
+  /** False when another POS with the same register name is the one the screen shows. */
+  showing: z.boolean().optional(),
 });
 
 export const displayRequestSchema = z.discriminatedUnion("kind", [
