@@ -1,6 +1,6 @@
 begin;
 set local search_path = public, extensions;
-select plan(19);
+select plan(25);
 
 select is((select count(*) from public.permissions where code = 'orders.view'), 1::bigint, 'orders.view permission exists');
 select is((select count(*) from public.role_permissions rp join public.roles r on r.id = rp.role_id join public.permissions p on p.id = rp.permission_id where r.code = 'owner' and p.code = 'orders.view'), 1::bigint, 'owner receives orders.view');
@@ -28,7 +28,15 @@ select is((public.wayne_admin_orders('W903001') ->> 'total_count')::integer, 1, 
 select is((public.wayne_admin_orders('Alice') ->> 'total_count')::integer, 1, 'finds by customer name without empty phone false-positive');
 select is((public.wayne_admin_orders('(508) 555-0101') ->> 'total_count')::integer, 1, 'finds by formatted phone');
 select is((public.wayne_admin_orders(null, '2026-03-15', '2026-03-15') ->> 'total_count')::integer, 1, 'filters by Wayne business date');
-select is((public.wayne_admin_orders(null, null, null, 'delivery') ->> 'total_count')::integer, 1, 'filters by fulfillment');
+-- Both fixture fulfillments share this order-number prefix. Retained sandbox
+-- orders outside the fixture must not alter the exact one-delivery expectation.
+select is((public.wayne_admin_orders('W90300') ->> 'total_count')::integer, 2, 'mixed fulfillment fixture contains exactly two orders');
+select is((public.wayne_admin_orders('W90300', null, null, 'delivery') ->> 'total_count')::integer, 1, 'filters by fulfillment');
+select is(public.wayne_admin_orders('W90300', null, null, 'delivery') -> 'orders' -> 0 ->> 'id', '46000000-0000-4000-8000-000000000011', 'delivery filter returns the exact delivery fixture');
+select is((public.wayne_admin_orders('W90300', null, null, 'pickup') ->> 'total_count')::integer, 1, 'pickup filter excludes delivery');
+select is(public.wayne_admin_orders('W90300', null, null, 'pickup') -> 'orders' -> 0 ->> 'id', '46000000-0000-4000-8000-000000000010', 'pickup filter returns the exact pickup fixture');
+select is((public.wayne_admin_orders('Alice', null, null, 'delivery') ->> 'total_count')::integer, 0, 'search and fulfillment filters combine');
+select is((public.wayne_admin_orders(null, null, null, 'delivery') ->> 'total_count')::bigint, (select count(*) from public.orders where fulfillment_type='delivery'), 'unscoped delivery count includes all retained delivery orders');
 select is(jsonb_array_length(public.wayne_admin_order_calendar('2026-03-01')), 2, 'calendar returns two active dates');
 select is((select sum((day ->> 'order_count')::integer) from jsonb_array_elements(public.wayne_admin_order_calendar('2026-03-01')) day), 2::bigint, 'calendar order counts match');
 select is((select sum((day ->> 'active_total_cents')::integer) from jsonb_array_elements(public.wayne_admin_order_calendar('2026-03-01')) day), 3500::bigint, 'calendar active totals match stored totals');
