@@ -220,19 +220,20 @@ test.describe("Phase 0–5 staging vertical slice", () => {
     const context = await browser.newContext({ storageState: ownerStorageState! });
     try {
       const page = await context.newPage();
+      page.setDefaultTimeout(15_000);
       await page.goto(`/admin/orders/${orderId}`);
-      await page.getByLabel("Total refund", { exact: true }).fill("18.00");
-      await page.getByLabel("Reason", { exact: true }).fill("Synthetic browser split refund");
+      await page.getByRole("textbox", { name: "Total refund", exact: true }).fill("18.00");
+      await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Synthetic browser split refund");
       await page.getByRole("button", { name: "Refund", exact: true }).click();
       await expect(page.getByRole("alert")).toContainText("select tip explicitly");
-      await page.getByLabel("Total refund", { exact: true }).fill("18.00");
-      await page.getByLabel("Tip included in refund (explicit amount)").fill("5.00");
-      await page.getByLabel("Reason", { exact: true }).fill("Synthetic browser split refund");
+      await page.getByRole("textbox", { name: "Total refund", exact: true }).fill("18.00");
+      await page.getByRole("textbox", { name: "Tip included in refund (explicit amount)", exact: true }).fill("5.00");
+      await page.getByRole("textbox", { name: "Reason", exact: true }).fill("Synthetic browser split refund");
       await page.getByRole("button", { name: "Refund", exact: true }).click();
       await expect(page.getByRole("status").filter({ hasText: "Refund sent" })).toBeVisible();
       await expect(page.getByRole("status").filter({ hasText: "Driver tip recovery due: $5.00" })).toBeVisible();
       await expect(page.getByText("Refunded $25.00", { exact: true })).toBeVisible();
-      await expect(page.getByLabel("Total refund", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("textbox", { name: "Total refund", exact: true })).toHaveCount(0);
     } finally { await context.close(); }
   });
 });
