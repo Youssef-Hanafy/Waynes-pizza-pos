@@ -16,7 +16,7 @@ select set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000001'
 select ok(wayne_has_permission('menu.manage'),'owner has real workspace menu permission');
 select lives_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',(select menu_revision from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'[]')$$,'owner saves canonical price despite empty optional group');
 select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'database acknowledges $14.25');
-select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',0,1350,'[]')$$,'40001','This item changed on another register. Reload before saving.','stale editor cannot restore $13.50');
+select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',0,1350,'[]')$$,'PT409','This item changed on another register. Reload before saving.','stale editor cannot restore $13.50');
 select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',(select menu_revision from menu_items where id='92000000-0000-4000-8000-000000000004'),-1,'[]')$$,'22023','Enter a price between $0.00 and $10,000.00','negative cents rejected');
 select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'failed write does not change price');
 select set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000002',true);

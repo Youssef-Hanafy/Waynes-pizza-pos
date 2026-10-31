@@ -57,6 +57,7 @@ revoke all on function public.wayne_touch_menu_parent() from public, anon, authe
 
 -- The full editor still supports archived-safe structural edits. Older clients
 -- must reload; they cannot silently overwrite a new price with stale form data.
+-- PT409 maps to HTTP 409; 40001 makes hosted PostgREST retry indefinitely.
 alter function public.wayne_update_menu_item(uuid,jsonb) rename to wayne_update_menu_item_definition;
 revoke all on function public.wayne_update_menu_item_definition(uuid,jsonb) from public, anon, authenticated, service_role;
 create function public.wayne_update_menu_item(target_item_id uuid, payload jsonb)
@@ -74,7 +75,7 @@ begin
     raise exception 'Menu management permission required' using errcode='42501';
   end if;
   if (payload->>'expected_revision')::bigint is distinct from target.menu_revision then
-    raise exception 'This item changed on another register. Reload before saving.' using errcode='40001';
+    raise exception 'This item changed on another register. Reload before saving.' using errcode='PT409';
   end if;
   if not exists(select 1 from public.menu_categories where id=(payload->>'category_id')::uuid and workspace_id=target.workspace_id and archived_at is null) then
     raise exception 'Choose an active category in this business' using errcode='22023';
@@ -92,12 +93,12 @@ begin
       join public.modifier_groups mg on mg.id=l.modifier_group_id
       where l.menu_item_id=target.id and l.modifier_group_id=(g->>'id')::uuid
         and l.active and mg.active and mg.archived_at is null and mg.workspace_id=target.workspace_id)) then
-    raise exception 'The modifier groups changed or do not belong to this item. Reload before saving.' using errcode='40001';
+    raise exception 'The modifier groups changed or do not belong to this item. Reload before saving.' using errcode='PT409';
   end if;
   if exists(select 1 from jsonb_array_elements(payload->'variants') v where v->>'id' is not null
     and not exists(select 1 from public.menu_item_variants old_v where old_v.id=(v->>'id')::uuid
       and old_v.menu_item_id=target.id and old_v.active and old_v.archived_at is null)) then
-    raise exception 'The sizes changed. Reload before saving.' using errcode='40001';
+    raise exception 'The sizes changed. Reload before saving.' using errcode='PT409';
   end if;
 
   -- The legacy full editor recreates groups and cannot serialize size rules.
@@ -144,7 +145,7 @@ begin
   end if;
   if target.special then raise exception 'Set special prices from Specials' using errcode='22023'; end if;
   if expected_revision is distinct from target.menu_revision then
-    raise exception 'This item changed on another register. Reload before saving.' using errcode='40001';
+    raise exception 'This item changed on another register. Reload before saving.' using errcode='PT409';
   end if;
   if base_price_cents is null or base_price_cents < 0 or base_price_cents > 1000000 then
     raise exception 'Enter a price between $0.00 and $10,000.00' using errcode='22023';
@@ -161,7 +162,7 @@ begin
        select 1 from public.menu_item_variants v where v.id=(p->>'id')::uuid and v.menu_item_id=target.id and v.active and v.archived_at is null))
      or exists(select 1 from public.menu_item_variants v where v.menu_item_id=target.id and v.active and v.archived_at is null and not exists(
        select 1 from jsonb_array_elements(variant_prices) p where (p->>'id')::uuid=v.id)) then
-    raise exception 'The sizes changed. Reload before saving prices.' using errcode='40001';
+    raise exception 'The sizes changed. Reload before saving prices.' using errcode='PT409';
   end if;
   update public.menu_item_variants v set price_cents=(p->>'price_cents')::integer
     from jsonb_array_elements(variant_prices) p where v.id=(p->>'id')::uuid and v.menu_item_id=target.id and v.price_cents is distinct from (p->>'price_cents')::integer;

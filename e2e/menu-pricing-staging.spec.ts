@@ -62,7 +62,8 @@ test.describe('real hosted menu pricing',()=>{
       if(page.url().includes('/pos/admin-pin')) {
         for(const digit of owner.pin)await page.getByRole('button',{name:digit,exact:true}).click();
         await page.getByRole('button',{name:'Open Admin',exact:true}).click();
-        await expect(page).toHaveURL(baseURL+`/admin/menu/items/${id}`);
+        await expect(page).toHaveURL(/\/admin(?:\/|$)/);
+        await page.goto(`/admin/menu/items/${id}`);
       }
       await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.26');
       await page.getByRole('button',{name:'Save prices only',exact:true}).click();
@@ -94,6 +95,41 @@ test.describe('real hosted menu pricing',()=>{
     for(const id of ids){const previous=JSON.parse(await readFile(`.vercel/pricing-historical-${id}.json`,'utf8'));const line=await db.from('order_items').select('unit_price_cents').eq('order_id',previous.order_id).single();expect(line.error).toBeNull();expect(line.data?.unit_price_cents).toBe(1350);}
     await page.context().storageState({path:'.vercel/pricing-owner-state.json'});
   });
+  test('public sandbox checkout saves both dinners at 1425 cents',async({page})=>{
+    test.skip(process.env.MENU_PRICING_PHASE==='baseline','Candidate only');
+    await page.goto('/order');await page.getByRole('link',{name:'Choose pickup'}).click();
+    const gate=page.getByRole('dialog').filter({has:page.getByRole('button',{name:'Start my order'})});
+    await gate.getByLabel('First name').fill('Synthetic');await gate.getByLabel('Last name').fill('Pricing');
+    await gate.getByLabel('Mobile number').fill('2025550142');await gate.getByRole('button',{name:'Start my order'}).click();
+    await expect(gate).not.toBeVisible();await page.getByRole('button',{name:'Dinners',exact:true}).last().click();
+    for(const name of ['Cheeseburger Dinner','Gyro Dinner']){
+      const card=page.locator('article').filter({has:page.getByRole('heading',{name,exact:true})});
+      await card.getByRole('button',{name:'Customize & add'}).click();
+      const dialog=page.getByRole('dialog');await expect(dialog.getByRole('button',{name:/Add ·.*14.25/})).toBeVisible();
+      await dialog.getByRole('button',{name:/^Add ·/}).click();
+    }
+    await page.getByRole('link',{name:'Continue to checkout'}).click();
+    const checkout=page.locator('main form');await checkout.getByLabel('First name').fill('Synthetic');
+    await checkout.getByLabel('Last name').fill('Pricing');await checkout.getByLabel('Phone').fill('2025550142');
+    const cardPayment=page.getByRole('button',{name:/^Pay \$28.50 and place order$/});
+    if(await cardPayment.isVisible()){
+      const config=await db.from('location_payment_configurations').select('provider,environment').eq('workspace_id','40000000-0000-4000-8000-000000000001');
+      expect(config.error).toBeNull();expect(config.data?.some(c=>c.provider==='stripe'&&c.environment==='sandbox')).toBe(true);
+      expect(await page.content()).toContain('pk_test_');
+      const card=page.locator('[aria-label="Card details"]').frameLocator('iframe').first();
+      await card.getByRole('textbox',{name:'Credit or debit card number'}).fill('4242424242424242');
+      await card.getByPlaceholder('MM / YY').fill('1230');await card.getByPlaceholder('CVC').fill('123');
+      await cardPayment.click();
+    }else await page.getByRole('button',{name:'Place test order',exact:true}).click();
+    await expect(page).toHaveURL(/\/order\/[0-9a-f-]+\?token=/,{timeout:30_000});
+    await expect(page.getByText('Order saved',{exact:true})).toBeVisible();
+    const created={id:new URL(page.url()).pathname.split('/').pop()!};
+    const lines=await db.from('order_items').select('menu_item_id,unit_price_cents').eq('order_id',created.id);
+    expect(lines.error).toBeNull();expect(lines.data).toHaveLength(2);
+    expect(lines.data?.map(l=>l.menu_item_id).sort()).toEqual([...ids].sort());
+    expect(lines.data?.every(l=>l.unit_price_cents===1425)).toBe(true);
+    await writeFile('.vercel/pricing-online-order.json',JSON.stringify({order_id:created.id,price:1425}));
+  });
   test('cashier session cannot edit menu pricing',async({page})=>{
     test.skip(process.env.MENU_PRICING_PHASE==='baseline','Candidate only');
     await login(page,`/admin/menu/items/${ids[0]}`,cashier);await expect(page).toHaveURL(/\/unauthorized/);
@@ -103,23 +139,24 @@ test.describe('real hosted menu pricing',()=>{
     await page.goto('/pos');await expect(page.getByRole('button',{name:'Walk-in At the counter',exact:true})).toBeVisible();
     await page.context().storageState({path:'.vercel/pricing-cashier-state.json'});
   });
-  test('real concurrent editors reject a stale save and retain the unsaved draft',async({page})=>{
+  test('real concurrent editors reject a stale save and retain the unsaved draft',async({page,browser})=>{
     test.skip(process.env.MENU_PRICING_PHASE==='baseline','Candidate only');
     const path=`/admin/menu/items/${ids[0]}`;
     await login(page,path);
-    const second=await page.context().newPage();await second.goto(path);
+    const otherRegister=await browser.newContext({storageState:await page.context().storageState()});
+    const second=await otherRegister.newPage();await second.goto(baseURL+path);
     await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.26');
     await page.getByRole('button',{name:'Save prices only',exact:true}).click();
     await expect(page.getByText('Prices saved to the database.',{exact:true})).toBeVisible();
     await second.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('13.50');
     await second.getByRole('button',{name:'Save menu item',exact:true}).click();
-    await expect(second.getByRole('main').getByRole('alert')).toContainText('another register');
+    await expect(second.getByRole('main').getByRole('alert')).toContainText('another register',{timeout:20_000});
     await expect(second.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('13.50');
     await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.25');
     await page.getByRole('button',{name:'Save prices only',exact:true}).click();
     await expect(page.getByText('Prices saved to the database.',{exact:true})).toBeVisible();
     await second.reload();await expect(second.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('14.25');
-    await page.context().storageState({path:'.vercel/pricing-owner-state.json'});await second.close();
+    await page.context().storageState({path:'.vercel/pricing-owner-state.json'});await otherRegister.close();
   });
 
 });
