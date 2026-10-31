@@ -19,6 +19,8 @@ export type AppBuild = {
   builtAt: string;
   live: string;
   offlineCopy: boolean;
+  /** The saved copy is older than the newest build this register has seen live (last-resort offline open). */
+  stale: boolean;
   savedAt: string;
   /** The offline worker's own version ("" until it answers). */
   worker: string;
@@ -30,6 +32,7 @@ const initial: AppBuild = {
   builtAt: process.env.WAYNE_BUILT_AT ?? "",
   live: "",
   offlineCopy: false,
+  stale: false,
   savedAt: "",
   worker: "",
 };
@@ -51,9 +54,9 @@ let asked = false;
 export function askOfflineWorker() {
   if (asked || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   asked = true;
-  navigator.serviceWorker.addEventListener("message", (event: MessageEvent<{ type?: string; offline?: boolean; savedAt?: string; version?: string }>) => {
+  navigator.serviceWorker.addEventListener("message", (event: MessageEvent<{ type?: string; offline?: boolean; stale?: boolean; savedAt?: string; version?: string }>) => {
     if (event.data?.type !== "wayne-offline-copy") return;
-    appBuildStore.set({ ...appBuildStore.get(), offlineCopy: Boolean(event.data.offline), savedAt: event.data.savedAt ?? "", worker: event.data.version ?? "" });
+    appBuildStore.set({ ...appBuildStore.get(), offlineCopy: Boolean(event.data.offline), stale: Boolean(event.data.stale), savedAt: event.data.savedAt ?? "", worker: event.data.version ?? "" });
   });
   const ask = () => navigator.serviceWorker.controller?.postMessage({ type: "wayne-ask-offline" });
   ask();

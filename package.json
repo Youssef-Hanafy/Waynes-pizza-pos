@@ -27,6 +27,7 @@
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "seed:menu": "tsx scripts/seed-menu.ts",
     "test:menu-pricing:e2e": "playwright test -c e2e/menu-pricing.config.ts",
+    "test:screen-stability": "playwright test -c e2e/screen-stability-local.config.ts",
     "test:menu-pricing:staging": "playwright test -c e2e/menu-pricing-staging.config.ts",
     "test:menu-pricing:hosted-db": "tsx scripts/test-menu-pricing-hosted.ts"
   },

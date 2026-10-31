@@ -34,8 +34,41 @@ function schedule() {
   timer = window.setTimeout(flush, 5000);
 }
 
+/**
+ * Application lifecycle events (app.*) are written to this register's storage FIRST
+ * and sent straight away (2026-10-31): the 5-second batch above was lost whenever
+ * the page reloaded, which is exactly when an update happens — so in 30 days not one
+ * app.reload / app.update_confirmed reached the server.  The next page sends anything
+ * still waiting.  Diagnostics only: build ids and states, never order or card data.
+ */
+const OUTBOX = "wayne.pos.device-log-outbox.v1";
+let outboxSending = false;
+function readOutbox(): (Entry & { id: string })[] {
+  try { const list = JSON.parse(window.localStorage.getItem(OUTBOX) || "[]") as unknown; return Array.isArray(list) ? list.slice(-60) as (Entry & { id: string })[] : []; } catch { return []; }
+}
+function writeOutbox(list: (Entry & { id: string })[]) { try { window.localStorage.setItem(OUTBOX, JSON.stringify(list.slice(-60))); } catch { /* storage full: the in-memory batch still tries */ } }
+export function flushDeviceOutbox() {
+  if (typeof window === "undefined" || outboxSending || typeof fetch !== "function") return;
+  const pending = readOutbox();
+  if (!pending.length) return;
+  outboxSending = true;
+  const sent = new Set(pending.slice(0, 40).map((entry) => entry.id));
+  const events = pending.slice(0, 40).map(({ id, ...entry }) => ({ ...entry, detail: { ...entry.detail, outbox_id: id } }));
+  try {
+    void fetch("/api/pos/device-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events }), cache: "no-store", keepalive: true, credentials: "same-origin" })
+      .then((response) => { if (response.ok) writeOutbox(readOutbox().filter((entry) => !sent.has(entry.id))); })
+      .catch(() => undefined)
+      .finally(() => { outboxSending = false; if (readOutbox().some((entry) => !sent.has(entry.id))) window.setTimeout(flushDeviceOutbox, 1000); });
+  } catch { outboxSending = false; }
+}
+
 export function logDevice(kind: string, message = "", detail: Record<string, unknown> = {}) {
   if (typeof window === "undefined") return;
+  if (kind.startsWith("app.")) {
+    writeOutbox([...readOutbox(), { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, kind, message: String(message).slice(0, 4000), detail, at: new Date().toISOString() }]);
+    flushDeviceOutbox();
+    return;
+  }
   queue.push({ kind, message: String(message).slice(0, 4000), detail, at: new Date().toISOString() });
   if (queue.length > 200) queue = queue.slice(-200);
   schedule();

@@ -5,7 +5,8 @@ import { beginCriticalWork, markUncertainWork, noteRegisterActivity, registerUpd
 import { createStore, useStore } from "./create-store";
 import { appBuildStore, setLiveBuild } from "./app-build";
 import { isPrintStationDevice } from "./print-station";
-import { logDevice } from "@/lib/pos/device-log";
+import { flushDeviceOutbox, logDevice } from "@/lib/pos/device-log";
+import type { Release } from "@/lib/pos/release";
 
 const initial: UpdateState = { status: "checking", latest: null, checkedAt: "", message: "Checking application version…", lastReload: null };
 export const appUpdateStore = createStore<UpdateState>(initial);
@@ -21,6 +22,42 @@ function bridgeVersion() {
  if (!native) return navigator.userAgent.includes("WaynesPOSAndroid/") ? 0 : Number.MAX_SAFE_INTEGER;
  return typeof native.printerSend === "function" && typeof native.stripeCollect === "function" ? 1 : 0;
 }
+/** The offline worker that will answer this page's next navigation (controller, or a newly active one). */
+async function posWorker(): Promise<ServiceWorker | null> {
+ if (!("serviceWorker" in navigator)) return null;
+ if (navigator.serviceWorker.controller) return navigator.serviceWorker.controller;
+ try { const registration = await navigator.serviceWorker.getRegistration(window.location.pathname); return registration?.active ?? null; } catch { return null; }
+}
+function askWorker<T>(worker: ServiceWorker, message: Record<string, unknown>, timeoutMs: number): Promise<T | null> {
+ return new Promise(resolve => {
+  const channel = new MessageChannel(); const timer = window.setTimeout(() => { channel.port1.close(); resolve(null); }, timeoutMs);
+  channel.port1.onmessage = event => { window.clearTimeout(timer); channel.port1.close(); resolve(event.data as T); };
+  try { worker.postMessage(message, [channel.port2]); } catch { window.clearTimeout(timer); resolve(null); }
+ });
+}
+/**
+ * Save the target build's page + code in the offline worker before leaving this one
+ * (2026-10-31). Without it, a slow connection during the reload made the worker open
+ * its saved copy of the OLD build — the old screens came back. No worker = nothing
+ * on this device can serve an older copy, so there is nothing to stage.
+ */
+async function stageTarget(release: Release): Promise<boolean> {
+ const worker = await posWorker();
+ if (!worker) return true;
+ const answer = await askWorker<{ ok?: boolean; build?: string; reason?: string }>(worker, { type: "wayne-stage", path: window.location.pathname, build: release.build, builtAt: release.builtAt }, 45_000);
+ if (!answer?.ok || answer.build !== release.build) { logDevice("app.stage_failed", answer?.reason ?? "no answer from the offline worker", { target: release.build }); return false; }
+ return true;
+}
+function tellWorkerHighWater(release: Release) { void posWorker().then(worker => { try { worker?.postMessage({ type: "wayne-high-water", build: release.build, builtAt: release.builtAt }); } catch { /* best effort */ } }); }
+let cover: HTMLDivElement | null = null;
+/** Taps can't start work in the moment between leaving this page and the new one opening. */
+function showReloadCover(on: boolean) {
+ if (on && !cover) {
+  cover = document.createElement("div"); cover.setAttribute("data-wayne-update-cover", "");
+  cover.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(247,241,227,.92);font:700 28px system-ui,sans-serif;color:#1F3A2E";
+  cover.textContent = "Updating the POS…"; document.body.appendChild(cover);
+ } else if (!on && cover) { cover.remove(); cover = null; }
+}
 export function retainAppUpdates() {
  users++;
  if (users > 1) return releaseUser;
@@ -28,6 +65,7 @@ export function retainAppUpdates() {
  const nativeFetch = window.fetch.bind(window);
  const loaded = currentRelease();
  const opened = new URL(window.location.href);
+ flushDeviceOutbox();
  if (opened.searchParams.get("wayne_update") === loaded.build) { opened.searchParams.delete("wayne_update"); window.history.replaceState(window.history.state,"",opened); logDevice("app.update_confirmed", "Verified target loaded", {build:loaded.build}); }
  const browserGuard = registerUpdateGuard("browser", () => {
   const reasons = [];
@@ -56,12 +94,20 @@ export function retainAppUpdates() {
   persist: () => { try { window.localStorage.setItem("wayne.pos.storage-check", "ok"); window.localStorage.removeItem("wayne.pos.storage-check"); return true; } catch { return false; } },
   get: key => (key === UPDATE_HIGH_WATER ? window.localStorage : window.sessionStorage).getItem(key),
   put: (key,value) => (key === UPDATE_HIGH_WATER ? window.localStorage : window.sessionStorage).setItem(key,value),
+  stage: stageTarget,
+  log: (kind, detail) => logDevice(kind, "", detail),
   reload: target => {
-   logDevice("app.reload", "Verified idle update", { from: loaded.build, to: target });
+   showReloadCover(true);
    const url = new URL(window.location.href); url.searchParams.set("wayne_update", target);
    window.history.replaceState(window.history.state,"",url); window.location.reload();
   },
-  changed: state => { const previous=appUpdateStore.get(); if(previous.status!==state.status || previous.latest?.build!==state.latest?.build) logDevice("app.update_state",state.status,{loaded:loaded.build,latest:state.latest?.build ?? ""}); appUpdateStore.set(state); if (state.latest) setLiveBuild(state.latest.build); },
+  changed: state => {
+   const previous=appUpdateStore.get();
+   if(previous.status!==state.status || previous.latest?.build!==state.latest?.build) logDevice("app.update_state",state.status,{loaded:loaded.build,latest:state.latest?.build ?? "",why:state.message.slice(0,300)});
+   if (state.status !== "reloading") showReloadCover(false);
+   appUpdateStore.set(state);
+   if (state.latest) { setLiveBuild(state.latest.build); if (previous.latest?.build !== state.latest.build) tellWorkerHighWater(state.latest); }
+  },
  });
  manualCheck = () => manager?.request("staff requested version verification");
  // All same-origin requests identify their client. A mismatched response requests
@@ -87,6 +133,8 @@ export function retainAppUpdates() {
  window.fetch = trackedFetch;
  const check = () => { if (document.visibilityState === "visible") void manager?.check(); };
  const visibility = () => { noteRegisterActivity(); check(); };
+ // The same page shown again from the back/forward cache after it started an update reload.
+ const shownAgain = (event: PageTransitionEvent) => { if (event.persisted) manager?.resume(undefined, "page restored from back/forward cache"); visibility(); };
  const assetError = (event: Event) => {
   const node = event.target;
   if (node instanceof HTMLScriptElement || (node instanceof HTMLLinkElement && node.rel === "stylesheet")) {
@@ -96,9 +144,12 @@ export function retainAppUpdates() {
  };
  const chunkError = (event: PromiseRejectionEvent) => { if (/ChunkLoadError|Loading (?:chunk|CSS)|Failed to fetch dynamically imported module/.test(String(event.reason))) manager?.request("application chunk unavailable"); };
  const first = window.setTimeout(check,3000); const poll = window.setInterval(check,60000); const safe = window.setInterval(()=>manager?.tick(),1000);
- document.addEventListener("visibilitychange",visibility); window.addEventListener("online",check); window.addEventListener("wayne:reconnected",check); window.addEventListener("pageshow",visibility);
+ document.addEventListener("visibilitychange",visibility); window.addEventListener("online",check); window.addEventListener("wayne:reconnected",check); window.addEventListener("pageshow",shownAgain);
  window.addEventListener("pointerdown",noteRegisterActivity,true); window.addEventListener("keydown",noteRegisterActivity,true); window.addEventListener("error",assetError,true); window.addEventListener("unhandledrejection",chunkError);
- if (appBuildStore.get().offlineCopy) manager.request("opened from an offline copy");
- releaseRuntime = () => { manager?.stop(); browserGuard(); window.clearTimeout(first); window.clearInterval(poll); window.clearInterval(safe); document.removeEventListener("visibilitychange",visibility); window.removeEventListener("online",check); window.removeEventListener("wayne:reconnected",check); window.removeEventListener("pageshow",visibility); window.removeEventListener("pointerdown",noteRegisterActivity,true); window.removeEventListener("keydown",noteRegisterActivity,true); window.removeEventListener("error",assetError,true); window.removeEventListener("unhandledrejection",chunkError); if (window.fetch === trackedFetch) window.fetch = nativeFetch; manager=undefined; manualCheck=()=>{}; };
+ // The worker's "opened from the saved copy" answer usually arrives after this point.
+ let offlineAsked = false;
+ const offlineCopy = () => { if (!offlineAsked && appBuildStore.get().offlineCopy) { offlineAsked = true; logDevice("app.offline_copy_opened", "", { loaded: loaded.build, stale: appBuildStore.get().stale }); manager?.request("opened from an offline copy"); } };
+ const offOfflineCopy = appBuildStore.subscribe(offlineCopy); offlineCopy();
+ releaseRuntime = () => { offOfflineCopy(); showReloadCover(false); manager?.stop(); browserGuard(); window.clearTimeout(first); window.clearInterval(poll); window.clearInterval(safe); document.removeEventListener("visibilitychange",visibility); window.removeEventListener("online",check); window.removeEventListener("wayne:reconnected",check); window.removeEventListener("pageshow",shownAgain); window.removeEventListener("pointerdown",noteRegisterActivity,true); window.removeEventListener("keydown",noteRegisterActivity,true); window.removeEventListener("error",assetError,true); window.removeEventListener("unhandledrejection",chunkError); if (window.fetch === trackedFetch) window.fetch = nativeFetch; manager=undefined; manualCheck=()=>{}; };
  return releaseUser;
 }

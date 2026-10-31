@@ -8,7 +8,7 @@ function fixture() {
  const storage=new Map<string,string>(); storage.set("pos-drafts.v2",JSON.stringify({ticket:"offline order",amount:2000}));
  let blockers:string[]=[], revision=0, server:string[]=[], next=latest;
  const reload=vi.fn(); const read=vi.fn(async()=>next);
- const d:UpdateDependencies={loaded,read,safety:()=>({blockers,revision}),serverSafety:async()=>server,bridge:()=>1,persist:()=>true,get:k=>storage.get(k)??null,put:(k,v)=>{storage.set(k,v);},reload,changed:vi.fn()};
+ const d:UpdateDependencies={loaded,read,safety:()=>({blockers,revision}),serverSafety:async()=>server,bridge:()=>1,persist:()=>true,get:k=>storage.get(k)??null,put:(k,v)=>{storage.set(k,v);},reload,changed:vi.fn(),settleMs:0};
  const manager=new UpdateManager(d);
  return {manager,d,reload,read,storage,busy:(...values:string[])=>{blockers=values;revision++;},activity:()=>revision++,server:(values:string[])=>{server=values;},next:(r:Release)=>{next=r;},advance:()=>vi.advanceTimersByTimeAsync(901)};
 }
@@ -25,7 +25,7 @@ describe("controlled application updates",()=>{
  it("checks authoritative durable operations",async()=>{const f=fixture();f.server(["pending tip hold release"]);await f.manager.check();await f.advance();expect(f.reload).not.toHaveBeenCalled();f.server([]);f.manager.tick();await f.advance();expect(f.reload).toHaveBeenCalledOnce();});
  it("offline version check does not reload; reconnection verifies before updating",async()=>{const f=fixture();f.read.mockRejectedValueOnce(Error("offline"));await f.manager.check();await f.advance();expect(f.reload).not.toHaveBeenCalled();await f.manager.check();await f.advance();expect(f.reload).toHaveBeenCalledOnce();});
  it("keeps saved offline orders byte-for-byte intact",async()=>{const f=fixture();const before=f.storage.get("pos-drafts.v2");await f.manager.check();await f.advance();expect(f.storage.get("pos-drafts.v2")).toBe(before);});
- it("rapid deployments use the latest verified target",async()=>{const f=fixture();await f.manager.check();f.next(release("C",22));await f.advance();expect(f.reload).toHaveBeenCalledExactlyOnceWith("C");});
+ it("rapid deployments use the latest verified target (and never reload onto the superseded one)",async()=>{const f=fixture();await f.manager.check();f.next(release("C",22));await f.advance();expect(f.reload).not.toHaveBeenCalled();f.manager.tick();await f.advance();expect(f.reload).toHaveBeenCalledExactlyOnceWith("C");});
  it("refuses an older deployment response",async()=>{const f=fixture();await f.manager.check();f.next(release("old",19));await f.advance();expect(f.reload).not.toHaveBeenCalled();expect(f.manager.state.status).toBe("blocked");});
  it("high water survives restarting and rejects alias rollback",async()=>{const f=fixture();f.storage.set(UPDATE_HIGH_WATER,JSON.stringify(release("C",22)));await f.manager.check();await f.advance();expect(f.reload).not.toHaveBeenCalled();expect(f.manager.state.status).toBe("blocked");});
  it("checks bridge compatibility",async()=>{const f=fixture();f.d.bridge=()=>0;await f.manager.check();await f.advance();expect(f.reload).not.toHaveBeenCalled();expect(f.manager.state.status).toBe("blocked");});

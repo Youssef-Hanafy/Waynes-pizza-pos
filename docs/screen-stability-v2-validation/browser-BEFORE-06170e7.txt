@@ -1,0 +1,94 @@
+Running 6 tests using 1 worker
+  ✓  1 [chromium] › e2e/screen-stability-local.spec.ts:45:1 › two consecutive deployments: updates to each newest build once, idle, and never shows an older design again (10.8s)
+  ✘  2 [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest (7.3s)
+  ✘  3 [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) (1.7m)
+  ✘  4 [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates (6.3s)
+  ✓  5 [chromium] › e2e/screen-stability-local.spec.ts:115:1 › an open order holds the update for as long as it stays open; idle register then updates once (10.0s)
+  ✘  6 [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log (34.7s)
+  1) [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 0
+    + Received  + 2
+      Array [
+        "dpl_A",
+    +   "dpl_B",
+    +   "dpl_C",
+        "dpl_D",
+      ]
+      70 |   await pass(page, 5 * MINUTE);
+      71 |   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_D");
+    > 72 |   expect(await designs(page)).toEqual(["dpl_A", "dpl_D"]);
+         |                               ^
+      73 | });
+      74 |
+      75 | test("slow store network after a deployment never brings the OLD design back (offline-copy rollback)", async ({ context }) => {
+        at /tmp/before-wt/e2e/screen-stability-local.spec.ts:72:31
+    Error Context: test-results/screen-stability-local-rap-b8c0b-ange-straight-to-the-newest-chromium/error-context.md
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-local-rap-b8c0b-ange-straight-to-the-newest-chromium/trace.zip
+    Usage:
+        npx playwright show-trace test-results/screen-stability-local-rap-b8c0b-ange-straight-to-the-newest-chromium/trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  2) [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) 
+    Error: expect(received).toBe(expected) // Object.is equality
+    Expected: "design dpl_B"
+    Received: "design dpl_A"
+    Call Log:
+    - Timeout 40000ms exceeded while waiting on the predicate
+      86 |   await pass(page, 4 * MINUTE);
+      87 |   if (process.env.STABILITY_DEBUG) console.log("SEQUENCE", JSON.stringify((await state(page)).loaded.map((l) => `${l.build}${l.offline ? " (saved copy)" : ""} ${l.url.replace(/^.*\/pos/, "/pos")}`)), await page.evaluate(() => sessionStorage.getItem("wayne.pos.update-journal.v1")));
+    > 88 |   await expect.poll(() => shown(page), { timeout: 40_000 }).toBe("design dpl_B");
+         |                                                             ^
+      89 |   const seen = await designs(page);
+      90 |   // A may only appear before B. Once B has booted, A must never boot again.
+      91 |   expect(seen.slice(seen.indexOf("dpl_B"))).not.toContain("dpl_A");
+        at /tmp/before-wt/e2e/screen-stability-local.spec.ts:88:61
+    Error Context: test-results/screen-stability-local-slo-ce741-back-offline-copy-rollback--chromium/error-context.md
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-local-slo-ce741-back-offline-copy-rollback--chromium/trace.zip
+    Usage:
+        npx playwright show-trace test-results/screen-stability-local-slo-ce741-back-offline-copy-rollback--chromium/trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  3) [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates 
+    Error: expect(received).toBe(expected) // Object.is equality
+    Expected: 2
+    Received: 1
+      102 |   // Bounded: two attempts, then it keeps working on its current build (no reload loop).
+      103 |   const attempts = (await state(page)).logs.filter((log) => log.kind === "app.reload").length;
+    > 104 |   expect(attempts).toBe(2);
+          |                    ^
+      105 |   expect((await state(page)).logs.map((log) => log.kind)).toEqual(expect.arrayContaining(["app.reload_stalled", "app.update_blocked"]));
+      106 |   await pass(page, 10 * MINUTE, 60_000);
+      107 |   expect((await state(page)).logs.filter((log) => log.kind === "app.reload").length).toBe(2);
+        at /tmp/before-wt/e2e/screen-stability-local.spec.ts:104:20
+    Error Context: test-results/screen-stability-local-an--cb70b-f-silently-stopping-updates-chromium/error-context.md
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-local-an--cb70b-f-silently-stopping-updates-chromium/trace.zip
+    Usage:
+        npx playwright show-trace test-results/screen-stability-local-an--cb70b-f-silently-stopping-updates-chromium/trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  4) [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log 
+    Error: expect(received).toEqual(expected) // deep equality
+    Expected: ArrayContaining ["app.reload", "app.update_confirmed"]
+    Received: ["app.update_state", "app.update_confirmed", "app.update_state"]
+    Call Log:
+    - Timeout 30000ms exceeded while waiting on the predicate
+      134 |   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_B");
+      135 |   await pass(page, 30_000, 5_000);
+    > 136 |   await expect.poll(async () => (await state(page)).logs.map((log) => log.kind), { timeout: 30_000 }).toEqual(expect.arrayContaining(["app.reload", "app.update_confirmed"]));
+          |                                                                                                       ^
+      137 | });
+      138 |
+        at /tmp/before-wt/e2e/screen-stability-local.spec.ts:136:103
+    Error Context: test-results/screen-stability-local-eac-8a8d3-mation-reach-the-server-log-chromium/error-context.md
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-local-eac-8a8d3-mation-reach-the-server-log-chromium/trace.zip
+    Usage:
+        npx playwright show-trace test-results/screen-stability-local-eac-8a8d3-mation-reach-the-server-log-chromium/trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  4 failed
+    [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest 
+    [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) 
+    [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates 
+    [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log 
+  2 passed (3.0m)

@@ -50,7 +50,7 @@ export function AppInfoPanel() {
   const rows: [string, string][] = [
     ["Website build", build.current ? `${build.current}${build.commit ? ` · commit ${build.commit.slice(0, 7)}` : ""}${build.builtAt ? ` · built ${date(build.builtAt)}` : ""}` : "local build (no deploy id)"],
     ["Server is on", !build.live ? "checking…" : behind ? `${build.live} — different build; check update status below` : `${build.live} — the same build ✓`],
-    ["Opened from", build.offlineCopy ? `the saved offline copy${build.savedAt ? ` (saved ${date(build.savedAt)})` : ""}` : "the server ✓"],
+    ["Opened from", build.offlineCopy ? `the saved offline copy${build.savedAt ? ` (saved ${date(build.savedAt)})` : ""}${build.stale ? " — older than the live version; it moves to the live version once the connection is back" : ""}` : "the server ✓"],
     ["Android app", native ? `${native.version ?? "?"}${native.versionCode ? ` (code ${native.versionCode})` : " (1.5 or older)"}${native.buildType ? ` · ${native.buildType}` : ""}` : "not in the Android app (browser)"],
     ...(native?.package ? [["App id", native.package] as [string, string]] : []),
     ...(native?.signer ? [["Signing key", native.signer] as [string, string]] : []),

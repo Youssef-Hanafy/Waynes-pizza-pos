@@ -1,0 +1,49 @@
+     × settle: a fresh deployment is not loaded until it has stayed live for the settle window 12ms
+     × three deployments in six minutes are ONE screen change, straight to the newest 10ms
+     × the alias moving on during verification never reloads onto the superseded build 2ms
+     × a restart does not restart the settle clock for a build already seen 1ms
+     × hourly cap: no more than MAX_RELOADS_PER_HOUR screen changes across different deployments 1ms
+     × stage first: a target that cannot be saved on the device is not attempted, and no attempt is used up 1ms
+     × stage runs before the final safety check: work that starts while staging defers the reload 1ms
+     × stall: a reload that never replaced the page resumes checking (the Elo's silent dead end) 2ms
+     × blocked after two failed attempts recovers by itself after the 30-minute window (no permanent old build) 2ms
+     × page shown again from the back/forward cache after leaving resumes instead of staying departed 1ms
+     × reload is logged durably BEFORE leaving the page 1ms
+     × state does not churn on every server response for the same pending target 1ms
+     × slow server + saved copy IS the newest build: the saved copy still stands in after 10 s (offline register unchanged) 5009ms
+     × no connection at all + only an older copy: opened as a last resort and flagged stale (orders can still be taken) 9ms
+     × saves the target page and every code file it names, then the slow update reload opens the staged target after 4 s 5001ms
+     × refuses to stage when the server answers with a different build (alias moved on) 5005ms
+     × refuses to stage a sign-in redirect or an error page 5006ms
+     × a missing code file fails the stage (the target would not open offline) 5002ms
+     × only stages POS pages 5007ms
+     × update policy keeps its settle window, hourly cap and stall recovery 4ms
+     × lifecycle diagnostics are written durably before a reload can drop them 9ms
+     × the offline worker keeps its cache names, stages targets and never prefers an older saved build 4ms
+     × CI runs the real-browser deployment-transition suite 4ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/pos-offline-worker-switching.test.ts > offline worker never brings back an older build > slow server + saved copy IS the newest build: the saved copy still stands in after 10 s (offline register unchanged)
+ FAIL  tests/pos-offline-worker-switching.test.ts > offline worker never brings back an older build > no connection at all + only an older copy: opened as a last resort and flagged stale (orders can still be taken)
+ FAIL  tests/pos-offline-worker-switching.test.ts > staging the update target > saves the target page and every code file it names, then the slow update reload opens the staged target after 4 s
+ FAIL  tests/pos-offline-worker-switching.test.ts > staging the update target > refuses to stage when the server answers with a different build (alias moved on)
+ FAIL  tests/pos-offline-worker-switching.test.ts > staging the update target > refuses to stage a sign-in redirect or an error page
+ FAIL  tests/pos-offline-worker-switching.test.ts > staging the update target > a missing code file fails the stage (the target would not open offline)
+ FAIL  tests/pos-offline-worker-switching.test.ts > staging the update target > only stages POS pages
+ FAIL  tests/screen-stability-invariants.test.ts > screen stability invariants > update policy keeps its settle window, hourly cap and stall recovery
+ FAIL  tests/screen-stability-invariants.test.ts > screen stability invariants > lifecycle diagnostics are written durably before a reload can drop them
+ FAIL  tests/screen-stability-invariants.test.ts > screen stability invariants > the offline worker keeps its cache names, stages targets and never prefers an older saved build
+ FAIL  tests/screen-stability-invariants.test.ts > screen stability invariants > CI runs the real-browser deployment-transition suite
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > settle: a fresh deployment is not loaded until it has stayed live for the settle window
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > three deployments in six minutes are ONE screen change, straight to the newest
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > the alias moving on during verification never reloads onto the superseded build
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > a restart does not restart the settle clock for a build already seen
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > hourly cap: no more than MAX_RELOADS_PER_HOUR screen changes across different deployments
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > stage first: a target that cannot be saved on the device is not attempted, and no attempt is used up
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > stage runs before the final safety check: work that starts while staging defers the reload
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > stall: a reload that never replaced the page resumes checking (the Elo's silent dead end)
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > blocked after two failed attempts recovers by itself after the 30-minute window (no permanent old build)
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > page shown again from the back/forward cache after leaving resumes instead of staying departed
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > reload is logged durably BEFORE leaving the page
+ FAIL  tests/update-switching-regression.test.ts > old/new switching regressions (2026-10-31) > state does not churn on every server response for the same pending target
+ Test Files  3 failed (3)
+      Tests  23 failed | 7 passed (30)

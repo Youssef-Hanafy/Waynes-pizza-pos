@@ -81,7 +81,7 @@ describe("POS offline worker", () => {
     const answer = await ask(worker, "second");
     expect(answer.offline).toBe(true);
     expect(answer.savedAt).toBeTruthy();
-    expect(answer.version).toContain("pos-sw 3");
+    expect(answer.version).toContain("pos-sw 4");
   });
 
   it("a server error page is shown as it is — never swapped for an older saved copy", async () => {

@@ -1,0 +1,11 @@
+
+Running 6 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/screen-stability-local.spec.ts:45:1 › two consecutive deployments: updates to each newest build once, idle, and never shows an older design again (10.9s)
+  ✓  2 [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest (7.2s)
+  ✓  3 [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) (55.1s)
+  ✓  4 [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates (20.1s)
+  ✓  5 [chromium] › e2e/screen-stability-local.spec.ts:115:1 › an open order holds the update for as long as it stays open; idle register then updates once (9.4s)
+  ✓  6 [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log (5.6s)
+
+  6 passed (1.8m)

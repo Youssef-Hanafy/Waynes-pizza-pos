@@ -1,7 +1,7 @@
 name: POS release regression
 on:
   push:
-    branches: [main, claude/elo-screen-stability]
+    branches: [main, claude/elo-screen-stability, claude/elo-screen-stability-v2]
   pull_request:
 permissions:
   contents: read
@@ -21,5 +21,21 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # Includes tests/screen-stability-invariants.test.ts and tests/update-switching-regression.test.ts.
       - run: npm test
       - run: npm run build
+  # Old/new screen switching (2026-10-31): real Chromium + the real offline worker +
+  # the real update manager against simulated back-to-back deployments, slow store
+  # network, a stalled reload and an open order. No staging, Supabase or Stripe access.
+  screen-stability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test -c e2e/screen-stability-local.config.ts
