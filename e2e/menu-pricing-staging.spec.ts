@@ -2,7 +2,8 @@ import { readFile,writeFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { expect,test,type Page } from '@playwright/test';
-const baseURL='https://waynes-pos-staging.vercel.app';
+const baseURL=process.env.MENU_PRICING_APP_URL??'https://waynes-pos-staging.vercel.app';
+if(!['https://waynes-pos-staging.vercel.app','http://127.0.0.1:3105'].includes(baseURL))throw new Error('Named staging app or isolated local candidate required');
 const ids=['418c30cc-344c-4200-917d-0d60c183c77c','5677ccf0-ba1d-41a1-8382-473233f61ea9'];
 const stagingSupabaseUrl='https://pkjrdvtdygiprmsojdqg.supabase.co';
 const enabled=process.env.MENU_PRICING_HOSTED==='1';
@@ -99,5 +100,26 @@ test.describe('real hosted menu pricing',()=>{
     const client=createClient(stagingSupabaseUrl,env.NEXT_PUBLIC_SUPABASE_ANON_KEY??'',{auth:{persistSession:false}});
     expect((await client.auth.signInWithPassword({email:cashier.email,password:cashier.password})).error).toBeNull();
     const result=await client.rpc('wayne_set_menu_prices',{target_item_id:ids[0],expected_revision:0,base_price_cents:1350,variant_prices:[]});expect(result.error?.code).toBe('42501');
+    await page.goto('/pos');await expect(page.getByRole('button',{name:'Walk-in At the counter',exact:true})).toBeVisible();
+    await page.context().storageState({path:'.vercel/pricing-cashier-state.json'});
   });
+  test('real concurrent editors reject a stale save and retain the unsaved draft',async({page})=>{
+    test.skip(process.env.MENU_PRICING_PHASE==='baseline','Candidate only');
+    const path=`/admin/menu/items/${ids[0]}`;
+    await login(page,path);
+    const second=await page.context().newPage();await second.goto(path);
+    await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.26');
+    await page.getByRole('button',{name:'Save prices only',exact:true}).click();
+    await expect(page.getByText('Prices saved to the database.',{exact:true})).toBeVisible();
+    await second.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('13.50');
+    await second.getByRole('button',{name:'Save menu item',exact:true}).click();
+    await expect(second.getByRole('main').getByRole('alert')).toContainText('another register');
+    await expect(second.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('13.50');
+    await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.25');
+    await page.getByRole('button',{name:'Save prices only',exact:true}).click();
+    await expect(page.getByText('Prices saved to the database.',{exact:true})).toBeVisible();
+    await second.reload();await expect(second.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('14.25');
+    await page.context().storageState({path:'.vercel/pricing-owner-state.json'});await second.close();
+  });
+
 });

@@ -13,15 +13,14 @@ await mkdir('.vercel',{recursive:true});
 const service=createClient(env.NEXT_PUBLIC_SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY??'',{auth:{persistSession:false,autoRefreshToken:false}});
 type Reviewer={id:string;email:string;password:string;pin:string;role:'owner'|'cashier'};
 let users:Reviewer[];
-try{users=JSON.parse(await readFile('.vercel/menu-pricing-users.json','utf8'));}catch{
-  users=[];
-  for(const role of ['owner','cashier'] as const){
+try{users=JSON.parse(await readFile('.vercel/menu-pricing-users.json','utf8'));}catch{users=[];}
+for(const role of ['owner','cashier'] as const){
+    if(users.some(user=>user.role===role))continue;
     const email=`menu-pricing-${role}-${randomUUID().slice(0,8)}@example.invalid`,password=`Synthetic-${randomUUID()}-Aa1!`;
     const result=await service.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{display_name:`Synthetic pricing review ${role}`}});
     if(result.error||!result.data.user)throw new Error(result.error?.message??'Test account creation failed');
     users.push({id:result.data.user.id,email,password,pin:String(randomInt(100000,999999)),role});
     await writeFile('.vercel/menu-pricing-users.json',JSON.stringify(users),{mode:0o600});
-  }
 }
 const literal=(value:unknown)=>`'${JSON.stringify(value).replaceAll("'","''")}'::jsonb`;
 let sql='begin;\n';
