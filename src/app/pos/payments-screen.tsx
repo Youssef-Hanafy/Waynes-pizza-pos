@@ -562,14 +562,17 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid, onPr
         signal: AbortSignal.timeout(15_000),
       });
       if (!intentResponse.ok) throw new Error(await readError(intentResponse, "The payment could not be prepared."));
-      const intent = await intentResponse.json().catch(() => null) as { payment_id?: string; client_secret?: string } | null;
+      const intent = await intentResponse.json().catch(() => null) as { payment_id?: string; client_secret?: string; payment_status?: string } | null;
       if (!intent?.payment_id || !intent.client_secret) throw new Error("The payment could not be prepared.");
-      setMessage("Waiting for Stripe…");
       let stripeError: string | null = null;
-      try {
-        const confirmed = await confirmRef.current({ clientSecret: intent.client_secret, name: order.customer_name || "Customer" });
-        stripeError = confirmed.error ? confirmed.error.message ?? "The card was declined. Try another card." : null;
-      } catch { stripeError = null; }
+      // A card that was already approved (this register lost the answer earlier) is only read back, never confirmed again.
+      if (intent.payment_status !== "authorized" && intent.payment_status !== "captured") {
+        setMessage("Waiting for Stripe…");
+        try {
+          const confirmed = await confirmRef.current({ clientSecret: intent.client_secret, name: order.customer_name || "Customer" });
+          stripeError = confirmed.error ? confirmed.error.message ?? "The card was declined. Try another card." : null;
+        } catch { stripeError = null; }
+      }
       // 3. Declined or not, the server reads Stripe: a decline closes this approval so the tip or card can change.
       await settle(intent.payment_id, current, amounts, stripeError);
     } catch (cause) {

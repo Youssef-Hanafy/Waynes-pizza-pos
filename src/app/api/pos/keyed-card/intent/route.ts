@@ -57,7 +57,15 @@ export async function POST(request: Request) {
   const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
     payload: { order_id: parsed.data.order_id, idempotency_key: parsed.data.idempotency_key, entry: "pos_keyed_card", method: "card" },
   });
-  if (beginError || !beginData) return Response.json({ error: beginError?.code === "40001" ? "A payment is already in progress for this order." : "The card payment could not be opened." }, { status: beginError?.code === "40001" ? 409 : 400 });
+  if (beginError?.code === "40001") {
+    // A keyed card already open on this order. If its register lost the answer and gave up, carry
+    // on with THAT approval (same payment, same Stripe PaymentIntent, same amount) instead of
+    // leaving the order unpayable. A PaymentIntent can only ever be approved once.
+    const resumed = await resumeAbandonedKeyedCard({ service, orderId: order.id, expected, provider: resolved.value.provider, workspaceName: access.workspace_name ?? "Store", delivery: order.fulfillment_type === "delivery" });
+    if (resumed) return resumed;
+    return Response.json({ error: "A payment is already in progress for this order." }, { status: 409 });
+  }
+  if (beginError || !beginData) return Response.json({ error: "The card payment could not be opened." }, { status: 400 });
   const begun = beginData as { payment_id: string; duplicate: boolean; amount_cents: number; order_number: string };
 
   try {
@@ -81,19 +89,10 @@ export async function POST(request: Request) {
         await service.rpc("wayne_settle_payment", { payload: { payment_id: begun.payment_id, status: "failed", failure_reason: "The order total changed before the card was approved." } });
         return Response.json(changedAnswer(begun.amount_cents, tipIncluded), { status: 409 });
       }
-      intent = await resolved.value.provider.createOnlinePaymentIntent({
-        amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card${tipIncluded ? ` — order ${dollars(begun.amount_cents - tipIncluded)} + ${dollars(tipIncluded)} tip` : ""}${delivery ? `${tipIncluded ? "; extra" : " —"} tip added at cash-out` : ""})`, paymentId: begun.payment_id, receiptEmail: null,
-        tipAdjust: delivery, tipCents: tipIncluded,
+      intent = await createKeyedIntent({
+        service, provider: resolved.value.provider, paymentId: begun.payment_id, idempotencyKey: parsed.data.idempotency_key,
+        orderNumber: begun.order_number, amountCents: begun.amount_cents, tipIncluded, delivery, workspaceName: access.workspace_name ?? "Store",
       });
-      const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
-      const metadata = {
-        ...((current?.metadata ?? {}) as Record<string, unknown>), ...(delivery ? { tip_adjust: true, held_for: "delivery_tip" } : {}),
-        // How much of this one charge is the tip (receipts, refunds, disputes); the cash-out adds only an extra on top.
-        ...(tipIncluded ? { tip_included_cents: tipIncluded, order_cents: begun.amount_cents - tipIncluded } : {}),
-      };
-      const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", begun.payment_id);
-      if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
     }
     return Response.json({ payment_id: begun.payment_id, client_secret: intent.clientSecret, payment_status: intent.status === "captured" ? "captured" : intent.status === "authorized" ? "authorized" : "pending" }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
@@ -104,6 +103,69 @@ export async function POST(request: Request) {
 }
 
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+type Service = ReturnType<typeof createServiceSupabaseClient>;
+type Provider = Extract<Awaited<ReturnType<typeof resolvePaymentProvider>>, { ok: true }>["value"]["provider"];
+
+/**
+ * Creates the Stripe PaymentIntent for a payment row and records it. Every input is derived from the
+ * payment and the (locked) order, so the same call with the same idempotency key always asks Stripe
+ * for the same thing — Stripe answers a repeat with the PaymentIntent it already made.
+ */
+async function createKeyedIntent(input: { service: Service; provider: Provider; paymentId: string; idempotencyKey: string; orderNumber: string; amountCents: number; tipIncluded: number; delivery: boolean; workspaceName: string }) {
+  const { service, tipIncluded, delivery } = input;
+  const intent = await input.provider.createOnlinePaymentIntent({
+    amountCents: input.amountCents, idempotencyKey: input.idempotencyKey, referenceId: input.orderNumber,
+    note: `${input.workspaceName} order ${input.orderNumber} (keyed card${tipIncluded ? ` — order ${dollars(input.amountCents - tipIncluded)} + ${dollars(tipIncluded)} tip` : ""}${delivery ? `${tipIncluded ? "; extra" : " —"} tip added at cash-out` : ""})`, paymentId: input.paymentId, receiptEmail: null,
+    tipAdjust: delivery, tipCents: tipIncluded,
+  });
+  const { data: current } = await service.from("payments").select("metadata").eq("id", input.paymentId).maybeSingle();
+  const metadata = {
+    ...((current?.metadata ?? {}) as Record<string, unknown>), ...(delivery ? { tip_adjust: true, held_for: "delivery_tip" } : {}),
+    // How much of this one charge is the tip (receipts, refunds, disputes); the cash-out adds only an extra on top.
+    ...(tipIncluded ? { tip_included_cents: tipIncluded, order_cents: input.amountCents - tipIncluded } : {}),
+  };
+  const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", input.paymentId);
+  if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
+  return intent;
+}
+
+/** Longer than the register waits for this route (15 s): an open keyed card older than this was given up on. */
+const ABANDONED_KEYED_CARD_MS = 20_000;
+
+/**
+ * Verification fix (2026-10-31): a keyed card whose answer was lost left a 'pending' payment that
+ * blocked every later payment on the order ("A payment is already in progress") — cash included.
+ * The register's retry now continues that same payment instead.  Only a keyed card, only once its
+ * register has given up (older than ABANDONED_KEYED_CARD_MS, so a second register can't grab a card
+ * still being typed), and only for the amount the retrying cashier sees.
+ */
+async function resumeAbandonedKeyedCard(input: { service: Service; orderId: string; expected: number | undefined; provider: Provider; workspaceName: string; delivery: boolean }): Promise<Response | null> {
+  const { service } = input;
+  const { data: open } = await service.from("payments")
+    .select("id, provider_payment_id, amount_cents, created_at, metadata, idempotency_key, order:orders!inner(order_number, total_cents, tip_cents)")
+    .eq("order_id", input.orderId).eq("status", "pending").eq("method", "card").eq("provider", "stripe")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!open || (open.metadata as Record<string, unknown> | null)?.entry !== "pos_keyed_card") return null;
+  if (Date.now() - Date.parse(open.created_at as string) < ABANDONED_KEYED_CARD_MS) return null;
+  if (input.expected !== undefined && open.amount_cents !== input.expected) {
+    return Response.json({ error: `A card for ${dollars(open.amount_cents)} is still open on this order. Check the card in Payments before trying a different amount; do not key the card in again.`, code: "OPEN_PAYMENT", amount_cents: open.amount_cents }, { status: 409 });
+  }
+  const order = open.order as unknown as { order_number: string; total_cents: number; tip_cents: number };
+  try {
+    const intent = open.provider_payment_id
+      ? await input.provider.getOnlinePaymentIntent(open.provider_payment_id)
+      : await createKeyedIntent({
+        service, provider: input.provider, paymentId: open.id, idempotencyKey: open.idempotency_key as string, orderNumber: order.order_number,
+        amountCents: open.amount_cents, tipIncluded: order.total_cents === open.amount_cents ? Math.max(0, order.tip_cents) : 0, delivery: input.delivery, workspaceName: input.workspaceName,
+      });
+    if (intent.amountCents !== null && intent.amountCents !== undefined && intent.amountCents !== open.amount_cents) return null;
+    return Response.json({ payment_id: open.id, client_secret: intent.clientSecret, resumed: true, payment_status: intent.status === "captured" ? "captured" : intent.status === "authorized" ? "authorized" : "pending" }, { headers: { "Cache-Control": "no-store" } });
+  } catch (cause) {
+    logger.error("pos.keyed_card_resume_failed", cause, { order_id: input.orderId, payment_id: open.id });
+    return null;
+  }
+}
 
 /** The order changed since the screen showed it: say what it comes to now. Nothing was charged. */
 function changedAnswer(owedCents: number, tipCents: number) {

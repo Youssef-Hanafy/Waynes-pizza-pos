@@ -27,6 +27,12 @@ export async function POST(request: Request) {
     // A keyed card is authorised for the order; the tip from the slip is added when it is captured.
     // max_capture_cents is how far Stripe lets this card be captured (order + the most tip it can take).
     const held = result.status === "authorized";
+    // Exactly the amount this payment was opened for (order + any phone tip, owner 2026-10-31). Stripe
+    // approving anything else is never written to the books as if it matched.
+    if ((result.status === "authorized" || result.status === "captured") && typeof result.amountCents === "number" && result.amountCents !== payment.amount_cents) {
+      logger.error("pos.keyed_card_amount_mismatch", new Error("Stripe amount differs from the payment"), { payment_id: payment.id, expected: payment.amount_cents, stripe: result.amountCents });
+      return Response.json({ error: `Stripe shows $${(result.amountCents / 100).toFixed(2)} on this card but the ticket expected $${(payment.amount_cents / 100).toFixed(2)}. Don't key the card again — check this payment in Stripe.`, code: "AMOUNT_MISMATCH" }, { status: 409 });
+    }
     if (result.status !== "pending") {
       const { error } = await service.rpc("wayne_settle_payment", { payload: {
         payment_id: payment.id, status: result.status, provider_payment_id: result.providerPaymentId, provider_status: result.providerStatus,
