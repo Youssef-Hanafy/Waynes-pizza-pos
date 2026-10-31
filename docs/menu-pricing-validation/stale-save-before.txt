@@ -1,5 +1,4 @@
-
- RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1
+RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1
 
  ❯ tests/menu-pricing-postgres.test.ts (10 tests | 1 failed | 9 skipped) 929ms
    ❯ menu pricing on isolated PostgreSQL (10)
@@ -133,4 +132,3 @@ AssertionError: promise resolved "Result{ command: 'SELECT', …(9) }" instead o
       Tests  1 failed | 9 skipped (10)
    Start at  16:48:00
    Duration  1.01s (tests 97%, transform 2%, import 1%)
-

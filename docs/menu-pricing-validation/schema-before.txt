@@ -1,5 +1,4 @@
-
- RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1
+RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1
 
  ❯ tests/menu-pricing-schema.test.ts (3 tests | 2 failed) 6ms
    ❯ production dinner configuration regression (3)
@@ -33,4 +32,3 @@ AssertionError: [{"origin":"array","code":"too_small","minimum":1,"inclusive":tr
       Tests  2 failed | 1 passed (3)
    Start at  16:53:01
    Duration  118ms (import 59%, transform 28%, tests 10%, worker 3%)
-

@@ -1,4 +1,3 @@
-
 > waynes-pizza-pos@0.1.0 test
 > vitest run
 
@@ -10,4 +9,3 @@
       Tests  885 passed (885)
    Start at  17:02:35
    Duration  31.21s (tests 96%, import 2%, transform 1%)
-

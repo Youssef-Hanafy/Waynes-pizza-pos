@@ -1,4 +1,3 @@
-
 > waynes-pizza-pos@0.1.0 test:e2e
 > playwright test
 
@@ -19,7 +18,7 @@ Running 6 tests using 3 workers
   ✘  6 [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping (4ms)
 
 
-  1) [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register 
+  1) [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -46,7 +45,7 @@ Running 6 tests using 3 workers
 
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
-  2) [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft 
+  2) [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -73,7 +72,7 @@ Running 6 tests using 3 workers
 
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
-  3) [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+  3) [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -101,7 +100,7 @@ Running 6 tests using 3 workers
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   3 failed
-    [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register 
-    [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft 
-    [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+    [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register
+    [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft
+    [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping
   3 skipped

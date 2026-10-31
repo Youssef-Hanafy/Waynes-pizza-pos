@@ -1,4 +1,3 @@
-
 > waynes-pizza-pos@0.1.0 test:menu-pricing:e2e
 > playwright test -c e2e/menu-pricing.config.ts
 
