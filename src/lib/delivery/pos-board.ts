@@ -95,11 +95,35 @@ export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cent
   return Math.max(0, (order.hold_cents ?? order.total_cents) - order.total_cents);
 }
 
+/**
+ * A tip the customer gave on the phone BEFORE the delivery card was approved
+ * (owner, 2026-10-31): it is already inside the approval ($30 order + $5 tip →
+ * approved for $35) and on the order.  At cash-out it is paid to the driver but
+ * never charged again; the tip box takes only an EXTRA tip from the slip.
+ */
+export function tipOnCardCents(order: Pick<PosDeliveryOrder, "paid_by" | "tip_cents">) {
+  return order.paid_by === "card_held" ? Math.max(0, order.tip_cents) : 0;
+}
+
+/**
+ * Orders where the extra typed at cash-out is exactly the tip already on the card —
+ * almost always the phone tip typed a second time.  Shown before the cash-out is
+ * confirmed, so it isn't charged twice by mistake.
+ */
+export function repeatedPhoneTips(orders: PosDeliveryOrder[], tips: Record<string, number>) {
+  return orders.filter((order) => {
+    const onCard = tipOnCardCents(order);
+    return onCard > 0 && (tips[order.order_id] ?? 0) === onCard;
+  }).map((order) => ({ order, tipCents: tipOnCardCents(order) }));
+}
+
 /** One order on the driver's run, the way the cash-out reads it back. */
 export type CashoutLine = {
   order: PosDeliveryOrder;
-  /** The tip that counts for this order. */
+  /** The tip that counts for this order (for a delivery card: the tip already on the card + the extra typed now). */
   tip: number;
+  /** Delivery card only: the tip typed at cash-out, charged on top of the approval. */
+  extra: number;
   /** Cash the driver collected at the door for the order (tip not included). */
   collected: number;
   /** Tip the store owes the driver out of the drawer (card / online tips). */
@@ -119,12 +143,14 @@ export function cashoutLines(orders: PosDeliveryOrder[], tips: Record<string, nu
   return orders.map((order) => {
     if (order.paid_by === "card" || order.paid_by === "paid") {
       const tip = Math.max(0, order.tip_cents);
-      return { order, tip, collected: 0, storePays: tip, keeps: 0 };
+      return { order, tip, extra: 0, collected: 0, storePays: tip, keeps: 0 };
     }
-    const tip = tipAllowed(order) ? Math.min(Math.max(0, tips[order.order_id] ?? 0), maxTipCents(order)) : 0;
-    if (order.paid_by === "cash") return { order, tip, collected: order.total_cents, storePays: 0, keeps: tip };
-    if (order.paid_by === "cash_paid") return { order, tip, collected: 0, storePays: 0, keeps: tip };
-    return { order, tip, collected: 0, storePays: tip, keeps: 0 }; // card_held: tip added to the card
+    const typed = tipAllowed(order) ? Math.min(Math.max(0, tips[order.order_id] ?? 0), maxTipCents(order)) : 0;
+    if (order.paid_by === "cash") return { order, tip: typed, extra: 0, collected: order.total_cents, storePays: 0, keeps: typed };
+    if (order.paid_by === "cash_paid") return { order, tip: typed, extra: 0, collected: 0, storePays: 0, keeps: typed };
+    // card_held: the phone tip already on the approval + the extra added to the card now; the drawer pays the driver both.
+    const tip = tipOnCardCents(order) + typed;
+    return { order, tip, extra: typed, collected: 0, storePays: tip, keeps: 0 };
   });
 }
 
@@ -140,9 +166,12 @@ export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, 
   return { cashOrders, cashTips, cardTips, tips: cashTips + cardTips, handIn: cashOrders - cardTips };
 }
 
-export function paidByLabel(order: Pick<PosDeliveryOrder, "paid_by" | "card_label">) {
+export function paidByLabel(order: Pick<PosDeliveryOrder, "paid_by" | "card_label"> & { tip_cents?: number }) {
   switch (order.paid_by) {
-    case "card_held": return `${order.card_label || "Card"} · add tip`;
+    case "card_held": {
+      const onCard = Math.max(0, order.tip_cents ?? 0);
+      return onCard ? `${order.card_label || "Card"} · $${(onCard / 100).toFixed(2)} tip on card` : `${order.card_label || "Card"} · add tip`;
+    }
     case "card": return `${order.card_label || "Card"} · charged at counter`;
     case "paid": return "Paid online";
     case "cash_paid": return "Cash (collected)";

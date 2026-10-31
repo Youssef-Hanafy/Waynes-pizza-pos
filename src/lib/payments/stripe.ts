@@ -142,7 +142,7 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       throw new PaymentProviderError("This Stripe checkout must be confirmed in the secure card form.", "UNSUPPORTED_OPERATION");
     },
 
-    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents, tipAdjust }) {
+    async createOnlinePaymentIntent({ amountCents, idempotencyKey, referenceId, note, paymentId, receiptEmail, holdCents, tipAdjust, tipCents }) {
       const hold = holdCents && holdCents > 0 ? Math.round(holdCents) : null;
       const manual = Boolean(hold) || Boolean(tipAdjust);
       // Tip adjust without Stripe "overcapture" (2026-10-19: the account is not
@@ -172,6 +172,9 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
           setup_future_usage: customerId ? "off_session" : undefined,
           "metadata[wayne_tip_adjust]": tipAdjust ? "true" : undefined,
           "metadata[wayne_hold_cents]": hold ?? undefined,
+          // One charge, order + phone tip (owner, 2026-10-31): Stripe's record shows how much of it is the tip.
+          "metadata[wayne_tip_cents]": tipCents && tipCents > 0 ? Math.round(tipCents) : undefined,
+          "metadata[wayne_order_cents]": tipCents && tipCents > 0 ? Math.round(amountCents - tipCents) : undefined,
           currency: "usd",
           "payment_method_types[]": "card",
           description: note.slice(0, 500),

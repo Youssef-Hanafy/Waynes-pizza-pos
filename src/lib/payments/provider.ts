@@ -63,7 +63,9 @@ export interface PaymentProvider {
      * Authorise the amount now and capture later (with a tip added) — the
      * restaurant "tip adjust" flow for delivery cards keyed in over the phone.
      */
-    tipAdjust?: boolean }): Promise<ProviderOnlinePaymentIntent>;
+    tipAdjust?: boolean;
+    /** The tip already inside amountCents (taken on the phone before the card), recorded on the provider's payment for reconciliation. */
+    tipCents?: number }): Promise<ProviderOnlinePaymentIntent>;
   getOnlinePaymentIntent(providerPaymentId: string): Promise<ProviderOnlinePaymentIntent>;
   /** Ask a paired card reader to collect a card-present payment. */
   createCardPresentPayment(input: { amountCents: number; idempotencyKey: string; deviceId: string; referenceId: string; note: string }): Promise<ProviderTerminalCheckout>;

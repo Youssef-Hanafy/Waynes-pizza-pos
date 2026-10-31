@@ -16,6 +16,15 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
  * order plus any tip given on the phone, and the order is closed (owner,
  * 2026-10-13: "the only orders you should have to manually add tips is those
  * that are in the delivery").
+ *
+ * A delivery customer can also tip on the phone (owner, 2026-10-31): the POS
+ * saves the tip on the order first (wayne_pos_set_tip), so this approval is
+ * created ONCE for order + tip ($30 + $5 → $35).  The amount the cashier saw is
+ * sent as expected_amount_cents; a different amount (another register changed
+ * the order, a stale screen, a retry with a changed tip) is refused before
+ * anything reaches Stripe.  The tip inside the approval is written on the
+ * payment (tip_included_cents) and on Stripe's record; the driver's cash-out
+ * then only ever charges an EXTRA tip on top of it (tip-operation.ts).
  */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
@@ -29,11 +38,22 @@ export async function POST(request: Request) {
 
   const service = createServiceSupabaseClient();
   const { data: order } = await service.from("orders")
-    .select("id, source, fulfillment_type")
+    .select("id, source, fulfillment_type, total_cents, tip_cents")
     .eq("id", parsed.data.order_id).eq("workspace_id", access.workspace_id).maybeSingle();
   if (!order) return Response.json({ error: "Order not found." }, { status: 404 });
 
   const userClient = await createServerSupabaseClient();
+  const expected = parsed.data.expected_amount_cents;
+  const expectedTip = parsed.data.expected_tip_cents;
+  // Stale screen check before anything is opened: what is owed now must be what the cashier is about to approve.
+  if (expected !== undefined) {
+    const { data: paidData, error: paidError } = await userClient.rpc("wayne_order_paid_cents", { target_order_id: order.id });
+    if (paidError || typeof paidData !== "number") return Response.json({ error: "The order total could not be checked. Nothing was charged; try again." }, { status: 503 });
+    const owed = order.total_cents - paidData;
+    if (owed !== expected || (expectedTip !== undefined && paidData === 0 && order.tip_cents !== expectedTip)) {
+      return Response.json(changedAnswer(owed, paidData === 0 ? order.tip_cents : 0), { status: 409 });
+    }
+  }
   const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
     payload: { order_id: parsed.data.order_id, idempotency_key: parsed.data.idempotency_key, entry: "pos_keyed_card", method: "card" },
   });
@@ -43,18 +63,35 @@ export async function POST(request: Request) {
   try {
     let intent;
     if (begun.duplicate) {
-      const { data: payment } = await service.from("payments").select("provider_payment_id").eq("id", begun.payment_id).maybeSingle();
+      const { data: payment } = await service.from("payments").select("provider_payment_id, amount_cents").eq("id", begun.payment_id).maybeSingle();
+      // A replay of the same request may only continue the SAME amount; a changed total is a new payment, never this one.
+      if (expected !== undefined && payment && payment.amount_cents !== expected) {
+        return Response.json({ error: `This card was already started for ${dollars(payment.amount_cents)}, not ${dollars(expected)}. Check the ticket in Payments before trying again; do not key the card in again.` }, { status: 409 });
+      }
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
       const delivery = order.fulfillment_type === "delivery";
+      // The payment row is now open, so the tip is locked (wayne_pos_set_tip refuses while it is pending): read what this approval holds.
+      const { data: locked } = await service.from("orders").select("total_cents, tip_cents").eq("id", order.id).maybeSingle();
+      const firstPayment = locked ? locked.total_cents === begun.amount_cents : false;
+      const tipIncluded = firstPayment ? Math.max(0, locked?.tip_cents ?? 0) : 0;
+      if (!locked || (expected !== undefined && begun.amount_cents !== expected) || (expectedTip !== undefined && firstPayment && tipIncluded !== expectedTip)) {
+        // The order changed between the check above and the payment opening: close this payment before Stripe ever sees it.
+        await service.rpc("wayne_settle_payment", { payload: { payment_id: begun.payment_id, status: "failed", failure_reason: "The order total changed before the card was approved." } });
+        return Response.json(changedAnswer(begun.amount_cents, tipIncluded), { status: 409 });
+      }
       intent = await resolved.value.provider.createOnlinePaymentIntent({
         amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, referenceId: begun.order_number,
-        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card${delivery ? " — tip added at cash-out" : ""})`, paymentId: begun.payment_id, receiptEmail: null,
-        tipAdjust: delivery,
+        note: `${access.workspace_name ?? "Store"} order ${begun.order_number} (keyed card${tipIncluded ? ` — order ${dollars(begun.amount_cents - tipIncluded)} + ${dollars(tipIncluded)} tip` : ""}${delivery ? `${tipIncluded ? "; extra" : " —"} tip added at cash-out` : ""})`, paymentId: begun.payment_id, receiptEmail: null,
+        tipAdjust: delivery, tipCents: tipIncluded,
       });
       const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
-      const metadata = { ...((current?.metadata ?? {}) as Record<string, unknown>), ...(delivery ? { tip_adjust: true, held_for: "delivery_tip" } : {}) };
+      const metadata = {
+        ...((current?.metadata ?? {}) as Record<string, unknown>), ...(delivery ? { tip_adjust: true, held_for: "delivery_tip" } : {}),
+        // How much of this one charge is the tip (receipts, refunds, disputes); the cash-out adds only an extra on top.
+        ...(tipIncluded ? { tip_included_cents: tipIncluded, order_cents: begun.amount_cents - tipIncluded } : {}),
+      };
       const { error } = await service.from("payments").update({ provider_payment_id: intent.providerPaymentId, provider_status: intent.providerStatus, metadata }).eq("id", begun.payment_id);
       if (error) throw new PaymentProviderError("The payment could not be prepared. Please try again.", "DATABASE", true);
     }
@@ -64,4 +101,14 @@ export async function POST(request: Request) {
     logger.error("pos.keyed_card_intent_failed", cause, { code: error?.code, order_id: parsed.data.order_id });
     return Response.json({ error: error?.message ?? "The keyed card payment could not be prepared." }, { status: error?.retryable ? 502 : 400 });
   }
+}
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/** The order changed since the screen showed it: say what it comes to now. Nothing was charged. */
+function changedAnswer(owedCents: number, tipCents: number) {
+  return {
+    error: `The order now comes to ${dollars(owedCents)}${tipCents ? ` (order ${dollars(owedCents - tipCents)} + ${dollars(tipCents)} tip)` : ""}. Nothing was charged. Check the amount with the customer and press Approve again.`,
+    code: "AMOUNT_CHANGED", amount_cents: owedCents, tip_cents: tipCents,
+  };
 }

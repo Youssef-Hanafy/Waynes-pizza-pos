@@ -117,6 +117,14 @@ export const stripeConfirmResultSchema = z.object({
 export const posKeyedCardIntentSchema = z.object({
   order_id: z.uuid(),
   idempotency_key: z.string().min(16).max(160),
+  /**
+   * The amount the cashier sees on the button (order + any tip taken on the phone,
+   * owner 2026-10-31). When sent, the approval is created only for exactly this
+   * amount; a changed order is refused before anything reaches Stripe.
+   */
+  expected_amount_cents: z.number().int().positive().max(10_000_000).optional(),
+  /** The tip inside that amount, as shown to the cashier. */
+  expected_tip_cents: z.number().int().min(0).max(100_000).optional(),
 });
 export const posKeyedCardConfirmSchema = z.object({ payment_id: z.uuid() });
 
