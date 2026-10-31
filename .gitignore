@@ -28,3 +28,5 @@ Claude outputs/
 /e2e/pricing-fixture/.next/
 /e2e/pricing-fixture/next-env.d.ts
 /e2e/pricing-fixture/test-results/
+
+/e2e/pricing-fixture/staging-test-results/

@@ -27,6 +27,7 @@ const editorConfigSchema = z.object({
   modifier_groups: z
     .array(
       z.object({
+        id: z.uuid().optional(),
         name: z.string(),
         customer_label: z.string(),
         min_select: z.number().int(),
@@ -248,6 +249,7 @@ async function writeMenuItem(id: string | null, formData: FormData) {
     variants: configuration.data.variants
       .filter((variant) => variant.name.trim())
       .map((variant, sort_order) => ({
+        id: variant.id,
         name: variant.name,
         price_cents: cents(variant.price),
         sku: variant.sku,

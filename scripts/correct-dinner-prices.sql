@@ -19,6 +19,7 @@ begin
       and c.name='Dinners' and c.archived_at is null and i.name=item_name and i.archived_at is null and not i.special;
     if not found then raise exception 'Record changed during verification for %',item_name; end if;
     if target.id <> (case item_name when 'Cheeseburger Dinner' then '418c30cc-344c-4200-917d-0d60c183c77c'::uuid else '5677ccf0-ba1d-41a1-8382-473233f61ea9'::uuid end)
+       or target.workspace_id <> '40000000-0000-4000-8000-000000000001'::uuid
        or target.category_id <> '3fcd712d-f81a-45cf-9251-228af6584bdc'::uuid then
       raise exception 'Record identity changed for %; review before applying',item_name;
     end if;

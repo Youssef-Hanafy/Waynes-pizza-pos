@@ -61,7 +61,12 @@ alter function public.wayne_update_menu_item(uuid,jsonb) rename to wayne_update_
 revoke all on function public.wayne_update_menu_item_definition(uuid,jsonb) from public, anon, authenticated, service_role;
 create function public.wayne_update_menu_item(target_item_id uuid, payload jsonb)
 returns uuid language plpgsql security definer set search_path = '' as $$
-declare target public.menu_items%rowtype;
+declare
+  target public.menu_items%rowtype;
+  saved_rules jsonb;
+  group_rules jsonb;
+  rule jsonb;
+  new_group_id uuid;
 begin
   select * into target from public.menu_items where id=target_item_id and archived_at is null for update;
   if not found then raise exception 'Menu item not found' using errcode='P0002'; end if;
@@ -77,7 +82,50 @@ begin
   if exists(select 1 from jsonb_array_elements(payload->'variants') v group by lower(btrim(v->>'name')) having count(*)>1) then
     raise exception 'Size names must be unique' using errcode='22023';
   end if;
-  return public.wayne_update_menu_item_definition(target_item_id,payload);
+  if exists(select 1 from jsonb_array_elements(payload->'modifier_groups') g
+    where ((g->>'required')::boolean and (g->>'min_select')::integer < 1)
+       or (jsonb_array_length(g->'choices')=0 and ((g->>'required')::boolean or (g->>'min_select')::integer > 0))) then
+    raise exception 'A group requiring selections must contain an active choice' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(payload->'modifier_groups') g
+    where g->>'id' is not null and not exists(select 1 from public.menu_item_modifier_groups l
+      join public.modifier_groups mg on mg.id=l.modifier_group_id
+      where l.menu_item_id=target.id and l.modifier_group_id=(g->>'id')::uuid
+        and l.active and mg.active and mg.archived_at is null and mg.workspace_id=target.workspace_id)) then
+    raise exception 'The modifier groups changed or do not belong to this item. Reload before saving.' using errcode='40001';
+  end if;
+  if exists(select 1 from jsonb_array_elements(payload->'variants') v where v->>'id' is not null
+    and not exists(select 1 from public.menu_item_variants old_v where old_v.id=(v->>'id')::uuid
+      and old_v.menu_item_id=target.id and old_v.active and old_v.archived_at is null)) then
+    raise exception 'The sizes changed. Reload before saving.' using errcode='40001';
+  end if;
+
+  -- The legacy full editor recreates groups and cannot serialize size rules.
+  -- Retain their allowance values on the new group, using submitted group IDs
+  -- and variant IDs to follow reordering/renaming without guessing by position.
+  select coalesce(jsonb_agg(jsonb_build_object('index',g.ordinality-1,'rules',(
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'size_name',case when r.size_name='' then '' else (
+        select btrim(v->>'name') from jsonb_array_elements(payload->'variants') v
+        where (v->>'id' is not null and exists(select 1 from public.menu_item_variants old_v
+                where old_v.id=(v->>'id')::uuid and lower(btrim(old_v.name))=lower(btrim(r.size_name))))
+           or (v->>'id' is null and lower(btrim(v->>'name'))=lower(btrim(r.size_name)))
+        limit 1) end,
+      'included_count',r.included_count,'max_portions',r.max_portions,'extra_each_cents',r.extra_each_cents)), '[]'::jsonb)
+    from public.modifier_group_size_rules r where r.modifier_group_id=(g.value->>'id')::uuid
+  ))),'[]'::jsonb) into saved_rules
+  from jsonb_array_elements(payload->'modifier_groups') with ordinality g;
+
+  perform public.wayne_update_menu_item_definition(target_item_id,payload);
+  for group_rules in select value from jsonb_array_elements(saved_rules) loop
+    select modifier_group_id into new_group_id from public.menu_item_modifier_groups
+      where menu_item_id=target.id and active and sort_order=(group_rules->>'index')::integer;
+    for rule in select value from jsonb_array_elements(group_rules->'rules') where value->>'size_name' is not null loop
+      insert into public.modifier_group_size_rules(modifier_group_id,size_name,included_count,max_portions,extra_each_cents,workspace_id)
+      values(new_group_id,rule->>'size_name',(rule->>'included_count')::integer,(rule->>'max_portions')::integer,(rule->>'extra_each_cents')::integer,target.workspace_id);
+    end loop;
+  end loop;
+  return target.id;
 end;
 $$;
 revoke all on function public.wayne_update_menu_item(uuid,jsonb) from public,anon;

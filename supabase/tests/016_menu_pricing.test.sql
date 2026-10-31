@@ -1,0 +1,31 @@
+begin;
+set local search_path=public,extensions;
+select plan(11);
+insert into auth.users(id,email,raw_user_meta_data) values
+ ('92000000-0000-4000-8000-000000000001','pricing-owner@example.invalid','{"display_name":"Synthetic pgTAP pricing owner"}'),
+ ('92000000-0000-4000-8000-000000000002','pricing-cashier@example.invalid','{"display_name":"Synthetic pgTAP pricing cashier"}');
+update profiles set active=true,role_id=(select id from roles where code='owner') where id='92000000-0000-4000-8000-000000000001';
+update profiles set active=true where id='92000000-0000-4000-8000-000000000002';
+insert into menu_categories(id,name) values('92000000-0000-4000-8000-000000000003','Synthetic pgTAP pricing');
+insert into menu_items(id,category_id,name,base_price_cents) values('92000000-0000-4000-8000-000000000004','92000000-0000-4000-8000-000000000003','Synthetic dinner',1350);
+insert into modifier_groups(id,name,customer_label,min_select,max_select,required) values('92000000-0000-4000-8000-000000000005','Optional empty Meats','Meats',0,12,false);
+insert into menu_item_modifier_groups(menu_item_id,modifier_group_id) values('92000000-0000-4000-8000-000000000004','92000000-0000-4000-8000-000000000005');
+select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1350,'fixture starts at $13.50');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000001',true);
+select ok(wayne_has_permission('menu.manage'),'owner has real workspace menu permission');
+select lives_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',(select menu_revision from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'[]')$$,'owner saves canonical price despite empty optional group');
+select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'database acknowledges $14.25');
+select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',0,1350,'[]')$$,'40001','This item changed on another register. Reload before saving.','stale editor cannot restore $13.50');
+select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',(select menu_revision from menu_items where id='92000000-0000-4000-8000-000000000004'),-1,'[]')$$,'22023','Enter a price between $0.00 and $10,000.00','negative cents rejected');
+select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'failed write does not change price');
+select set_config('request.jwt.claim.sub','92000000-0000-4000-8000-000000000002',true);
+select ok(not wayne_has_permission('menu.manage'),'cashier has no menu permission');
+select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',0,1350,'[]')$$,'42501','Menu management permission required','cashier RPC denied');
+reset role;
+set local role anon;
+select throws_ok($$select wayne_set_menu_prices('92000000-0000-4000-8000-000000000004',0,1350,'[]')$$,'42501',null,'anonymous RPC denied');
+reset role;
+select is((select base_price_cents from menu_items where id='92000000-0000-4000-8000-000000000004'),1425,'unauthorized writes did not change price');
+select * from finish();
+rollback;

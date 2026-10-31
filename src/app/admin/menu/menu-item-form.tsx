@@ -3,9 +3,11 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { editorConfiguration } from "@/lib/menu/editor-configuration";
+import { uuid } from "@/lib/uuid";
 
 // Phase 14: variant_prices holds one $ string per size the owner has
-// explicitly overridden, keyed by that size's *current* name. A size with no
+// explicitly overridden, keyed by that size's stable draft key. A size with no
 // key here uses the choice's flat `price` -- which is also the only price an
 // item with no sizes at all ever uses.
 type DraftChoice = {
@@ -15,6 +17,7 @@ type DraftChoice = {
   variant_prices: Record<string, string>;
 };
 type DraftGroup = {
+  id?: string;
   name: string;
   customer_label: string;
   min_select: number;
@@ -25,7 +28,7 @@ type DraftGroup = {
   allow_halves?: boolean;
   choices: DraftChoice[];
 };
-type DraftVariant = { id?: string; name: string; price: string; sku: string };
+type DraftVariant = { price_key?: string; id?: string; name: string; price: string; sku: string };
 export type MenuItemInitial = {
   menu_revision: number;
   name: string;
@@ -80,7 +83,7 @@ export function MenuItemForm({
 }: Props) {
   const [dirty, setDirty] = useState(false);
   const [variants, setVariants] = useState<DraftVariant[]>(
-    initial?.variants ?? [],
+    initial?.variants.map(variant => ({ ...variant, price_key: variant.name })) ?? [],
   );
   const [groups, setGroups] = useState<DraftGroup[]>(
     initial?.modifier_groups ?? [],
@@ -106,7 +109,7 @@ export function MenuItemForm({
       <input
         name="configuration"
         type="hidden"
-        value={JSON.stringify({ variants, modifier_groups: groups })}
+        value={JSON.stringify(editorConfiguration(variants, groups))}
       />
       <section className="grid gap-4 rounded-2xl border border-wayne-border bg-white p-6">
         <h2 className="text-2xl font-black">Item details</h2>
@@ -253,7 +256,7 @@ export function MenuItemForm({
           </div>
           <Button
             onClick={() =>
-              setVariants([...variants, { name: "", price: "0.00", sku: "" }])
+              setVariants([...variants, { name: "", price: "0.00", sku: "", price_key: uuid() }])
             }
             type="button"
             variant="secondary"
@@ -267,6 +270,7 @@ export function MenuItemForm({
             key={index}
           >
             <Input
+              id={`variant-${index}-name`}
               label="Name"
               value={variant.name}
               onChange={(event) =>
@@ -280,6 +284,7 @@ export function MenuItemForm({
               }
             />
             <Input
+              id={`variant-${index}-price`}
               label="Price ($)"
               value={variant.price}
               onChange={(event) =>
@@ -480,15 +485,16 @@ export function MenuItemForm({
                           .filter((variant) => variant.name.trim())
                           .map((variant) => (
                             <Input
-                              key={variant.name}
+                              key={variant.price_key ?? variant.name}
+                              id={`override-${groupIndex}-${choiceIndex}-${variant.price_key ?? variant.name}`}
                               label={`${variant.name} ($)`}
                               placeholder={choice.price}
-                              value={choice.variant_prices[variant.name] ?? ""}
+                              value={choice.variant_prices[variant.price_key ?? variant.name] ?? ""}
                               onChange={(event) =>
                                 changeChoiceVariantPrice(
                                   groupIndex,
                                   choiceIndex,
-                                  variant.name,
+                                  variant.price_key ?? variant.name,
                                   event.target.value,
                                 )
                               }
