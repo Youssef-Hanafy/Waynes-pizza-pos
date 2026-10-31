@@ -8,7 +8,7 @@ describe('menu pricing on isolated PostgreSQL', () => {
   const ids: string[] = [];
   const category = '3fcd712d-f81a-45cf-9251-228af6584bdc';
   beforeAll(async () => {
-    db = await startTipPostgres({ skipMigration: process.env.MENU_PRICING_BASELINE === '1' ? '20261123080000_menu_price_editing.sql' : undefined });
+    db = await startTipPostgres({ skipMigration: process.env.MENU_PRICING_BASELINE === '1' ? '20261124080000_menu_price_editing.sql' : undefined });
     await db.admin.query("insert into menu_categories(id,name) values($1,'Dinners')",[category]);
     for (const [index,name] of ['Cheeseburger Dinner', 'Gyro Dinner'].entries()) {
       const id = ['418c30cc-344c-4200-917d-0d60c183c77c','5677ccf0-ba1d-41a1-8382-473233f61ea9'][index]; ids.push(id);

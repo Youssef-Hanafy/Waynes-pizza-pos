@@ -52,8 +52,10 @@ both database prices remained 1350. Required-group validation remains enforced.
    unexpected variant prices or current prices, changes only the two base-price
    fields, and is transaction-safe and repeatable. Existing 1425 is a no-op.
 6. Renumber the unshipped pricing migration to
-   `20261123080000_menu_price_editing.sql`: the operations branch already uses
-   `20261122080000`. No operations migration was edited or imported. The staging
+   `20261124080000_menu_price_editing.sql`: the operations branch already uses
+   `20261122080000`, and its verification branch uses `20261123080000`. Both
+   remote branches were fetched and checked; no operations migration was edited
+   or imported. The staging
    ledger was corrected to the unique pricing version.
 7. Add a guarded synthetic staging-fixture preparer, real hosted browser tests,
    and a management-API pgTAP runner. Credentials, session files and browser traces

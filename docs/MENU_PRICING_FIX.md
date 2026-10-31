@@ -69,7 +69,7 @@ existing active menu before its first write.
   Price-only saves validate cents and identify sizes by their existing UUIDs.
 - The item editor reads variant IDs and the revision. Failed child queries now
   stop editor loading instead of substituting empty definitions into a save.
-- `20261123080000_menu_price_editing.sql`: add `menu_revision`; bump it on item and
+- `20261124080000_menu_price_editing.sql`: add `menu_revision`; bump it on item and
   linked size/modifier/included-choice/size-rule changes, including shared groups.
   Wrap the existing full editor RPC with row locking, revision, tenant/category,
   and duplicate-size checks. Revoke direct client access to the renamed internal
