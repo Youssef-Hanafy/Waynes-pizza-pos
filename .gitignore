@@ -30,3 +30,6 @@ Claude outputs/
 /e2e/pricing-fixture/test-results/
 
 /e2e/pricing-fixture/staging-test-results/
+
+# Browser traces can include authenticated fixture sessions.
+/test-results/

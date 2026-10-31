@@ -1,0 +1,48 @@
+
+ RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-final/hanafy-retention-v1
+
+ ❯ tests/menu-editor-snapshot.test.ts (2 tests | 2 failed) 10ms
+   ❯ menu editor snapshot consistency (2)
+     × refuses mixed editor data when another register saves while children load 8ms
+     × reads the item revision before reading children and rechecks it afterward 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/menu-editor-snapshot.test.ts > menu editor snapshot consistency > refuses mixed editor data when another register saves while children load
+AssertionError: expected '<main class="mx-auto max-w-5xl px-5 p…' to contain 'changed while it was loading'
+
+Expected: "changed while it was loading"
+Received: "<main class="mx-auto max-w-5xl px-5 py-10"><a class="font-bold text-wayne-red" href="/admin/menu">← Menu</a><h1 class="mt-4 text-4xl font-black">Edit Cheeseburger Dinner</h1><p class="mt-2 text-wayne-muted">Use Save prices only to keep sizes and modifier settings intact. Save menu item also saves changes to the item details, sizes and modifiers.</p><p class="mt-2 rounded-xl border border-wayne-border bg-wayne-cream p-3 text-sm font-semibold">Changing an option for every item in this category? Use <a class="font-black text-wayne-red underline" href="/admin/menu/categories/3fcd712d-f81a-45cf-9251-228af6584bdc/options">Edit options for all items</a> instead — this page is for this one item (and what it comes with).</p><form class="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-wayne-border bg-white p-3 text-sm" action="javascript:throw new Error(&#x27;React form unexpectedly submitted.&#x27;)"><input type="hidden" name="id" value="418c30cc-344c-4200-917d-0d60c183c77c"/><label class="flex min-h-11 flex-1 items-center gap-2 font-semibold"><input class="size-5 accent-wayne-red" type="checkbox" name="pos_auto_add"/>POS: add to the ticket by itself once its first option is picked (e.g. a One Topping Pizza once the topping is chosen)</label><button class="min-h-11 rounded-lg border border-wayne-border px-4 font-bold" type="submit">Save</button></form><div class="mt-8"></div></main><script>addEventListener("submit",function(a){if(!a.defaultPrevented){var c=a.target,d=a.submitter,e=c.action,b=d;if(d){var f=d.getAttribute("formAction");null!=f&&(e=f,b=null)}"javascript:throw new Error('React form unexpectedly submitted.')"===e&&(a.preventDefault(),b?(a=document.createElement("input"),a.name=b.name,a.value=b.value,b.parentNode.insertBefore(a,b),b=new FormData(c),a.parentNode.removeChild(a)):b=new FormData(c),a=c.ownerDocument||c,(a.$$reactFormReplay=a.$$reactFormReplay||[]).push(c,d,b))}});</script>"
+
+ ❯ tests/menu-editor-snapshot.test.ts:25:18
+     23|     state.changeDuringLoad=true;
+     24|     const html=renderToStaticMarkup(await Page({params:Promise.resolve…
+     25|     expect(html).toContain('changed while it was loading');
+       |                  ^
+     26|     expect(html).not.toContain('Save menu item');
+     27|     expect(state.reads.at(-1)).toBe('menu_items:menu_revision');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/menu-editor-snapshot.test.ts > menu editor snapshot consistency > reads the item revision before reading children and rechecks it afterward
+AssertionError: expected 'menu_item_included_choices:modifier_c…' to be 'menu_items:menu_revision' // Object.is equality
+
+Expected: "menu_items:menu_revision"
+Received: "menu_item_included_choices:modifier_choice_id"
+
+ ❯ tests/menu-editor-snapshot.test.ts:32:32
+     30|     await Page({params:Promise.resolve({id:'418c30cc-344c-4200-917d-0d…
+     31|     expect(state.reads[0]).toMatch(/^menu_items:/);
+     32|     expect(state.reads.at(-1)).toBe('menu_items:menu_revision');
+       |                                ^
+     33|   });
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:15:24
+   Duration  137ms (import 48%, transform 35%, tests 14%, worker 3%)
+

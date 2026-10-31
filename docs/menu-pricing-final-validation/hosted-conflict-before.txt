@@ -1,0 +1,47 @@
+
+> waynes-pizza-pos@0.1.0 test:menu-pricing:staging
+> playwright test -c e2e/menu-pricing-staging.config.ts --grep concurrent editors
+
+
+Running 1 test using 1 worker
+
+(node:9586) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 e2e/menu-pricing-staging.spec.ts:107:3 › real hosted menu pricing › real concurrent editors reject a stale save and retain the unsaved draft (26.6s)
+
+
+  1) e2e/menu-pricing-staging.spec.ts:107:3 › real hosted menu pricing › real concurrent editors reject a stale save and retain the unsaved draft 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('main').getByRole('alert')
+    Expected substring: "another register"
+    Timeout: 20000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" getByRole('main').getByRole('alert') with timeout 20000ms
+      - waiting for getByRole('main').getByRole('alert')
+
+
+      116 |     await second.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('13.50');
+      117 |     await second.getByRole('button',{name:'Save menu item',exact:true}).click();
+    > 118 |     await expect(second.getByRole('main').getByRole('alert')).toContainText('another register',{timeout:20_000});
+          |                                                               ^
+      119 |     await expect(second.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('13.50');
+      120 |     await page.getByRole('textbox',{name:'Item price ($)',exact:true}).fill('14.25');
+      121 |     await page.getByRole('button',{name:'Save prices only',exact:true}).click();
+        at /Users/youssefhanafy/.codex/worktrees/menu-pricing-final/hanafy-retention-v1/e2e/menu-pricing-staging.spec.ts:118:63
+
+    Error Context: e2e/pricing-fixture/staging-test-results/menu-pricing-staging-real--fa444-nd-retain-the-unsaved-draft/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e/pricing-fixture/staging-test-results/menu-pricing-staging-real--fa444-nd-retain-the-unsaved-draft/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e/pricing-fixture/staging-test-results/menu-pricing-staging-real--fa444-nd-retain-the-unsaved-draft/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/menu-pricing-staging.spec.ts:107:3 › real hosted menu pricing › real concurrent editors reject a stale save and retain the unsaved draft 

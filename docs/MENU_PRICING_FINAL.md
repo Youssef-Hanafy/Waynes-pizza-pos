@@ -97,7 +97,29 @@ prices and records; no live restaurant prices or financial transactions were use
   remain1350. Cashier denied in both admin UI and authenticated RPC. Separate
   browser registers reject a stale1350 submission and preserve its draft.
 
-Final hosted checkout and deployment results are recorded below after completion.
+Public Stripe sandbox checkout also passed through the actual browser/card form
+and confirmation endpoint: a saved online order contains both dinner IDs with
+unit_price_cents1425. Only a test publishable key, sandbox connection and Stripe
+test card were used. The customer-display checkout regression passed ownership
+reclaim, a dropped heartbeat, delayed tip persistence, injected signature503/retry,
+and exactly one simulated payment. Tips were enabled only for that staging test
+and restored to their original false setting afterward.
+
+The hosted test separates the anonymous online customer from the staff session.
+The before-install baseline is deliberately skipped on a candidate run and was
+executed separately against the original staging app. Local browser traces remain
+private because they include synthetic sign-in sessions.
+
+One interrupted sandbox checkout left a pending payment; the release guard
+correctly refused an idle reload. The same synthetic order was then completed
+through checkout with its original idempotency key, and pending payments returned
+to zero. No financial guard was bypassed or disabled. A separate controlled
+release-transition check follows after the pricing runs complete.
+
+Browser coverage is Chromium, including real Supabase sessions and PostgreSQL;
+physical Elo restart, hardware card-reader and production acceptance remain outside
+this review. The unrelated phase0-5 live refund/core-path browser file was not
+rerun; the full automated regression suite and each browser run are listed here.
 
 ## Production release boundary
 

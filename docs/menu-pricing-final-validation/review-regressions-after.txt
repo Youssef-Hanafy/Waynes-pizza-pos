@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-final/hanafy-retention-v1
+
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  17:17:34
+   Duration  1.77s (tests 90%, transform 5%, import 5%)
+

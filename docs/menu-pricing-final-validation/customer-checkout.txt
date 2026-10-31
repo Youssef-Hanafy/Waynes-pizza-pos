@@ -1,0 +1,10 @@
+
+Running 1 test using 1 worker
+
+(node:11011) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+CHECKOUT_BROWSER verified ownership/reclaim, dropped heartbeat, delayed tip, signature 503/retry, one payment
+  ✓  1 [chromium] › e2e/customer-checkout.spec.ts:4:1 › customer display reconnect, ownership, delayed tip and failed signature finish checkout once (14.8s)
+
+  1 passed (15.2s)
+Restored original staging tips setting: false

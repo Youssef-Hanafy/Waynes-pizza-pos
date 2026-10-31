@@ -1,0 +1,52 @@
+{
+  "menu": [
+    {
+      "base_price_cents": 1425,
+      "id": "418c30cc-344c-4200-917d-0d60c183c77c",
+      "menu_revision": 354,
+      "name": "Cheeseburger Dinner",
+      "workspace_id": "40000000-0000-4000-8000-000000000001"
+    },
+    {
+      "base_price_cents": 1425,
+      "id": "5677ccf0-ba1d-41a1-8382-473233f61ea9",
+      "menu_revision": 317,
+      "name": "Gyro Dinner",
+      "workspace_id": "40000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "migration": "menu_price_editing",
+  "order_lines": [
+    {
+      "menu_item_id": "5677ccf0-ba1d-41a1-8382-473233f61ea9",
+      "order_id": "f7d2e6e9-3760-44ee-8124-436d6858ea62",
+      "unit_price_cents": 1350
+    },
+    {
+      "menu_item_id": "418c30cc-344c-4200-917d-0d60c183c77c",
+      "order_id": "de729b07-4c35-40a9-95ba-880fda71aef8",
+      "unit_price_cents": 1425
+    },
+    {
+      "menu_item_id": "418c30cc-344c-4200-917d-0d60c183c77c",
+      "order_id": "365d9df5-e79f-4b0b-b5f8-2f6e35880b79",
+      "unit_price_cents": 1425
+    },
+    {
+      "menu_item_id": "5677ccf0-ba1d-41a1-8382-473233f61ea9",
+      "order_id": "365d9df5-e79f-4b0b-b5f8-2f6e35880b79",
+      "unit_price_cents": 1425
+    },
+    {
+      "menu_item_id": "418c30cc-344c-4200-917d-0d60c183c77c",
+      "order_id": "e8705973-620e-41f9-8e53-fe9596a034d6",
+      "unit_price_cents": 1350
+    },
+    {
+      "menu_item_id": "5677ccf0-ba1d-41a1-8382-473233f61ea9",
+      "order_id": "d124a51d-5ea2-4dcc-8998-01ff4a7f0100",
+      "unit_price_cents": 1425
+    }
+  ],
+  "tips_restored": true
+}
