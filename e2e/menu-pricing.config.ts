@@ -1,0 +1,2 @@
+import { defineConfig } from '@playwright/test';
+export default defineConfig({testDir:'.',outputDir:'pricing-fixture/test-results',testMatch:'menu-pricing.spec.ts',workers:1,use:{baseURL:'http://127.0.0.1:3107',trace:'retain-on-failure'},webServer:{command:'npx tsx e2e/pricing-fixture/server.ts',cwd:process.cwd(),url:'http://127.0.0.1:3107/admin/menu',reuseExistingServer:false,gracefulShutdown:{signal:'SIGTERM',timeout:5000},timeout:120_000}});

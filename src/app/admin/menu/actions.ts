@@ -22,11 +22,12 @@ const categorySchema = z.object({
 });
 const editorConfigSchema = z.object({
   variants: z
-    .array(z.object({ name: z.string(), price: z.string(), sku: z.string() }))
+    .array(z.object({ id: z.uuid().optional(), name: z.string(), price: z.string(), sku: z.string() }))
     .max(100),
   modifier_groups: z
     .array(
       z.object({
+        id: z.uuid().optional(),
         name: z.string(),
         customer_label: z.string(),
         min_select: z.number().int(),
@@ -177,10 +178,10 @@ export async function setItemStateAction(
 }
 
 export async function createMenuItemAction(formData: FormData) {
-  await writeMenuItem(null, formData);
+  return await writeMenuItem(null, formData);
 }
 export async function updateMenuItemAction(id: string, formData: FormData) {
-  await writeMenuItem(id, formData);
+  return await writeMenuItem(id, formData);
 }
 
 async function writeMenuItem(id: string | null, formData: FormData) {
@@ -192,22 +193,38 @@ async function writeMenuItem(id: string | null, formData: FormData) {
   try {
     rawConfiguration = JSON.parse(text(formData, "configuration") || "{}");
   } catch {
-    menuRedirect("Invalid variants or modifiers");
+    return { error: "Invalid variants or modifiers" };
   }
   const configuration = editorConfigSchema.safeParse(rawConfiguration);
   if (!configuration.success)
-    menuRedirect(
-      configuration.error.issues[0]?.message ?? "Invalid variants or modifiers",
-    );
+    return { error: configuration.error.issues[0]?.message ?? "Invalid variants or modifiers" };
+  const revision = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).safeParse(formData.get("expected_revision"));
+  if (id && (!formData.has("expected_revision") || !revision.success)) return { error: "Reload this item before saving." };
+  if (id && formData.get("save_mode") === "prices") {
+    const prices = z.object({
+      base: z.number().int().min(0).max(1_000_000),
+      variants: z.array(z.object({ id: z.uuid(), price_cents: z.number().int().min(0).max(1_000_000) })),
+    }).safeParse({ base: cents(text(formData, "base_price")), variants: configuration.data.variants.map(v => ({ id: v.id, price_cents: cents(v.price) })) });
+    if (!prices.success) return { error: "Enter prices like 14.25, between $0.00 and $10,000.00. Save size changes with Save menu item first." };
+    const supabase = await createServerSupabaseClient();
+    try {
+      const result = await supabase.rpc("wayne_set_menu_prices", { target_item_id: id, expected_revision: revision.data, base_price_cents: prices.data.base, variant_prices: prices.data.variants });
+      if (result.error) return { error: result.error.message };
+      if (result.data !== id) return { error: "The database did not confirm this save. Reload to verify the current price before retrying." };
+    } catch {
+      return { error: "Could not confirm the database save. Reload to verify the current price before retrying." };
+    }
+    revalidateMenu();
+    revalidatePath(`/admin/menu/items/${id}`);
+    redirect(`/admin/menu/items/${id}?saved=${encodeURIComponent("Prices saved to the database.")}`);
+  }
   const image = formData.get("image");
   let imagePath: string | null = null;
   try {
     if (image instanceof File)
       imagePath = await uploadOptimizedImage(image, "items");
   } catch (error) {
-    menuRedirect(
-      error instanceof Error ? error.message : "Image upload failed",
-    );
+    return { error: error instanceof Error ? error.message : "Image upload failed" };
   }
   const payload = menuItemPayloadSchema.safeParse({
     category_id: text(formData, "category_id"),
@@ -232,6 +249,7 @@ async function writeMenuItem(id: string | null, formData: FormData) {
     variants: configuration.data.variants
       .filter((variant) => variant.name.trim())
       .map((variant, sort_order) => ({
+        id: variant.id,
         name: variant.name,
         price_cents: cents(variant.price),
         sku: variant.sku,
@@ -257,20 +275,29 @@ async function writeMenuItem(id: string | null, formData: FormData) {
   });
   if (!payload.success) {
     if (imagePath) await removeUploadedImage(imagePath);
-    menuRedirect(payload.error.issues[0]?.message ?? "Invalid menu item");
+    return { error: payload.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
   }
   const supabase = await createServerSupabaseClient();
-  const result = id
-    ? await supabase.rpc("wayne_update_menu_item", {
-        target_item_id: id,
-        payload: payload.data,
-      })
-    : await supabase.rpc("wayne_create_menu_item", { payload: payload.data });
+  let result: { data: unknown; error: { message: string } | null };
+  try {
+    result = id
+      ? await supabase.rpc("wayne_update_menu_item", {
+          target_item_id: id,
+          payload: { ...payload.data, expected_revision: revision.data },
+        })
+      : await supabase.rpc("wayne_create_menu_item", { payload: payload.data });
+  } catch {
+    // The response can be lost after commit. Keep any uploaded image because
+    // the acknowledged database state must be checked before cleanup/retry.
+    return { error: "Could not confirm the database save. Reload to verify the current item before retrying." };
+  }
   if (result.error) {
     if (imagePath) await removeUploadedImage(imagePath);
-    menuRedirect(result.error.message);
+    return { error: result.error.message };
   }
+  if (!z.uuid().safeParse(result.data).success || (id && result.data !== id)) return { error: "The database did not confirm this save. Reload before retrying." };
   revalidateMenu();
+  if (id) revalidatePath(`/admin/menu/items/${id}`);
   menuRedirect();
 }
 
@@ -365,6 +392,7 @@ async function removeUploadedImage(path: string) {
 function revalidateMenu() {
   revalidatePath("/");
   revalidatePath("/menu");
+  revalidatePath("/pos");
   revalidatePath("/admin/menu");
 }
 

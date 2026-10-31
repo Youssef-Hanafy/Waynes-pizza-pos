@@ -1,0 +1,81 @@
+
+> waynes-pizza-pos@0.1.0 test:menu-pricing:hosted-db
+> tsx scripts/test-menu-pricing-hosted.ts
+
+001_phase0_rls.test.sql: PASS
+1..14
+ok 1 - roles has RLS enabled
+ok 2 - permissions has RLS enabled
+ok 3 - role_permissions has RLS enabled
+ok 4 - profiles has RLS enabled
+ok 5 - owner role check succeeds server-side
+ok 6 - owner has admin access
+ok 7 - owner can manage staff
+ok 8 - owner can view staff profiles
+ok 9 - cashier role check succeeds server-side
+ok 10 - cashier has no admin access
+ok 11 - cashier has POS access
+ok 12 - cashier can view only their own profile
+ok 13 - unknown authenticated user has no admin access
+ok 14 - unknown authenticated user sees no profiles
+002_phase1_menu_rls.test.sql: PASS
+1..24
+ok 1 - store_settings has RLS enabled
+ok 2 - store_special_hours has RLS enabled
+ok 3 - menu_categories has RLS enabled
+ok 4 - menu_items has RLS enabled
+ok 5 - menu_item_variants has RLS enabled
+ok 6 - modifier_groups has RLS enabled
+ok 7 - modifier_choices has RLS enabled
+ok 8 - menu_item_modifier_groups has RLS enabled
+ok 9 - owner has menu management permission
+ok 10 - owner can create category
+ok 11 - owner can create item tree transactionally
+ok 12 - two active variants created
+ok 13 - two active modifier choices created
+ok 14 - owner can add special hours
+ok 15 - cashier lacks menu management permission
+ok 16 - cashier cannot call privileged menu RPC
+ok 17 - cashier cannot see or target website settings
+ok 18 - anonymous visitor gets canonical business settings
+ok 19 - anonymous visitor gets special hours through public function
+ok 20 - anonymous visitor sees public menu item
+ok 21 - sold-out item remains visible and labeled
+ok 22 - anonymous visitor cannot create category
+ok 23 - archived item disappears from public menu
+ok 24 - archiving retains variants for historical safety
+011_hanafy_phase1_tenancy_rls.test.sql: PASS
+1..12
+ok 1 - creates the workspace tenant root
+ok 2 - creates workspace locations
+ok 3 - keeps platform identities separate
+ok 4 - creates workspace membership
+ok 5 - creates a platform service catalogue
+ok 6 - creates workspace entitlements
+ok 7 - workspace RLS is enabled
+ok 8 - location RLS is enabled
+ok 9 - platform user RLS is enabled
+ok 10 - workspace membership RLS is enabled
+ok 11 - service catalogue RLS is enabled
+ok 12 - workspace service RLS is enabled
+012_hanafy_phase3_workspace_rls.test.sql: PASS
+1..6
+ok 1 - customers have RLS enabled
+ok 2 - orders have RLS enabled
+ok 3 - integration outbox has RLS enabled
+ok 4 - payment settings have RLS enabled
+ok 5 - customers use a workspace read policy
+ok 6 - orders use a workspace read policy
+016_menu_pricing.test.sql: PASS
+1..11
+ok 1 - fixture starts at $13.50
+ok 2 - owner has real workspace menu permission
+ok 3 - owner saves canonical price despite empty optional group
+ok 4 - database acknowledges $14.25
+ok 5 - stale editor cannot restore $13.50
+ok 6 - negative cents rejected
+ok 7 - failed write does not change price
+ok 8 - cashier has no menu permission
+ok 9 - cashier RPC denied
+ok 10 - anonymous RPC denied
+ok 11 - unauthorized writes did not change price

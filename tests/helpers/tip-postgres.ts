@@ -13,7 +13,7 @@ const categoryId = "79000000-0000-4000-8000-000000000002";
 const itemId = "79000000-0000-4000-8000-000000000003";
 
 /** Always creates its own local cluster. Never reads a connection URL or .env. */
-export async function startTipPostgres() {
+export async function startTipPostgres(options: { skipMigration?: string } = {}) {
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, "127.0.0.1", resolve));
   const address = socket.address();
@@ -48,7 +48,7 @@ export async function startTipPostgres() {
       grant usage on schema public to anon, authenticated, service_role;
     `);
     for (const file of (await readdir("supabase/migrations")).filter((file) => file.endsWith(".sql")).sort()) {
-      await admin.query(await readFile(join("supabase/migrations", file), "utf8"));
+      if (file !== options.skipMigration) await admin.query(await readFile(join("supabase/migrations", file), "utf8"));
     }
     await admin.query(`
       update public.pos_tip_capture_control set execution_enabled=true;
@@ -129,5 +129,10 @@ export async function startTipPostgres() {
     return { client, api: api as unknown as ReturnType<typeof createServiceSupabaseClient>, failNextRpc: (name: string) => { failRpc = name; }, loseNextRpcResponse: (name: string) => { loseRpc = name; } };
   }
   const closeTestClients = async () => { await Promise.all(clients.splice(1).map((client) => client.end())); };
-  return { admin, connect, fixture, service, closeTestClients, stop: async () => { await closeTestClients(); await admin.end(); await cluster.stop(); } };
+  async function disconnect(client: Client) {
+    const index = clients.indexOf(client);
+    if (index >= 0) clients.splice(index, 1);
+    await client.end();
+  }
+  return { admin, connect, disconnect, fixture, service, closeTestClients, stop: async () => { await closeTestClients(); await admin.end(); await cluster.stop(); } };
 }

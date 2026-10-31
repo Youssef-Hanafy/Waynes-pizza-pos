@@ -1,0 +1,11 @@
+
+Running 3 tests using 1 worker
+
+(node:7369) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/menu-pricing-staging.spec.ts:36:3 › real hosted menu pricing › baseline: both real admin submissions reproduce the empty-group rejection (8.6s)
+  -  2 e2e/menu-pricing-staging.spec.ts:55:3 › real hosted menu pricing › candidate: real staff login/PIN, both saves, reload, new POS charges and online price
+  -  3 e2e/menu-pricing-staging.spec.ts:95:3 › real hosted menu pricing › cashier session cannot edit menu pricing
+
+  2 skipped
+  1 passed (9.1s)

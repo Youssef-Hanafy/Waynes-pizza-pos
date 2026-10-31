@@ -1,0 +1,17 @@
+
+> waynes-pizza-pos@0.1.0 test:menu-pricing:staging
+> playwright test -c e2e/menu-pricing-staging.config.ts
+
+
+Running 5 tests using 1 worker
+
+(node:14920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  1 e2e/menu-pricing-staging.spec.ts:38:3 › real hosted menu pricing › baseline: both real admin submissions reproduce the empty-group rejection
+  ✓  2 e2e/menu-pricing-staging.spec.ts:57:3 › real hosted menu pricing › candidate: real staff login/PIN, both saves, reload, new POS charges and online price (27.2s)
+  ✓  3 e2e/menu-pricing-staging.spec.ts:101:3 › real hosted menu pricing › public sandbox checkout saves both dinners at 1425 cents (8.3s)
+  ✓  4 e2e/menu-pricing-staging.spec.ts:145:3 › real hosted menu pricing › cashier session cannot edit menu pricing (3.8s)
+  ✓  5 e2e/menu-pricing-staging.spec.ts:154:3 › real hosted menu pricing › real concurrent editors reject a stale save and retain the unsaved draft (8.8s)
+
+  1 skipped
+  4 passed (49.9s)

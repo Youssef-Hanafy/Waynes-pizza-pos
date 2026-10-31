@@ -1,0 +1,13 @@
+
+> waynes-pizza-pos@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-final/hanafy-retention-v1
+
+
+ Test Files  137 passed (137)
+      Tests  891 passed (891)
+   Start at  17:58:11
+   Duration  46.14s (tests 97%, import 2%, transform 1%)
+

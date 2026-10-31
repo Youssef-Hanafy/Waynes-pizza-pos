@@ -1,0 +1,383 @@
+[
+  {
+    "id": "418c30cc-344c-4200-917d-0d60c183c77c",
+    "name": "Cheeseburger Dinner",
+    "category_id": "3fcd712d-f81a-45cf-9251-228af6584bdc",
+    "base_price_cents": 1350,
+    "variants": [],
+    "modifier_groups": [
+      {
+        "name": "Dinner Side Choice",
+        "customer_label": "Choose 2 sides",
+        "min_select": 0,
+        "max_select": 2,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "French Fries",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Onion Rings",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Rice Pilaf",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Curly Fries",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Cheeseburger Dinner \u2013 Vegetables",
+        "customer_label": "Vegetables",
+        "min_select": 0,
+        "max_select": 27,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Black Olives",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Peppers",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Spinach",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mushrooms",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Jalapenos",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Onion",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Pickles",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Lettuce",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Tomato",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Cheeseburger Dinner \u2013 Meats",
+        "customer_label": "Meats",
+        "min_select": 0,
+        "max_select": 12,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": []
+      },
+      {
+        "name": "Cheeseburger Dinner \u2013 Sauces",
+        "customer_label": "Sauces",
+        "min_select": 0,
+        "max_select": 14,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Mayo",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mustard",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Ketchup",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Cheeseburger Dinner \u2013 Cheese",
+        "customer_label": "Cheese",
+        "min_select": 0,
+        "max_select": 12,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Extra Cheese",
+            "price_delta_cents": 100,
+            "default_selected": false
+          },
+          {
+            "name": "Light Cheese",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mozzarella Cheese",
+            "price_delta_cents": 100,
+            "default_selected": false
+          },
+          {
+            "name": "No Cheese",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "5677ccf0-ba1d-41a1-8382-473233f61ea9",
+    "name": "Gyro Dinner",
+    "category_id": "3fcd712d-f81a-45cf-9251-228af6584bdc",
+    "base_price_cents": 1350,
+    "variants": [],
+    "modifier_groups": [
+      {
+        "name": "Dinner Side Choice",
+        "customer_label": "Choose 2 sides",
+        "min_select": 0,
+        "max_select": 2,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "French Fries",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Onion Rings",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Rice Pilaf",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Curly Fries",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Dinners \u2013 Vegetables",
+        "customer_label": "Vegetables",
+        "min_select": 0,
+        "max_select": 27,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Black Olives",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Peppers",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Spinach",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mushrooms",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Jalapenos",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Onion",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Pickles",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Lettuce",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Tomato",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Dinners \u2013 Meats",
+        "customer_label": "Meats",
+        "min_select": 0,
+        "max_select": 12,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": []
+      },
+      {
+        "name": "Dinners \u2013 Sauces",
+        "customer_label": "Sauces",
+        "min_select": 0,
+        "max_select": 14,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Mayo",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mustard",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Ketchup",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Marinara Sauce",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Ranch",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Hot Sauce",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Bleu Cheese",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Sweet and Sour",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Honey Mustard",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "BBQ Sauce",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Teriyaki Sauce",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Sour Cream",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Salsa",
+            "price_delta_cents": 165,
+            "default_selected": false
+          },
+          {
+            "name": "Cheesy Sauce",
+            "price_delta_cents": 200,
+            "default_selected": false
+          }
+        ]
+      },
+      {
+        "name": "Dinners \u2013 Cheese",
+        "customer_label": "Cheese",
+        "min_select": 0,
+        "max_select": 12,
+        "required": false,
+        "allow_quantities": true,
+        "allow_halves": false,
+        "choices": [
+          {
+            "name": "Extra Cheese",
+            "price_delta_cents": 100,
+            "default_selected": false
+          },
+          {
+            "name": "Light Cheese",
+            "price_delta_cents": 0,
+            "default_selected": false
+          },
+          {
+            "name": "Mozzarella Cheese",
+            "price_delta_cents": 100,
+            "default_selected": false
+          },
+          {
+            "name": "No Cheese",
+            "price_delta_cents": 0,
+            "default_selected": false
+          }
+        ]
+      }
+    ]
+  }
+]

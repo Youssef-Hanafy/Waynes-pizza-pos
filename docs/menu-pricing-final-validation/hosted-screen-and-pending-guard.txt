@@ -1,0 +1,44 @@
+
+Running 3 tests using 1 worker
+
+(node:11455) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register (2.1s)
+  ✓  2 [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft (4.6s)
+  ✘  3 [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping (5.0m)
+
+
+  1) [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "dpl_WeZXQvpu34jGdJEU3ijgUdLtRz5D"
+    Received: "dpl_EJzizTrZrY7Qj6tNEhqKkdgXXHy9"
+
+    Call Log:
+    - Timeout 95000ms exceeded while waiting on the predicate
+
+      60 |   await page.getByRole("button",{name:"＋ New order",exact:true}).click();
+      61 |   await expect(page.getByRole("button",{name:"Walk-in At the counter",exact:true})).toBeVisible();
+    > 62 |   await expect.poll(async()=>page.locator('meta[name="wayne-build"]').getAttribute("content"),{timeout:95000,intervals:[1000]}).toBe(target.build);
+         |                                                                                                                                 ^
+      63 |   await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem("wayne.pos.update-journal.v1")??"{}").confirmed),{timeout:10000}).toBe(true);
+      64 |   const journal=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("wayne.pos.update-journal.v1")??"{}"));expect(journal.target).toBe(target.build);expect(journal.attempts).toBe(1);
+      65 |   await page.evaluate(()=>{window.dispatchEvent(new Event("online"));window.dispatchEvent(new Event("pageshow"));});
+        at /Users/youssefhanafy/.codex/worktrees/menu-pricing-final/hanafy-retention-v1/e2e/screen-stability.spec.ts:62:129
+
+    Error Context: test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  Slow test file: [chromium] › e2e/screen-stability.spec.ts (5.1m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+  2 passed (5.1m)

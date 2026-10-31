@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { editorConfiguration } from "@/lib/menu/editor-configuration";
+import { uuid } from "@/lib/uuid";
 
 // Phase 14: variant_prices holds one $ string per size the owner has
-// explicitly overridden, keyed by that size's *current* name. A size with no
+// explicitly overridden, keyed by that size's stable draft key. A size with no
 // key here uses the choice's flat `price` -- which is also the only price an
 // item with no sizes at all ever uses.
 type DraftChoice = {
@@ -15,6 +17,7 @@ type DraftChoice = {
   variant_prices: Record<string, string>;
 };
 type DraftGroup = {
+  id?: string;
   name: string;
   customer_label: string;
   min_select: number;
@@ -25,8 +28,9 @@ type DraftGroup = {
   allow_halves?: boolean;
   choices: DraftChoice[];
 };
-type DraftVariant = { name: string; price: string; sku: string };
+type DraftVariant = { price_key?: string; id?: string; name: string; price: string; sku: string };
 export type MenuItemInitial = {
+  menu_revision: number;
   name: string;
   description: string;
   image_alt: string;
@@ -47,10 +51,11 @@ export type MenuItemInitial = {
   modifier_groups: DraftGroup[];
 };
 type Props = {
-  action: (formData: FormData) => void | Promise<void>;
+  action: (formData: FormData) => void | { error: string } | Promise<void | { error: string }>;
   categories: { id: string; name: string }[];
   initial?: MenuItemInitial;
   submitLabel: string;
+  savedMessage?: string;
 };
 const emptyChoice = (): DraftChoice => ({
   name: "",
@@ -74,19 +79,37 @@ export function MenuItemForm({
   categories,
   initial,
   submitLabel,
+  savedMessage,
 }: Props) {
+  const [dirty, setDirty] = useState(false);
   const [variants, setVariants] = useState<DraftVariant[]>(
-    initial?.variants ?? [],
+    initial?.variants.map(variant => ({ ...variant, price_key: variant.name })) ?? [],
   );
   const [groups, setGroups] = useState<DraftGroup[]>(
     initial?.modifier_groups ?? [],
   );
+  const [saveState, formAction, pending] = useActionState(
+    async (_previous: { error?: string }, formData: FormData): Promise<{ error?: string }> => {
+      return (await action(formData)) ?? {};
+    },
+    {},
+  );
   return (
-    <form action={action} className="grid gap-6">
+    <form
+      action={formAction}
+      className="grid gap-6"
+      onChange={() => setDirty(true)}
+      // React resets uncontrolled fields when an action returns, including
+      // validation/database errors. Keep the draft; successful saves redirect.
+      onReset={(event) => event.preventDefault()}
+    >
+      {savedMessage && !dirty && !pending && !saveState.error && <p role="status" className="rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{savedMessage}</p>}
+      {initial && <input type="hidden" name="expected_revision" value={initial.menu_revision} />}
+      {saveState.error && <p role="alert" className="rounded-xl bg-wayne-alert-soft p-4 font-bold text-wayne-alert">{saveState.error}</p>}
       <input
         name="configuration"
         type="hidden"
-        value={JSON.stringify({ variants, modifier_groups: groups })}
+        value={JSON.stringify(editorConfiguration(variants, groups))}
       />
       <section className="grid gap-4 rounded-2xl border border-wayne-border bg-white p-6">
         <h2 className="text-2xl font-black">Item details</h2>
@@ -124,7 +147,7 @@ export function MenuItemForm({
           <Input
             defaultValue={initial?.base_price ?? "0.00"}
             inputMode="decimal"
-            label="Base price ($)"
+            label={variants.length ? "Base price ($, used only without a size)" : "Item price ($)"}
             name="base_price"
             required
           />
@@ -228,12 +251,12 @@ export function MenuItemForm({
           <div>
             <h2 className="text-2xl font-black">Variants / sizes</h2>
             <p className="text-sm text-wayne-muted">
-              Examples: Small, Large, 8 wings, 2-liter.
+              A selected size uses its full price below, replacing the base price. Modifiers add their price changes.
             </p>
           </div>
           <Button
             onClick={() =>
-              setVariants([...variants, { name: "", price: "0.00", sku: "" }])
+              setVariants([...variants, { name: "", price: "0.00", sku: "", price_key: uuid() }])
             }
             type="button"
             variant="secondary"
@@ -247,6 +270,7 @@ export function MenuItemForm({
             key={index}
           >
             <Input
+              id={`variant-${index}-name`}
               label="Name"
               value={variant.name}
               onChange={(event) =>
@@ -260,6 +284,7 @@ export function MenuItemForm({
               }
             />
             <Input
+              id={`variant-${index}-price`}
               label="Price ($)"
               value={variant.price}
               onChange={(event) =>
@@ -390,6 +415,7 @@ export function MenuItemForm({
             </div>
             <div className="grid gap-3">
               <strong>Choices</strong>
+              {group.choices.length === 0 && <p className="text-sm text-wayne-muted">This optional group has no active choices. You can leave it empty or add a choice.</p>}
               {group.choices.map((choice, choiceIndex) => (
                 <div
                   className="grid gap-3 rounded-lg bg-white p-3"
@@ -459,15 +485,16 @@ export function MenuItemForm({
                           .filter((variant) => variant.name.trim())
                           .map((variant) => (
                             <Input
-                              key={variant.name}
+                              key={variant.price_key ?? variant.name}
+                              id={`override-${groupIndex}-${choiceIndex}-${variant.price_key ?? variant.name}`}
                               label={`${variant.name} ($)`}
                               placeholder={choice.price}
-                              value={choice.variant_prices[variant.name] ?? ""}
+                              value={choice.variant_prices[variant.price_key ?? variant.name] ?? ""}
                               onChange={(event) =>
                                 changeChoiceVariantPrice(
                                   groupIndex,
                                   choiceIndex,
-                                  variant.name,
+                                  variant.price_key ?? variant.name,
                                   event.target.value,
                                 )
                               }
@@ -504,9 +531,10 @@ export function MenuItemForm({
           </div>
         ))}
       </section>
-      <div className="sticky bottom-4 flex justify-end">
-        <Button className="min-w-44 shadow-lg" type="submit">
-          {submitLabel}
+      <div className="sticky bottom-4 flex flex-wrap justify-end gap-3">
+        {initial && <Button disabled={pending} name="save_mode" value="prices" type="submit" variant="secondary">{pending ? "Saving…" : "Save prices only"}</Button>}
+        <Button className="min-w-44 shadow-lg" disabled={pending} type="submit">
+          {pending ? "Saving…" : submitLabel}
         </Button>
       </div>
     </form>
