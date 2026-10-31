@@ -25,7 +25,8 @@
     "db:stop": "supabase stop",
     "seed:owner": "tsx scripts/seed-owner.ts",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "seed:menu": "tsx scripts/seed-menu.ts"
+    "seed:menu": "tsx scripts/seed-menu.ts",
+    "test:menu-pricing:e2e": "playwright test -c e2e/menu-pricing.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",

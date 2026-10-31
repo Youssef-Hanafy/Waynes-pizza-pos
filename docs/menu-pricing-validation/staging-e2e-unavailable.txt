@@ -1,0 +1,107 @@
+
+> waynes-pizza-pos@0.1.0 test:e2e
+> playwright test
+
+
+Running 6 tests using 3 workers
+
+  -  1 [chromium] › e2e/phase0-5.spec.ts:129:3 › Phase 0–5 staging vertical slice › creates, reconciles, and operates one online and POS order for each core path
+  -  2 [chromium] › e2e/phase0-5.spec.ts:216:3 › Phase 0–5 staging vertical slice › refunds both split legs only with an explicit tip and records driver recovery due
+(node:3382) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3381) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  3 [chromium] › e2e/customer-checkout.spec.ts:4:1 › customer display reconnect, ownership, delayed tip and failed signature finish checkout once
+  ✘  4 [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register (6ms)
+  ✘  5 [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft (10ms)
+(node:3391) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  6 [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping (4ms)
+
+
+  1) [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "1"
+    Received: undefined
+
+      3 | import { join } from "node:path";
+      4 | const base="https://waynes-pos-staging.vercel.app";
+    > 5 | function staging() { expect(process.env.E2E_RUN_STAGING).toBe("1");expect(process.env.E2E_BASE_URL).toBe(base);expect(process.env.E2E_POS_STORAGE_STATE).toBeTruthy(); }
+        |                                                          ^
+      6 |
+      7 | test("a second POS tab cannot interrupt the owning register",async({browser})=>{
+      8 |  staging();const context=await browser.newContext({storageState:process.env.E2E_POS_STORAGE_STATE});
+        at staging (/Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:5:58)
+        at /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:8:2
+
+    Error Context: test-results/screen-stability-a-second--cf2e3-terrupt-the-owning-register-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-a-second--cf2e3-terrupt-the-owning-register-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/screen-stability-a-second--cf2e3-terrupt-the-owning-register-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "1"
+    Received: undefined
+
+      3 | import { join } from "node:path";
+      4 | const base="https://waynes-pos-staging.vercel.app";
+    > 5 | function staging() { expect(process.env.E2E_RUN_STAGING).toBe("1");expect(process.env.E2E_BASE_URL).toBe(base);expect(process.env.E2E_POS_STORAGE_STATE).toBeTruthy(); }
+        |                                                          ^
+      6 |
+      7 | test("a second POS tab cannot interrupt the owning register",async({browser})=>{
+      8 |  staging();const context=await browser.newContext({storageState:process.env.E2E_POS_STORAGE_STATE});
+        at staging (/Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:5:58)
+        at /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:21:2
+
+    Error Context: test-results/screen-stability-a-future--d952c-d-preserves-its-saved-draft-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-a-future--d952c-d-preserves-its-saved-draft-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/screen-stability-a-future--d952c-d-preserves-its-saved-draft-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "1"
+    Received: undefined
+
+      3 | import { join } from "node:path";
+      4 | const base="https://waynes-pos-staging.vercel.app";
+    > 5 | function staging() { expect(process.env.E2E_RUN_STAGING).toBe("1");expect(process.env.E2E_BASE_URL).toBe(base);expect(process.env.E2E_POS_STORAGE_STATE).toBeTruthy(); }
+        |                                                          ^
+      6 |
+      7 | test("a second POS tab cannot interrupt the owning register",async({browser})=>{
+      8 |  staging();const context=await browser.newContext({storageState:process.env.E2E_POS_STORAGE_STATE});
+        at staging (/Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:5:58)
+        at /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1/e2e/screen-stability.spec.ts:42:2
+
+    Error Context: test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/screen-stability-real-alia-f784f-e-new-build-without-looping-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium] › e2e/screen-stability.spec.ts:7:1 › a second POS tab cannot interrupt the owning register 
+    [chromium] › e2e/screen-stability.spec.ts:20:1 › a future deployment waits for an open order and preserves its saved draft 
+    [chromium] › e2e/screen-stability.spec.ts:41:1 › real alias transition updates only after idle and confirms the new build without looping 
+  3 skipped

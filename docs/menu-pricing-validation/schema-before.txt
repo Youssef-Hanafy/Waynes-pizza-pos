@@ -1,0 +1,36 @@
+
+ RUN  v5.0.0 /Users/youssefhanafy/.codex/worktrees/menu-pricing-fix/hanafy-retention-v1
+
+ ❯ tests/menu-pricing-schema.test.ts (3 tests | 2 failed) 6ms
+   ❯ production dinner configuration regression (3)
+     × allows a price edit for Cheeseburger Dinner with its existing empty optional Meats group 5ms
+     × allows a price edit for Gyro Dinner with its existing empty optional Meats group 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/menu-pricing-schema.test.ts > production dinner configuration regression > allows a price edit for Cheeseburger Dinner with its existing empty optional Meats group
+ FAIL  tests/menu-pricing-schema.test.ts > production dinner configuration regression > allows a price edit for Gyro Dinner with its existing empty optional Meats group
+AssertionError: [{"origin":"array","code":"too_small","minimum":1,"inclusive":true,"path":["modifier_groups",2,"choices"],"message":"Too small: expected array to have >=1 items"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/menu-pricing-schema.test.ts:15:84
+     13|       expect(payload.modifier_groups.some(g=>g.choices.length===0)).to…
+     14|       const result=menuItemPayloadSchema.safeParse(payload);
+     15|       expect(result.success,JSON.stringify(result.success?[]:result.er…
+       |                                                                                    ^
+     16|     });
+     17|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  16:53:01
+   Duration  118ms (import 59%, transform 28%, tests 10%, worker 3%)
+

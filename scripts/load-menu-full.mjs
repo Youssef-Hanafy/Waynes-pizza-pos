@@ -5,8 +5,8 @@
  * option groups, option choices, and the per-size option prices. Once this has
  * run, every name and price is changed from Admin -> Menu, not from code.
  *
- * The earlier simplified seed is archived (archived_at set), never deleted, so
- * nothing is lost and no order history breaks.
+ * This initializer refuses an existing active menu before any write. Use
+ * Admin -> Menu for subsequent edits; replacing a menu needs a reviewed migration.
  *
  *   node scripts/load-menu-full.mjs            # load
  *   node scripts/load-menu-full.mjs --dry-run  # report only, write nothing
@@ -93,7 +93,15 @@ if (dryRun) {
 }
 
 // --- archive the old simplified seed --------------------------------------
-console.log("\nArchiving the previous menu (soft archive - nothing is deleted)…");
+// This is a one-time import, never a price synchronization job. A rerun
+// would archive edited records and restore the old source prices. Fail before
+// any write whenever an active menu exists; use Admin -> Menu for changes.
+const existingMenu = await rest("GET", "menu_items?select=id&archived_at=is.null&limit=1");
+if (existingMenu.length) {
+  throw new Error("An active menu already exists. Import refused to preserve staff price edits. Use Admin -> Menu; any planned replacement needs a separately reviewed migration.");
+}
+
+console.log("\nPreparing the initial menu (no active menu exists)…");
 const now = new Date().toISOString();
 await rest("DELETE", "menu_item_modifier_groups?menu_item_id=not.is.null");
 await rest("PATCH", "menu_item_variants?archived_at=is.null", { archived_at: now });

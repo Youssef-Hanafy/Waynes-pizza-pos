@@ -38,7 +38,13 @@ export const modifierGroupSchema = z.object({
   allow_quantities: z.boolean(),
   /** Left / right halves on a pizza (owner, 2026-10-20). */
   allow_halves: z.boolean().default(false),
-  choices: z.array(modifierChoiceSchema).min(1).max(100)
+  // Legacy cleanup can leave an optional group with no active choices.
+  // It must not block an unrelated item/price save. Required groups still
+  // need an active choice, and an empty group cannot require selections.
+  choices: z.array(modifierChoiceSchema).max(100)
+}).refine((value) => value.choices.length > 0 || (!value.required && value.min_select === 0), {
+  message: "A group requiring selections must contain an active choice.",
+  path: ["choices"]
 }).refine((value) => value.max_select >= value.min_select, {
   message: "Maximum selections must be at least the minimum.",
   path: ["max_select"]
@@ -65,7 +71,10 @@ export const menuItemPayloadSchema = z.object({
   available_start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$|^$/),
   available_end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$|^$/),
   sort_order: z.number().int().min(-100_000).max(100_000),
-  variants: z.array(variantSchema).max(100),
+  variants: z.array(variantSchema).max(100).refine(
+    variants => new Set(variants.map(v => v.name.trim().toLowerCase())).size === variants.length,
+    "Size names must be unique.",
+  ),
   modifier_groups: z.array(modifierGroupSchema).max(50)
 }).refine((value) => (value.available_start === "") === (value.available_end === ""), {
   message: "Availability requires both a start and end time.",
@@ -155,7 +164,8 @@ export function parseMoneyToCents(value: string) {
   const normalized = value.trim();
   if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
   const [dollars, fraction = ""] = normalized.split(".");
-  return Number(dollars) * 100 + Number(fraction.padEnd(2, "0"));
+  const cents = Number(dollars) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 export function parseSignedMoneyToCents(value: string) {
@@ -164,7 +174,8 @@ export function parseSignedMoneyToCents(value: string) {
   const sign = normalized.startsWith("-") ? -1 : 1;
   const unsigned = normalized.replace(/^-/, "");
   const [dollars, fraction = ""] = unsigned.split(".");
-  return sign * (Number(dollars) * 100 + Number(fraction.padEnd(2, "0")));
+  const cents = sign * (Number(dollars) * 100 + Number(fraction.padEnd(2, "0")));
+  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 export function formatCents(value: number) {

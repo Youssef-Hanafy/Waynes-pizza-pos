@@ -23,3 +23,8 @@ Claude outputs/
 
 # Built Android apps are delivered, not committed (they made every push 14 MB heavier)
 *.apk
+
+# Local menu pricing browser fixture runtime
+/e2e/pricing-fixture/.next/
+/e2e/pricing-fixture/next-env.d.ts
+/e2e/pricing-fixture/test-results/
