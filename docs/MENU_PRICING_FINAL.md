@@ -93,17 +93,17 @@ prices and records; no live restaurant prices or financial transactions were use
 - Hosted pgTAP: 67 assertions across five pricing/menu/permission/tenancy files
   passed in rolled-back transactions on PostgreSQL17.11.
 - Old hosted app: both full editor submissions reproduced the empty-choice error.
-- Candidate hosted app: real owner login/PIN; price-only save to1426, reload;
-  full-item save to1425, reload/reopen; both real POS dialogs at14.25; real TEST
-  POS order-line snapshots1425; both public menu cards14.25; historical snapshots
-  remain1350. Cashier denied in both admin UI and authenticated RPC. Separate
-  browser registers reject a stale1350 submission and preserve its draft.
+- Candidate hosted app: real owner login/PIN; price-only save to 1426 cents, reload;
+  full-item save to 1425 cents, reload/reopen; both real POS dialogs at $14.25; real TEST
+  POS order-line snapshots at 1425 cents; both public menu cards at $14.25; historical snapshots
+  remain at 1350 cents. Cashier denied in both admin UI and authenticated RPC. Separate
+  browser registers reject a stale 1350-cent submission and preserve its draft.
 
 Public Stripe sandbox checkout also passed through the actual browser/card form
 and confirmation endpoint: a saved online order contains both dinner IDs with
-unit_price_cents1425. Only a test publishable key, sandbox connection and Stripe
+`unit_price_cents = 1425`. Only a test publishable key, sandbox connection and Stripe
 test card were used. The customer-display checkout regression passed ownership
-reclaim, a dropped heartbeat, delayed tip persistence, injected signature503/retry,
+reclaim, a dropped heartbeat, delayed tip persistence, injected signature-save failure and retry,
 and exactly one simulated payment. Tips were enabled only for that staging test
 and restored to their original false setting afterward.
 
@@ -115,13 +115,47 @@ private because they include synthetic sign-in sessions.
 One interrupted sandbox checkout left a pending payment; the release guard
 correctly refused an idle reload. The same synthetic order was then completed
 through checkout with its original idempotency key, and pending payments returned
-to zero. No financial guard was bypassed or disabled. A separate controlled
-release-transition check follows after the pricing runs complete.
+to zero. No financial guard was bypassed or disabled. A subsequent controlled
+release-transition check passed: the open draft blocked the update; after staff
+returned to idle, the browser loaded and verified the new build with exactly one
+reload and no loop. The other two hosted screen-stability checks passed as well.
 
 Browser coverage is Chromium, including real Supabase sessions and PostgreSQL;
 physical Elo restart, hardware card-reader and production acceptance remain outside
 this review. The unrelated phase0-5 live refund/core-path browser file was not
 rerun; the full automated regression suite and each browser run are listed here.
+
+## Exact staged release and final results
+
+Staging URL: https://waynes-pos-staging.vercel.app
+
+Tested implementation commit: `3ea712aa4976befb03c7efed62f1387470053e7b`.
+Staging build: `dpl_jzYseKuqbD8itfnJnG51vGo47vAP`.
+The final handoff commit adds review evidence and documentation to that tested
+implementation; application code and database migration contents are unchanged.
+
+| Final check | Result |
+|---|---|
+| Full automated suite after migration renumber | 137 files / 891 tests passed |
+| Hosted PostgreSQL / RLS / tenancy / pricing | 67 assertions passed |
+| Local isolated PostgreSQL + Chromium | 3 tests passed |
+| Hosted pricing + public Stripe sandbox checkout | 4 candidate tests passed; before-install baseline skipped deliberately |
+| Hosted original-app baseline | Both dinner save failures reproduced in the separate baseline test |
+| Hosted customer-screen checkout | 1 test passed; exactly one simulated payment, tip/signature recovery |
+| Hosted screen ownership and safe draft retention | 2 tests passed |
+| Controlled real staging release transition | 1 test passed; exactly one confirmed idle reload |
+| TypeScript, ESLint, production build | Passed |
+| Production mutation / main merge / production deployment | None |
+
+The earlier release-transition failure in the saved screen log is the correctly
+blocked pending sandbox payment, resolved by the checkout retry described above.
+The later release-transition log and confirmed journal show the passing final run.
+A subsequent attempt waited in Vercel's account build queue beyond the browser
+coordination deadline; no runtime or financial guard was changed for that delay.
+Final acceptance reran all four hosted pricing tests against that exact staged
+commit after the release transition; all passed. The final database read confirms
+both base prices at 1425 cents, the two historical order lines at 1350 cents, four new POS/online
+lines at 1425 cents, zero pending payments, and the original tips setting restored.
 
 ## Production release boundary
 
