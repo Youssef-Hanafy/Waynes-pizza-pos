@@ -135,3 +135,36 @@ test("each update leaves a durable trail: reload and confirmation reach the serv
   await pass(page, 30_000, 5_000);
   await expect.poll(async () => (await state(page)).logs.map((log) => log.kind), { timeout: 30_000 }).toEqual(expect.arrayContaining(["app.reload", "app.update_confirmed"]));
 });
+
+test("cached legacy UI is purged; offline refresh and restart recover without reviving it", async ({ context }) => {
+  const page = await context.newPage();
+  await control(page, "reset"); await deploy(page, "dpl_CURRENT");
+  await page.goto("/pos");
+  await page.evaluate(async () => {
+    localStorage.setItem("pos-drafts.v2", "unsynchronized-order-preservation-marker");
+    localStorage.setItem("wayne.tip-drafts", "pending-tip-preservation-marker");
+    for (const name of ["wayne-pos-v1-pages", "wayne-pos-v1-static", "wayne-pos-v1-meta"]) {
+      await (await caches.open(name)).put("/pos", new Response("OBSOLETE POS DESIGN"));
+    }
+    await (await caches.open("operational-outbox")).put("/pending", new Response("unsynced operation"));
+    const registration = await navigator.serviceWorker.ready;
+    // Reinstall the real worker over seeded legacy caches to exercise migration.
+    await registration.unregister();
+    await navigator.serviceWorker.register("/pos-sw.js?migration=1", { scope: "/pos", updateViaCache: "none" });
+  });
+  await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(n => /^wayne-pos-.*-(pages|static|meta)$/.test(n)))).toEqual([]);
+  await page.reload(); await expect(page.locator("#design")).toHaveText("design dpl_CURRENT");
+  await control(page, "network", { mode: "fail-all" });
+  await page.reload(); await expect(page.getByRole("heading", { name: "Can't reach the POS" })).toBeVisible();
+  expect(await page.content()).not.toContain("OBSOLETE POS DESIGN");
+  await page.close();
+  const restarted = await context.newPage();
+  await restarted.goto("/pos?shortcut=1");
+  await expect(restarted.getByRole("heading", { name: "Can't reach the POS" })).toBeVisible();
+  await control(restarted, "network", { mode: "ok" });
+  await restarted.getByRole("link", { name: "Try again now" }).click();
+  await expect(restarted.locator("#design")).toHaveText("design dpl_CURRENT");
+  expect(await restarted.evaluate(() => localStorage.getItem("pos-drafts.v2"))).toBe("unsynchronized-order-preservation-marker");
+  expect(await restarted.evaluate(() => localStorage.getItem("wayne.tip-drafts"))).toBe("pending-tip-preservation-marker");
+  expect(await restarted.evaluate(async () => (await (await caches.open("operational-outbox")).match("/pending"))?.text())).toBe("unsynced operation");
+});

@@ -41,7 +41,7 @@ export function AppInfoPanel() {
       setWebView(/Chrome\/([\d.]+)/.exec(navigator.userAgent)?.[1] ?? "");
       setDevice(getDeviceId());
       setLoadedUrl(`${window.location.origin}${window.location.pathname}`);
-      setWorker("serviceWorker" in navigator ? navigator.serviceWorker.controller ? "on" : "not yet (opens offline after the next online start)" : "not supported");
+      setWorker("serviceWorker" in navigator ? navigator.serviceWorker.controller ? "on" : "not yet active" : "not supported");
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -56,7 +56,7 @@ export function AppInfoPanel() {
     ...(native?.signer ? [["Signing key", native.signer] as [string, string]] : []),
     ...(native?.updatedAt ? [["Installed / updated", `${date(native.installedAt)} / ${date(native.updatedAt)}`] as [string, string]] : []),
     ["WebView", native?.webView ?? (webView ? `Chrome ${webView}` : "")],
-    ["Offline worker", `${worker}${build.worker ? ` · ${build.worker}` : ""}`],
+    ["Connection worker", `${worker}${build.worker ? ` · ${build.worker}` : ""}`],
     ["Tips waiting to save", waitingTips ? `${waitingTips} on this register (sending…)` : "none ✓"],
     ["Register id", device],
     ["Loaded URL", loadedUrl],

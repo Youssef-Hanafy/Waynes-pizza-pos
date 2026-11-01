@@ -35,11 +35,8 @@ function askWorker<T>(worker: ServiceWorker, message: Record<string, unknown>, t
   try { worker.postMessage(message, [channel.port2]); } catch { window.clearTimeout(timer); resolve(null); }
  });
 }
-/**
- * Save the target build's page + code in the offline worker before leaving this one
- * (2026-10-31). Without it, a slow connection during the reload made the worker open
- * its saved copy of the OLD build — the old screens came back. No worker = nothing
- * on this device can serve an older copy, so there is nothing to stage.
+/** Verify the target through the network-only worker before a safe idle reload.
+ * The worker never retains page HTML; failed navigation shows connection recovery.
  */
 async function stageTarget(release: Release): Promise<boolean> {
  const worker = await posWorker();

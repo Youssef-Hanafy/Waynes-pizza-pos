@@ -30,11 +30,11 @@ android {
         applicationId = "com.waynespizza.pos"
         minSdk = 26
         targetSdk = 37
-        // 1.5.1 (2026-10-28): app info for POS → More → "This app" (version code, signer, WebView).
+        // 1.5.2: network-only WebView loading; preserve app identity and register data.
         // Always raise versionCode; never change applicationId or the signing key (an update would
         // then install as a second app, or fail, and the saved register data would not carry over).
-        versionCode = 7
-        versionName = "1.5.1"
+        versionCode = 8
+        versionName = "1.5.2"
         // The POS the app opens (see livePosUrl / debugPosUrl above).
         buildConfigField("String", "POS_URL", "\"$livePosUrl\"")
     }

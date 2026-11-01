@@ -61,14 +61,14 @@ describe("screen stability invariants", () => {
     expect(read("src/stores/app-update.ts")).toContain("flushDeviceOutbox()");
   });
 
-  it("the offline worker keeps its cache names, stages targets and never prefers an older saved build", () => {
+  it("the worker cannot resurrect cached frontend documents or assets", () => {
     const worker = read("public/pos-sw.js");
-    expect(worker).toContain('const VERSION = "wayne-pos-v1";');
+    expect(worker).not.toMatch(/caches\.(match|open)|cache\.(put|match)/);
+    expect(worker).toContain('cache: "no-store"');
     expect(worker).toContain('"wayne-stage"');
-    expect(worker).toContain("savedIsNewest");
-    expect(worker).toContain("savedIsTarget");
-    // A worker activation must never reload or navigate open registers.
-    expect(worker).not.toMatch(/\.navigate\s*\(|location\.reload|matchAll\s*\(/);
+    expect(worker).not.toMatch(/\.navigate\s*\(|matchAll\s*\(/);
+    expect(read("src/app/pos/pos-app.tsx")).toContain('updateViaCache: "none"');
+    expect(read("android/app/src/main/java/com/waynespizza/pos/MainActivity.java")).toContain('WebSettings.LOAD_NO_CACHE');
   });
 
   it("POS HTML and the worker script are never cached; every deploy stamps its identity", () => {

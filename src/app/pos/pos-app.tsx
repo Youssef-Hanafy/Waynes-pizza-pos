@@ -176,8 +176,8 @@ export function PosApp(props: Props) {
   useEffect(() => {
     watchConnectivity();
     startOfflineOrders();
-    // The register screen itself opens with no connection (public/pos-sw.js keeps the last good copy).
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/pos-sw.js", { scope: "/pos" }).catch(() => undefined);
+    // Replace installed snapshot workers; new navigations use live HTML or connection recovery.
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/pos-sw.js", { scope: "/pos", updateViaCache: "none" }).catch(() => undefined);
     // Was this page opened from the offline copy? (shown in the header and on More → This app)
     askOfflineWorker();
     // Typed tips that never reached the server are sent as soon as the register opens (owner, 2026-10-28).

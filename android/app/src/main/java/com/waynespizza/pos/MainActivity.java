@@ -65,12 +65,9 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        // Faster start (owner, 2026-10-13 "make it easier to load the system"):
-        // the server marks every POS page no-store, so the screen itself is
-        // always fresh, while the app's code files — which never change under
-        // the same name — load from the tablet instead of being downloaded
-        // again on every launch.
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // Documents always come from the current server. The network-only worker
+        // handles connection recovery; no HTTP-cache fallback may revive old UI.
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setAllowFileAccess(false);
