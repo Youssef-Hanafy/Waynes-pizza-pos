@@ -39,6 +39,12 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
     modifiers: lineModifiers(selectedChoices, sides),
   };
   const draftMenu = [{ id: "00000000-0000-4000-8000-000000000000", name: "", description: "", image_path: null, image_alt: "", items: [item] }] as PublicMenu;
+  const pickGroups = item.modifier_groups.filter((group) => /^(one|two|three)[ -]topping.*toppings?/i.test(group.name));
+  const pickNames = new Set(pickGroups.flatMap((group) => group.choices.map((choice) => choice.name.trim().toLowerCase())));
+  const visibleChoices = (group: MenuItem["modifier_groups"][number]) => group.choices.filter((choice) => pickGroups.includes(group) || !pickNames.has(choice.name.trim().toLowerCase()) || (selectedChoices[choice.id] ?? 0) > 0);
+  const isExtras = (group: MenuItem["modifier_groups"][number]) => /^(?:extras?|extra .+)$/i.test(group.customer_label.trim());
+  const sections = item.modifier_groups.filter((group) => !isExtras(group) && visibleChoices(group).length);
+  if (!sections.length && item.modifier_groups.length) sections.push(item.modifier_groups[0]);
   // Everything this item comes with, once each, in menu order.
   const included = item.modifier_groups.flatMap((group) => group.choices.filter(isIncludedChoice).map((choice) => ({ group, choice }))).filter((entry, index, all) => all.findIndex((other) => other.choice.id === entry.choice.id) === index);
 
@@ -66,7 +72,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
     const othersCount = rule ? countedPortions(group, { ...selectedChoices, [choiceId]: 0 }) : groupCount(group) - currentCount;
     const limit = rule && choice && isInstructionChoice(choice) ? 1 : Math.max(0, most - othersCount);
     const multiple = choice ? choiceAllowsExtra(group, choice) : group.allow_quantities;
-    const safeCount = Math.max(0, Math.min(multiple ? nextCount : Number(nextCount > 0), limit));
+    const safeCount = Math.max(0, Math.min(multiple ? nextCount : Number(nextCount > 0), limit, 20));
     if (nextCount > currentCount && safeCount === currentCount) {
       setError(`You can choose up to ${most} in ${group.customer_label}${rule && variantName ? ` on a ${variantName}` : ""}. Remove one first to change it.`);
       return;
@@ -77,7 +83,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
     // Taken off: it's on no half any more.
     const sidesNow = safeCount ? nextSides : Object.fromEntries(Object.entries(nextSides).filter(([id]) => id !== choiceId));
     if (sidesNow !== sides) setSides(sidesNow);
-    if (safeCount > currentCount && group.id === pickGroup?.id && sizeTapped && pickComplete(next, variantId)) addWith(next, variantId, sidesNow);
+
   }
 
   /** Left / Whole / Right on a topping: puts it on (if it wasn't) on that part of the pizza. */
@@ -113,29 +119,8 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
     });
   }
 
-  /**
-   * Auto-add (owner, 2026-10-19): an item marked in Admin (One / Two / Three
-   * Topping Pizza) goes on the ticket by itself the moment its first option
-   * group is full — e.g. the topping on a One Topping Pizza — once the size
-   * has been tapped.  Every other item keeps its Add to ticket button, and
-   * editing a line on the ticket never adds by itself.
-   */
-  const pickGroup = !initialLine && item.pos_auto_add ? item.modifier_groups[0] ?? null : null;
-  // The first size is already picked (Large first on pizzas, owner 2026-10-20), so picking the
-  // topping(s) is enough; tapping another size first still works.
-  const [sizeTapped, setSizeTapped] = useState(true);
-  function pickComplete(choices: Record<string, number>, chosenVariantId: string | null) {
-    if (!pickGroup) return false;
-    const rule = groupSizeRule(pickGroup, item.variants.find((variant) => variant.id === chosenVariantId)?.name ?? null);
-    const target = groupMaxPortions(pickGroup, rule);
-    const picked = rule ? countedPortions(pickGroup, choices) : pickGroup.choices.reduce((total, choice) => total + (choices[choice.id] ?? 0), 0);
-    return target > 0 && picked >= target;
-  }
-  function chooseSize(nextVariantId: string) {
-    setVariantId(nextVariantId);
-    setSizeTapped(true);
-    if (pickComplete(selectedChoices, nextVariantId)) addWith(selectedChoices, nextVariantId, sides);
-  }
+  // Keep options open until Add to ticket: another tap can add a paid portion.
+  function chooseSize(nextVariantId: string) { setVariantId(nextVariantId); }
 
   return <div aria-modal="true" className="fixed inset-0 z-50 bg-black/60 p-3 sm:grid sm:place-items-center" role="dialog">
     {/*
@@ -150,20 +135,24 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
         <button aria-label="Close item" className="h-12 w-12 shrink-0 rounded-full border text-xl" onClick={onClose}>×</button>
       </div>
       <FitToSpace innerClassName="px-4 pb-3 pt-3" label="Item options" min={0.7}>
-        <ComesWithPanel included={included} onToggle={(group, choiceId, on) => setChoiceCount(group, choiceId, on ? 1 : 0)} selectedChoices={selectedChoices} />
+        <ComesWithPanel included={included} onToggle={(group, choiceId) => setChoiceCount(group, choiceId, (selectedChoices[choiceId] ?? 0) + 1)} selectedChoices={selectedChoices} />
         {halvesChoiceIds.size ? <PizzaHalves groups={item.modifier_groups.filter((group) => group.allow_halves)} selectedChoices={selectedChoices} sides={sides} /> : null}
         <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-wayne-muted"><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-wayne-ok" /> on the item</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-wayne-red" /> comes with it, taken off</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-wayne-border bg-white" /> not on it</span><span>Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.</span></p>
-        {item.variants.length ? <fieldset className="mt-3"><legend className="font-black">Size{pickGroup && !sizeTapped ? <span className="ml-2 font-bold text-wayne-red">tap the size first — the item adds itself once its {pickGroup.customer_label.toLowerCase()} {pickGroup.max_select === 1 ? "is" : "are"} picked</span> : null}</legend><div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 9rem), 1fr))` }}>{item.variants.map((variant) => <button className={`flex min-h-16 items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => chooseSize(variant.id)} type="button"><span className="font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
-        {item.modifier_groups.length ? item.modifier_groups.map((group) => {
+        {item.variants.length ? <fieldset className="mt-3"><legend className="font-black">Size</legend><div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 9rem), 1fr))` }}>{item.variants.map((variant) => <button className={`flex min-h-16 items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-left ${variantId === variant.id ? "border-wayne-ok bg-wayne-ok/10" : "border-wayne-border"}`} key={variant.id} onClick={() => chooseSize(variant.id)} type="button"><span className="font-bold">{variant.name}</span><strong>{formatCents(variant.price_cents)}</strong></button>)}</div></fieldset> : null}
+        {item.modifier_groups.length ? sections.map((section, sectionIndex) => {
+          const group = section;
+          const entries = [section, ...(sectionIndex === 0 ? item.modifier_groups.filter((candidate) => candidate.id !== section.id && isExtras(candidate)) : [])].flatMap((source) => visibleChoices(source).map((choice) => ({ group: source, choice })));
           const rule = ruleFor(group);
-          const allowance = rule ? groupAllowanceLines(group, rule, variantId, Object.entries(selectedChoices).map(([choice_id, quantity]) => ({ choice_id, quantity }))) : [];
           const used = rule ? countedPortions(group, selectedChoices) : 0;
-          return <fieldset className="mt-3" key={group.id}><legend className="font-black">{group.customer_label} <span className="font-normal text-wayne-muted">({group.min_select}–{groupMaxPortions(group, rule)})</span></legend>
+          return <fieldset className="mt-3" key={group.id}><legend className="font-black">{isExtras(group) ? "Options" : group.customer_label} <span className="font-normal text-wayne-muted">({group.min_select}–{groupMaxPortions(group, rule)})</span></legend>
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
             {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
           {/* The same option group shares its register layout across items. */}
-          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}><ReorderTiles key={group.id} label="modifiers" scope={`modifiers:${group.id}`}>{group.choices.map((choice) => {
+          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}><ReorderTiles key={group.id} label="modifiers" scope={`modifiers:${group.id}`}>{entries.map(({ group, choice }) => {
+          const rule = ruleFor(group);
+          const allowance = rule ? groupAllowanceLines(group, rule, variantId, Object.entries(selectedChoices).map(([choice_id, quantity]) => ({ choice_id, quantity }))) : [];
+          const used = rule ? countedPortions(group, selectedChoices) : 0;
           const count = selectedChoices[choice.id] ?? 0;
           const delta = choicePriceDeltaCents(choice, variantId);
           const comesWith = isIncludedChoice(choice);
@@ -180,7 +169,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
             : delta ? ` · ${delta > 0 ? "+" : ""}${formatCents(delta)}${comesWith ? " per extra" : choiceAllowsExtra(group, choice) ? " each" : ""}` : "";
           return <div aria-label={`${choice.name}: ${status}`} className={`grid min-h-16 grid-cols-[4rem_minmax(0,1fr)_4rem] overflow-hidden rounded-xl transition ${state === "on" ? "border-2 border-wayne-ok bg-wayne-ok-soft shadow-[0_0_0_3px_rgba(29,122,76,0.18)]" : state === "removed" ? "border-2 border-dashed border-wayne-red bg-white" : "border border-wayne-border bg-white"}`} data-state={state} key={choice.id}>
             <button aria-label={`Remove ${choice.name}`} className="min-h-16 bg-wayne-red px-2 text-2xl font-black text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={!count} onClick={() => setChoiceCount(group, choice.id, count - 1)} type="button">−</button>
-            <div className="flex min-w-0 flex-col justify-center px-3"><strong className={`break-words py-1 leading-tight ${state === "on" ? "text-wayne-ok" : state === "removed" ? "text-wayne-red line-through" : "font-semibold text-wayne-ink/70"}`}>{state === "on" ? "✓ " : ""}{choice.name}</strong><span className={`text-xs ${state === "on" ? "font-bold text-wayne-ok" : state === "removed" ? "font-bold text-wayne-red" : "text-wayne-muted"}`}>{side === "left" ? "LEFT ½ · " : side === "right" ? "RIGHT ½ · " : ""}{status}{price}</span>
+            <div className="flex min-w-0 flex-col justify-center px-3"><button disabled={count > 0 && !choiceAllowsExtra(group, choice)} onClick={() => setChoiceCount(group, choice.id, count + 1)} type="button" className={`break-words py-1 text-left leading-tight ${state === "on" ? "text-wayne-ok" : state === "removed" ? "text-wayne-red line-through" : "font-semibold text-wayne-ink/70"}`}>{state === "on" ? "✓ " : ""}{choice.name}</button><span className={`text-xs ${state === "on" ? "font-bold text-wayne-ok" : state === "removed" ? "font-bold text-wayne-red" : "text-wayne-muted"}`}>{side === "left" ? "LEFT ½ · " : side === "right" ? "RIGHT ½ · " : ""}{status}{price}</span>
               {group.allow_halves && !isInstructionChoice(choice) ? <div aria-label={`${choice.name}: which part of the pizza`} className="mt-1.5 grid grid-cols-3 gap-1" role="group">
                 {(["left", "whole", "right"] as const).map((part) => {
                   const on = Boolean(count) && (side ?? "whole") === part;
@@ -202,7 +191,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
 /**
  * The answer to "what comes on it?" at a glance: every ingredient the item
  * comes with, lit up while it is on and struck through the moment it is taken
- * off.  Tapping a chip toggles it, the same as the red and green buttons below.
+ * off. Tapping a chip adds a portion; the red minus below removes one.
  */
 function ComesWithPanel({ included, onToggle, selectedChoices }: { included: { group: MenuItem["modifier_groups"][number]; choice: MenuItem["modifier_groups"][number]["choices"][number] }[]; onToggle: (group: MenuItem["modifier_groups"][number], choiceId: string, on: boolean) => void; selectedChoices: Record<string, number> }) {
   if (!included.length) return <p className="rounded-xl border border-wayne-border bg-wayne-cream p-3 text-sm font-semibold">Nothing comes on this by default — every topping below is an add-on.</p>;
@@ -210,8 +199,9 @@ function ComesWithPanel({ included, onToggle, selectedChoices }: { included: { g
   return <section aria-label="Comes with" className="rounded-xl border-2 border-wayne-ok bg-wayne-ok-soft p-3">
     <p className="text-xs font-black uppercase tracking-[0.16em] text-wayne-ok">Comes with{removed ? <span className="ml-2 rounded bg-wayne-red px-1.5 py-0.5 tracking-normal text-white">{removed} taken off</span> : null}</p>
     <div className="mt-2 flex flex-wrap gap-2">{included.map(({ group, choice }) => {
-      const on = Boolean(selectedChoices[choice.id]);
-      return <button aria-pressed={on} className={`min-h-16 rounded-full px-3 text-sm font-black transition active:scale-95 ${on ? "bg-wayne-ok text-white shadow-sm" : "border-2 border-dashed border-wayne-red bg-white text-wayne-red line-through"}`} key={choice.id} onClick={() => onToggle(group, choice.id, !on)} type="button">{on ? "✓ " : "NO "}{choice.name}</button>;
+      const count = selectedChoices[choice.id] ?? 0;
+      const on = Boolean(count);
+      return <button aria-pressed={on} className={`min-h-16 rounded-full px-3 text-sm font-black transition active:scale-95 ${on ? "bg-wayne-ok text-white shadow-sm" : "border-2 border-dashed border-wayne-red bg-white text-wayne-red line-through"}`} key={choice.id} onClick={() => onToggle(group, choice.id, true)} type="button">{on ? "✓ " : "NO "}{choice.name}{count > 1 ? ` + ${count - 1} extra` : ""}</button>;
     })}</div>
   </section>;
 }

@@ -56,12 +56,13 @@ type Phase = "idle" | "preparing" | "waiting" | "confirming" | "declined";
  * taps / inserts / swipes, and the server re-reads Stripe before the order is
  * marked paid.  A decline keeps the same payment open for the next card.
  */
-export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError, onPaid, autoStart = false }: {
-  orderId: string; totalCents: number; busy: boolean;
+export function StripeReaderTender({ onLock, amountCents, orderId, totalCents, busy, setBusy, onError, onPaid, autoStart = false }: {
+  onLock?: (locked: boolean) => void; amountCents?: number; orderId: string; totalCents: number; busy: boolean;
   /** Send the total to the reader as soon as it's ready — no extra tap after the customer's tip (owner, 2026-10-12). */
   autoStart?: boolean;
   setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (card: { brand: string | null; last4: string | null }) => void;
 }) {
+  const requestKey = useRef(`pos-m2-${orderId}-${uuid()}`);
   const reader = useStripeReader();
   const [phase, setPhase] = useState<Phase>("idle");
   const [note, setNote] = useState("");
@@ -85,8 +86,8 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       const body = await response.json() as { state?: string; card_brand?: string | null; card_last4?: string | null; message?: string | null };
       // Authorised = approved and held for the tip on the slip (owner, 2026-10-13): the order is paid by card.
       if (body.state === "captured" || body.state === "authorized") { finished.current = true; onPaid({ brand: body.card_brand ?? null, last4: body.card_last4 ?? null }); return true; }
-      if (body.state === "open") { setPhase("declined"); onError(body.message || "The card was declined. Try another card."); return false; }
-      if (body.state === "canceled") { paymentId.current = null; setPhase("idle"); onError("The payment was cancelled."); return false; }
+      if (body.state === "open") { onLock?.(false); setPhase("declined"); onError(body.message || "The card was declined. Try another card."); return false; }
+      if (body.state === "canceled") { onLock?.(false); requestKey.current = `pos-m2-${orderId}-${uuid()}`; paymentId.current = null; setPhase("idle"); onError("The payment was cancelled."); return false; }
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     throw new Error("Stripe is still processing this card. Do not charge again — check Payments in a moment.");
@@ -99,8 +100,9 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
         setPhase("preparing"); setNote("Connecting the card reader…");
         if (!(await connectStripeReader())) throw new Error("The card reader isn't connected. Turn it on (press the button once), keep it near the tablet, then try again.");
       }
+      onLock?.(true);
       setPhase("preparing"); setNote("Sending the total to the reader…");
-      const response = await post("/api/pos/stripe-terminal/intent", { order_id: orderId, idempotency_key: `pos-m2-${orderId}-${uuid()}` });
+      const response = await post("/api/pos/stripe-terminal/intent", { ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: orderId, idempotency_key: requestKey.current });
       const body = await response.json().catch(() => ({})) as { payment_id?: string; client_secret?: string; state?: string; error?: string };
       if (body.state === "captured" || body.state === "authorized") { finished.current = true; onPaid({ brand: null, last4: null }); return; }
       if (!response.ok || !body.payment_id || !body.client_secret) {
@@ -113,8 +115,8 @@ export function StripeReaderTender({ orderId, totalCents, busy, setBusy, onError
       setPhase("waiting"); setNote("");
       const outcome = await collectWithStripeReader(body.client_secret);
       if (outcome.ok) { await confirm(body.payment_id); return; }
-      if (outcome.code === "DECLINED") { setPhase("declined"); onError(outcome.message); return; }
-      if (outcome.code === "CANCELED") { setPhase("idle"); return; }
+      if (outcome.code === "DECLINED") { onLock?.(false); setPhase("declined"); onError(outcome.message); return; }
+      if (outcome.code === "CANCELED") { onLock?.(false); requestKey.current = `pos-m2-${orderId}-${uuid()}`; setPhase("idle"); return; }
       // Unknown outcome (the app or the connection dropped): Stripe decides whether money moved.
       if (!(await confirm(body.payment_id).catch(() => false))) {
         setPhase((current) => (current === "declined" ? current : "idle"));

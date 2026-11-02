@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
+  amount_cents: z.number().int().positive().max(10_000_000).optional(),
   order_id: z.uuid(),
   /** Card reader (the drawer opens) or a card keyed in over the phone. */
   entry: z.enum(["card_reader", "test_keyed"]),
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid test payment." }, { status: 400 });
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.rpc("wayne_pos_test_card_payment", {
+    ...(parsed.data.amount_cents !== undefined ? { amount_cents: parsed.data.amount_cents } : {}),
     target_order_id: parsed.data.order_id, authorize_only: parsed.data.authorize_only,
     entry: parsed.data.entry, request_key: parsed.data.idempotency_key,
   });

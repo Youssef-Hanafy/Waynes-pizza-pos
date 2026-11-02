@@ -115,6 +115,7 @@ export const stripeConfirmResultSchema = z.object({
 
 /** A staff-only Stripe payment for an already-created delivery phone order. */
 export const posKeyedCardIntentSchema = z.object({
+  amount_cents: z.number().int().positive().max(10_000_000).optional(),
   order_id: z.uuid(),
   idempotency_key: z.string().min(16).max(160),
   /**
@@ -129,6 +130,7 @@ export const posKeyedCardIntentSchema = z.object({
 export const posKeyedCardConfirmSchema = z.object({ payment_id: z.uuid() });
 
 export const terminalActionSchema = z.object({
+  amount_cents: z.number().int().positive().max(10_000_000).optional(),
   order_id: z.uuid(),
   terminal_id: z.uuid(),
   idempotency_key: z.string().min(16).max(160),

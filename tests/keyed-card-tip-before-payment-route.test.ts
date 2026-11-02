@@ -123,6 +123,21 @@ describe("keyed delivery card with a phone tip", () => {
     expect(updates[0]!.metadata).not.toHaveProperty("tip_included_cents");
   });
 
+  it("split card charges only the selected portion, including when the order already has a tip", async () => {
+    begun = { ...begun, amount_cents: 1000 };
+    const response = await openKeyedCard(request({ amount_cents: 1000, expected_amount_cents: 1000, expected_tip_cents: 0 }));
+    expect(response.status).toBe(200);
+    expect(user.rpc).toHaveBeenCalledWith("wayne_begin_payment", { payload: expect.objectContaining({ amount_cents: 1000 }) });
+    expect(stripe.createOnlinePaymentIntent).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 1000, tipAdjust: false }));
+  });
+
+  it("a split card cannot exceed the unpaid balance", async () => {
+    paidCents = 3000;
+    const response = await openKeyedCard(request({ amount_cents: 1000, expected_amount_cents: 1000, expected_tip_cents: 0 }));
+    expect(response.status).toBe(409);
+    expect(stripe.createOnlinePaymentIntent).not.toHaveBeenCalled();
+  });
+
   it("a register still on the previous build (no expected amount) works exactly as before", async () => {
     order = { ...order, total_cents: 3000, tip_cents: 0 }; lockedOrder = { total_cents: 3000, tip_cents: 0 };
     begun = { ...begun, amount_cents: 3000 };

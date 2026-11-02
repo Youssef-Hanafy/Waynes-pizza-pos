@@ -50,18 +50,18 @@ export async function POST(request: Request) {
     const { data: paidData, error: paidError } = await userClient.rpc("wayne_order_paid_cents", { target_order_id: order.id });
     if (paidError || typeof paidData !== "number") return Response.json({ error: "The order total could not be checked. Nothing was charged; try again." }, { status: 503 });
     const owed = order.total_cents - paidData;
-    if (owed !== expected || (expectedTip !== undefined && paidData === 0 && order.tip_cents !== expectedTip)) {
+    if ((parsed.data.amount_cents !== undefined ? parsed.data.amount_cents > owed || expected !== parsed.data.amount_cents : owed !== expected) || (parsed.data.amount_cents === undefined && expectedTip !== undefined && paidData === 0 && order.tip_cents !== expectedTip)) {
       return Response.json(changedAnswer(owed, paidData === 0 ? order.tip_cents : 0), { status: 409 });
     }
   }
   const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
-    payload: { order_id: parsed.data.order_id, idempotency_key: parsed.data.idempotency_key, entry: "pos_keyed_card", method: "card" },
+    payload: { ...(parsed.data.amount_cents !== undefined ? { amount_cents: parsed.data.amount_cents } : {}), order_id: parsed.data.order_id, idempotency_key: parsed.data.idempotency_key, entry: "pos_keyed_card", method: "card" },
   });
   if (beginError?.code === "40001") {
     // A keyed card already open on this order. If its register lost the answer and gave up, carry
     // on with THAT approval (same payment, same Stripe PaymentIntent, same amount) instead of
     // leaving the order unpayable. A PaymentIntent can only ever be approved once.
-    const resumed = await resumeAbandonedKeyedCard({ service, orderId: order.id, expected, provider: resolved.value.provider, workspaceName: access.workspace_name ?? "Store", delivery: order.fulfillment_type === "delivery" });
+    const resumed = await resumeAbandonedKeyedCard({ service, orderId: order.id, expected, provider: resolved.value.provider, workspaceName: access.workspace_name ?? "Store", delivery: parsed.data.amount_cents === undefined && order.fulfillment_type === "delivery" });
     if (resumed) return resumed;
     return Response.json({ error: "A payment is already in progress for this order." }, { status: 409 });
   }
@@ -79,12 +79,12 @@ export async function POST(request: Request) {
       if (!payment?.provider_payment_id) return Response.json({ error: "This payment is still being prepared. Check the ticket before trying again." }, { status: 409 });
       intent = await resolved.value.provider.getOnlinePaymentIntent(payment.provider_payment_id);
     } else {
-      const delivery = order.fulfillment_type === "delivery";
+      const delivery = parsed.data.amount_cents === undefined && order.fulfillment_type === "delivery";
       // The payment row is now open, so the tip is locked (wayne_pos_set_tip refuses while it is pending): read what this approval holds.
       const { data: locked } = await service.from("orders").select("total_cents, tip_cents").eq("id", order.id).maybeSingle();
       const firstPayment = locked ? locked.total_cents === begun.amount_cents : false;
       const tipIncluded = firstPayment ? Math.max(0, locked?.tip_cents ?? 0) : 0;
-      if (!locked || (expected !== undefined && begun.amount_cents !== expected) || (expectedTip !== undefined && firstPayment && tipIncluded !== expectedTip)) {
+      if (!locked || (expected !== undefined && begun.amount_cents !== expected) || (parsed.data.amount_cents === undefined && expectedTip !== undefined && firstPayment && tipIncluded !== expectedTip)) {
         // The order changed between the check above and the payment opening: close this payment before Stripe ever sees it.
         await service.rpc("wayne_settle_payment", { payload: { payment_id: begun.payment_id, status: "failed", failure_reason: "The order total changed before the card was approved." } });
         return Response.json(changedAnswer(begun.amount_cents, tipIncluded), { status: 409 });

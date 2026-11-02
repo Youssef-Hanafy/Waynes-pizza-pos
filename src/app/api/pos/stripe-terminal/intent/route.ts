@@ -6,7 +6,8 @@ import { cancelTerminalIntent, createTerminalIntent, guardStripeTerminal, json, 
 import { settleTerminalPayment } from "@/lib/payments/stripe-terminal-ledger";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
-const bodySchema = z.object({ order_id: z.uuid(), idempotency_key: z.string().min(16).max(160) });
+const bodySchema = z.object({
+  amount_cents: z.number().int().positive().max(10_000_000).optional(), order_id: z.uuid(), idempotency_key: z.string().min(16).max(160) });
 
 /**
  * Open (or reopen) the card payment for an order on the Stripe M2.  Returns the
@@ -34,7 +35,9 @@ export async function POST(request: Request) {
   // Items added after a payment stay on the same order (owner, 2026-10-19): the reader is sent what is still owed.
   const { data: settled } = await service.from("payments").select("amount_cents")
     .eq("order_id", order.id).in("status", ["authorized", "captured"]);
-  const dueCents = order.total_cents - (settled ?? []).reduce((sum, payment) => sum + (payment.amount_cents ?? 0), 0);
+  const balanceCents = order.total_cents - (settled ?? []).reduce((sum, payment) => sum + (payment.amount_cents ?? 0), 0);
+  const dueCents = parsed.data.amount_cents ?? balanceCents;
+  if (dueCents > balanceCents) return json({ error: "Payment exceeds the remaining balance." }, 409);
   if (dueCents <= 0) return json({ error: "This order is already paid.", state: "captured" }, 409);
 
   try {
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
       const settled = ledgerStatusFor(intent);
       if (settled) {
         await settleTerminalPayment(service, open.id, intent);
+        if (intent.amountCents !== dueCents) return json({ error: "The previous card was approved for a different amount. Reopen this order to check its balance." }, 409);
         if (settled === "captured" || settled === "authorized") return json({ payment_id: open.id, state: settled });
       } else if (intent.amountCents === dueCents && intent.state === "open") {
         return json({ payment_id: open.id, client_secret: intent.clientSecret, amount_cents: dueCents, state: "open", reused: true });
@@ -65,20 +69,24 @@ export async function POST(request: Request) {
     // 2. A new payment on the ledger, then its PaymentIntent on Stripe.
     const userClient = await createServerSupabaseClient();
     const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
-      payload: { order_id: order.id, idempotency_key: parsed.data.idempotency_key, entry: "terminal", method: "card" },
+      payload: { ...(parsed.data.amount_cents !== undefined ? { amount_cents: parsed.data.amount_cents } : {}), order_id: order.id, idempotency_key: parsed.data.idempotency_key, entry: "terminal", method: "card" },
     });
     if (beginError || !beginData) {
       logger.warn("stripe_terminal.begin_failed", { order_id: order.id, code: beginError?.code });
       return json({ error: beginError ? paymentErrorMessage(beginError) : "The payment could not be opened." }, beginError?.code === "40001" ? 409 : 400);
     }
     const begun = beginData as { payment_id: string; duplicate: boolean; amount_cents: number; order_number: string };
-    if (begun.duplicate) return json({ error: "That payment was already started. Tap Charge again to pick it up." }, 409);
+    if (begun.duplicate) {
+      const { data: previous } = await service.from("payments").select("status, amount_cents").eq("id", begun.payment_id).maybeSingle();
+      if (previous && (previous.status === "captured" || previous.status === "authorized") && (parsed.data.amount_cents === undefined || previous.amount_cents === parsed.data.amount_cents)) return json({ payment_id: begun.payment_id, state: previous.status });
+      return json({ error: "That payment was already started. Check Payments before trying again." }, 409);
+    }
 
     const intent = await createTerminalIntent(account, {
       amountCents: begun.amount_cents, idempotencyKey: parsed.data.idempotency_key, orderNumber: begun.order_number,
       paymentId: begun.payment_id, description: `Order ${begun.order_number} (card reader)`,
       // Only a delivery waits for the driver's signed slip; in the store the tip is already on the total.
-      holdForTip: order.fulfillment_type === "delivery",
+      holdForTip: parsed.data.amount_cents === undefined && order.fulfillment_type === "delivery",
     });
     const { data: current } = await service.from("payments").select("metadata").eq("id", begun.payment_id).maybeSingle();
     const { error: saveError } = await service.from("payments").update({

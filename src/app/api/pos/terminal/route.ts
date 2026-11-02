@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   // provider call and the settlement run with the server's own credentials.
   if (action === "start") {
     const { data: beginData, error: beginError } = await userClient.rpc("wayne_begin_payment", {
-      payload: { order_id, terminal_id, idempotency_key, entry: "terminal", method: "card" },
+      payload: { ...(parsed.data.amount_cents !== undefined ? { amount_cents: parsed.data.amount_cents } : {}), order_id, terminal_id, idempotency_key, entry: "terminal", method: "card" },
     });
     if (beginError || !beginData) {
       logger.warn("terminal.begin_failed", { order_id, code: beginError?.code });
@@ -79,8 +79,11 @@ export async function POST(request: Request) {
   // status / cancel both need the open payment for this order.
   const { data: payment } = await service.from("payments")
     .select("id, terminal_checkout_id, status")
-    .eq("order_id", order_id).in("status", ["pending", "authorized"])
+    .eq("order_id", order_id)
+    .in("status", action === "status" ? ["pending", "authorized", "captured", "failed", "voided"] : ["pending", "authorized"])
+    .match(action === "status" ? { idempotency_key } : {})
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (payment && ["captured", "failed", "voided"].includes(payment.status)) return Response.json({ payment_id: payment.id, state: payment.status });
   if (!payment?.terminal_checkout_id) return Response.json({ error: "No card reader payment is open on this order." }, { status: 404 });
 
   try {
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
     if (checkout.status === "pending")
       return Response.json({ payment_id: payment.id, state: "pending", provider_status: checkout.providerStatus }, { headers: { "Cache-Control": "no-store" } });
 
-    await service.rpc("wayne_settle_payment", {
+    const { error: settleError } = await service.rpc("wayne_settle_payment", {
       payload: {
         payment_id: payment.id,
         status: checkout.status,
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
         failure_reason: checkout.failureReason,
       },
     });
+    if (settleError) return Response.json({ error: "The reader answered, but the payment could not be recorded. Check Payments before charging again." }, { status: 503 });
     return Response.json({ payment_id: payment.id, state: checkout.status, provider_status: checkout.providerStatus }, { headers: { "Cache-Control": "no-store" } });
   } catch (cause) {
     logger.error("terminal.poll_failed", cause, { order_id });

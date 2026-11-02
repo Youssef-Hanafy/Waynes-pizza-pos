@@ -26,6 +26,7 @@ export function quickCashAmounts(dueCents: number): number[] {
 /** What the POS sends when a card was run on a reader that isn't linked to it. */
 export const cardReaderPaymentSchema = z.object({
   order_id: z.uuid(),
+  amount_cents: z.number().int().positive().max(10_000_000).optional(),
   idempotency_key: z.string().min(16).max(200),
   card_last4: z.string().trim().regex(/^(\d{4})?$/, "Enter the last 4 digits of the card, or leave it blank.").default(""),
   approval_code: z.string().trim().max(40, "That approval code is too long.").default(""),

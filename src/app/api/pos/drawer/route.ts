@@ -53,6 +53,7 @@ export async function POST(request: Request) {
         return supabase.rpc("wayne_take_cash_payment", {
           payload: {
             shift_id: input.shift_id, order_id: input.order_id,
+            ...(input.amount_cents !== undefined ? { amount_cents: input.amount_cents } : {}),
             tendered_cents: input.tendered_cents, idempotency_key: input.idempotency_key,
             ...(input.offline ? { offline: true, offline_taken_at: input.offline_taken_at } : {}),
           },

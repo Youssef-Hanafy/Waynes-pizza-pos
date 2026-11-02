@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { StripeReaderTender } from "@/components/pos/stripe-reader-panel";
 import { posDrawerSchema } from "@/lib/cash/schemas";
-import { formatCents } from "@/lib/menu/schemas";
+import { formatCents, parseMoneyToCents } from "@/lib/menu/schemas";
 import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
@@ -201,7 +201,12 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   // The customer screen (owner, 2026-10-11): a tip before the card, a signature after.
   const screen = useCustomerScreen();
   // Items added after a payment (owner, 2026-10-19): the same order, and this screen takes only what is still owed.
-  const paidBefore = openedOrder.payment_status === "paid" ? 0 : Math.max(0, openedOrder.paid_cents);
+  const [paidBefore, setPaidBefore] = useState(openedOrder.payment_status === "paid" ? 0 : Math.max(0, openedOrder.paid_cents));
+  const [split, setSplit] = useState(false);
+  const [splitAmount, setSplitAmount] = useState("");
+  const [paymentIndex, setPaymentIndex] = useState(0);
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentLocked, setPaymentLocked] = useState(false);
   const [order, setOrder] = useState<OpenOrder>(() => paidBefore ? { ...openedOrder, total_cents: openedOrder.total_cents - paidBefore } : openedOrder);
   const [tipAsked, setTipAsked] = useState(false);
   // Chosen once, when Card reader is tapped (owner, 2026-10-29): a connection blip can't skip an unanswered tip, and a card already sent to the reader isn't swapped back.
@@ -214,12 +219,25 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   }, [openedOrder, paidBefore]);
   const tipDone = useCallback((next: OpenOrder) => { setOrder(next); setTipAsked(true); }, []);
   const onPaid = useCallback((done: Done) => {
+    setPaymentLocked(false);
+    const remaining = order.total_cents - done.order.total_cents;
+    if (split && remaining > 0) {
+      setPaidBefore((paid) => paid + done.order.total_cents);
+      setOrder((current) => ({ ...current, total_cents: remaining, paid_cents: current.paid_cents + done.order.total_cents, payment_status: "unpaid" }));
+      setPaymentNote(`${formatCents(done.order.total_cents)} ${done.method === "cash" ? "cash recorded" : "card approved"}${done.method === "cash" ? ` · change ${formatCents(done.changeCents)}` : ""}. ${formatCents(remaining)} remaining.`);
+      setMode("choose"); setSplitAmount(""); setPaymentIndex((index) => index + 1); setKeyedPreview(null); setTipRouteTaken("card");
+      return;
+    }
     if (done.method === "card" && !done.held && (screen.screenOnline || customerScreenRecentlyOnline())) { setSigning(done); return; }
     if (!done.held) thankCustomer(done.method === "cash" ? done.changeCents : null);
     finishPayment(done);
-  }, [finishPayment, screen.screenOnline]);
+  }, [finishPayment, screen.screenOnline, split, order.total_cents]);
   const signed = useCallback(() => { if (signing) finishPayment(signing); }, [finishPayment, signing]);
   const due = order.total_cents;
+  const splitCents = parseMoneyToCents(splitAmount);
+  const validSplit = !split || (splitCents !== null && splitCents > 0 && splitCents <= due && splitCents <= 10_000_000);
+  const paymentOrder = split && validSplit ? { ...order, total_cents: splitCents! } : order;
+  const splitProps = split ? { amountCents: paymentOrder.total_cents, onLock: setPaymentLocked } : {};
   const shownDue = mode === "keyed" && keyedPreview ? keyedPreview.chargeCents : due;
 
   if (signing) return <CustomerSignStep onFinished={signed} order={signing.order} tipCents={Math.max(0, signing.order.total_cents - (openedOrder.total_cents - paidBefore))} />;
@@ -236,8 +254,8 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const buttonCount = (onPayLater ? 4 : 3) + (onAddItems && compact ? 1 : 0);
   const buttonColumns = buttonCount === 5 ? "md:grid-cols-5" : buttonCount === 4 ? "md:grid-cols-4" : "md:grid-cols-3";
   const option = (value: Exclude<Mode, "choose">, icon: string, title: string, note: string, disabled = false) => (
-    <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || (busy && mode !== value)} key={value} onClick={() => {
-      if (value === "terminal" && !tipRouteTaken) setTipRouteTaken(tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: customerScreenRecentlyOnline(), tipAsked, paidBefore, current: null }));
+    <button aria-pressed={mode === value} className={`flex items-center justify-center rounded-2xl border-2 p-2 text-center transition disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"} ${mode === value ? "border-wayne-green bg-wayne-green text-white" : "border-wayne-border bg-wayne-cream hover:border-wayne-green"}`} disabled={disabled || busy || paymentLocked || !validSplit} key={value} onClick={() => {
+      if (value === "terminal" && !tipRouteTaken) setTipRouteTaken(tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: customerScreenRecentlyOnline(), tipAsked, paidBefore: split ? Math.max(1, paidBefore) : paidBefore, current: null }));
       setMode(value); setError("");
     }} type="button">
       <span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{icon}</span>
@@ -254,23 +272,29 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
     {alreadyPaid ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Already paid ({order.payment_method}).</p>
       : cardHeld && !paidBefore ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out (a tip taken on the phone is already on the card — add only an extra)" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
       {order.is_test ? <p className={`rounded-xl bg-wayne-warn-soft font-bold ${compact ? "mt-2 px-3 py-1.5 text-sm" : "mt-5 p-3"}`}>🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
+      <div className="mt-3 rounded-xl border-2 border-wayne-border p-3">
+        <label className="flex min-h-12 items-center gap-3 text-lg font-black"><input checked={split} disabled={busy || paymentLocked || mode !== "choose"} onChange={(event) => { setSplit(event.target.checked); setSplitAmount(""); setError(""); }} type="checkbox" />Split payment · cash / card / multiple cards</label>
+        {split ? <><p className="mb-2 text-sm text-wayne-muted">Each card is charged now for the amount entered.</p><div className="flex flex-wrap items-end gap-3"><label className="grid gap-1 font-bold">This payment ($)<input aria-label="Split payment amount" className="min-h-12 w-40 rounded-xl border px-3 text-xl font-black" disabled={busy || paymentLocked || mode !== "choose"} inputMode="decimal" onChange={(event) => setSplitAmount(event.target.value)} value={splitAmount} /></label><Button disabled={busy || paymentLocked || mode !== "choose"} onClick={() => setSplitAmount((Math.ceil(due / 2) / 100).toFixed(2))} variant="secondary">Half</Button><Button disabled={busy || paymentLocked || mode !== "choose"} onClick={() => setSplitAmount((due / 100).toFixed(2))} variant="secondary">Remaining balance</Button><p className="pb-2 font-bold">{validSplit ? `${formatCents(due - splitCents!)} left after this payment` : `Enter an amount up to ${formatCents(due)}`}</p></div></> : null}
+        {mode !== "choose" ? <Button disabled={busy || paymentLocked} onClick={() => { setMode("choose"); setPaymentIndex((index) => index + 1); }} variant="ghost">Change payment amount</Button> : null}
+      </div>
+      {paymentNote ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-ok-soft p-3 font-bold text-wayne-ok">{paymentNote}</p> : null}
       {onAddItems && !compact ? <button className={`flex w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40 mt-4 min-h-14 text-lg`} disabled={busy || tipAsked} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
       <div className={`grid grid-cols-2 ${compact ? "mt-2 gap-2" : "mt-5 gap-3"} ${buttonColumns}`}>
         {onAddItems && compact ? <button className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-wayne-green bg-white p-2 text-center font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || tipAsked || mode === "terminal"} onClick={onAddItems} type="button"><span aria-hidden className="text-xl leading-none">＋</span><strong className="text-lg font-black leading-tight">Add items</strong></button> : null}
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
         {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · tip on slip" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
         {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? `Phone order · add tip now or at cash-out${order.is_test ? " (test)" : ""}` : "Needs Stripe") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
-        {onPayLater ? <button className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"}`} disabled={busy} onClick={onPayLater} type="button"><span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{isDelivery ? "🚗" : "⏱"}</span><strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{isDelivery ? "Cash at the door" : "Pay later"}</strong>{compact ? null : <span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span>}</button> : null}
+        {onPayLater ? <button className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"}`} disabled={busy || paymentLocked} onClick={onPayLater} type="button"><span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{isDelivery ? "🚗" : "⏱"}</span><strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{isDelivery ? "Cash at the door" : "Pay later"}</strong>{compact ? null : <span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span>}</button> : null}
       </div>
       {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
-      {mode === "cash" ? <CashTender busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {mode === "terminal" ? (tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: false, tipAsked, paidBefore, current: tipRouteTaken }) === "screen"
-        ? <CustomerTipStep onDone={tipDone} order={order} />
+      {mode === "cash" ? <CashTender key={paymentIndex} {...splitProps} busy={busy} due={paymentOrder.total_cents} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} shiftId={shiftId} /> : null}
+      {mode === "terminal" ? (tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: false, tipAsked, paidBefore: split ? Math.max(1, paidBefore) : paidBefore, current: tipRouteTaken }) === "screen"
+        ? <CustomerTipStep onDone={tipDone} order={paymentOrder} />
         // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
-        : order.is_test ? <TestCardTender autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} />
-        : <CardTender autoStart busy={busy} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
-      {mode === "keyed" && order.is_test ? <div className="mt-5"><TestCardTender busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} /></div>
-        : mode === "keyed" && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender busy={busy} config={keyedCardConfig} onError={setError} onOrderChange={setOrder} onPaid={onPaid} onPreview={setKeyedPreview} order={order} setBusy={setBusy} /></div> : null}
+        : order.is_test ? <TestCardTender key={paymentIndex} {...splitProps} autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} />
+        : <CardTender key={paymentIndex} {...splitProps} autoStart busy={busy} onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
+      {mode === "keyed" && order.is_test ? <div className="mt-5"><TestCardTender key={paymentIndex} {...splitProps} busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} /></div>
+        : mode === "keyed" && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender key={paymentIndex} {...splitProps} busy={busy} config={keyedCardConfig} onError={setError} onOrderChange={setOrder} onPaid={onPaid} onPreview={setKeyedPreview} order={paymentOrder} setBusy={setBusy} /></div> : null}
     </>}
   </div>;
 }
@@ -306,9 +330,9 @@ export function PaymentPrompt({ order, keyedCardConfig, stripeReader, onPayLater
   return <PaymentPage keyedCardConfig={keyedCardConfig} onAddItems={onAddItems} onDrawerChanged={loadDrawer} onPaid={onFinished} onPayLater={onPayLater} order={order} shiftId={shiftId} stripeReader={stripeReader} terminals={terminals} />;
 }
 
-type TenderProps = { order: OpenOrder; busy: boolean; setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (done: Done) => void };
+type TenderProps = { onLock?: (locked: boolean) => void; amountCents?: number; order: OpenOrder; busy: boolean; setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (done: Done) => void };
 
-function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDrawerChanged }: TenderProps & { due: number; shiftId: string; onDrawerChanged: () => Promise<void> }) {
+function CashTender({ amountCents, order, due, shiftId, busy, setBusy, onError, onPaid, onDrawerChanged }: TenderProps & { due: number; shiftId: string; onDrawerChanged: () => Promise<void> }) {
   // Keyed in like a register: digits fill from the cents up (2-0-0-0 = $20.00).
   const [digits, setDigits] = useState("");
   const tendered = digits ? Number.parseInt(digits, 10) : 0;
@@ -329,7 +353,7 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
     try {
       const response = await fetch("/api/pos/drawer", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cash_payment", shift_id: shiftId, order_id: order.id, tendered_cents: tendered, idempotency_key: `pos-cash-${order.id}-${tendered}` }),
+        body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), action: "cash_payment", shift_id: shiftId, order_id: order.id, tendered_cents: tendered, idempotency_key: `pos-cash-${order.id}-${order.paid_cents}-${tendered}` }),
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) throw new Error(await readError(response, "The cash could not be recorded."));
@@ -367,7 +391,8 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
   </div>;
 }
 
-function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeReader, autoStart = false }: TenderProps & { terminals: Terminal[]; stripeReader: boolean; autoStart?: boolean }) {
+function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onError, onPaid, stripeReader, autoStart = false }: TenderProps & { terminals: Terminal[]; stripeReader: boolean; autoStart?: boolean }) {
+  const requestKey = useRef(`pos-terminal-${order.id}-${uuid()}`);
   const [pickedTerminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
   const terminalId = pickedTerminalId || terminals[0]?.id || "";
   const [note, setNote] = useState("");
@@ -380,11 +405,11 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
   /** A reader linked to the POS: send it the total, then wait for the customer. */
   async function sendToReader() {
     if (!terminalId) return;
-    setCharging(true); setBusy(true); onError(""); setNote("Sending the total to the reader…");
-    const idempotencyKey = `pos-terminal-${order.id}-${Date.now()}`;
+    onLock?.(true); setCharging(true); setBusy(true); onError(""); setNote("Sending the total to the reader…");
+    const idempotencyKey = requestKey.current;
     const call = (action: "start" | "status") => fetch("/api/pos/terminal", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order_id: order.id, terminal_id: terminalId, idempotency_key: idempotencyKey, action }),
+      body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: order.id, terminal_id: terminalId, idempotency_key: idempotencyKey, action }),
       signal: AbortSignal.timeout(20_000),
     });
     try {
@@ -398,8 +423,8 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
         if (!poll.ok) throw new Error(await readError(poll, "The card reader could not be reached."));
         const body = await poll.json().catch(() => ({})) as { state?: string };
         if (body.state === "captured") { onPaid({ order, method: "card", changeCents: 0, tenderedCents: null }); return; }
-        if (body.state === "voided") throw new Error("The customer cancelled at the reader.");
-        if (body.state === "failed") throw new Error("The card was declined at the reader.");
+        if (body.state === "voided") { onLock?.(false); throw new Error("The customer cancelled at the reader."); }
+        if (body.state === "failed") { onLock?.(false); throw new Error("The card was declined at the reader."); }
       }
       throw new Error("The reader did not answer in time. Check it before charging again.");
     } catch (cause) {
@@ -434,7 +459,7 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
     try {
       const response = await fetch("/api/pos/payments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-card-reader-${order.id}`, card_last4: last4.trim(), approval_code: approval.trim(), processor: "Card reader" }),
+        body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: order.id, idempotency_key: `pos-card-reader-${order.id}-${order.paid_cents}`, card_last4: last4.trim(), approval_code: approval.trim(), processor: "Card reader" }),
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) throw new Error(await readError(response, "The card payment could not be recorded."));
@@ -462,7 +487,7 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
 
   return <div className="mt-5 grid gap-4">
     {/* Only a delivery card is held for the driver's slip; in the store it is charged for order + tip and the order closes (owner, 2026-10-13). */}
-    {stripeReader ? <StripeReaderTender autoStart={autoStart} busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null, held: order.fulfillment_type === "delivery" })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
+    {stripeReader ? <StripeReaderTender onLock={onLock} amountCents={amountCents} autoStart={autoStart} busy={busy} onError={onError} onPaid={() => onPaid({ order, method: "card", changeCents: 0, tenderedCents: null, held: amountCents === undefined && order.fulfillment_type === "delivery" })} orderId={order.id} setBusy={setBusy} totalCents={order.total_cents} /> : null}
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
@@ -475,7 +500,8 @@ function CardTender({ order, terminals, busy, setBusy, onError, onPaid, stripeRe
 }
 
 /** Keyed-in cards (usually over the phone) are typed into Stripe's own secure field, never into Wayne's app. */
-function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid, onPreview, onOrderChange }: TenderProps & { config: Extract<CheckoutPaymentConfig, { provider: "stripe" }>; onPreview?: (preview: KeyedPreview | null) => void; onOrderChange?: (next: OpenOrder) => void }) {
+function KeyedStripeTender({ onLock, amountCents, order, config, busy, setBusy, onError, onPaid, onPreview, onOrderChange }: TenderProps & { config: Extract<CheckoutPaymentConfig, { provider: "stripe" }>; onPreview?: (preview: KeyedPreview | null) => void; onOrderChange?: (next: OpenOrder) => void }) {
+  const requestKey = useRef(`pos-keyed-card-${order.id}-${uuid()}`);
   const confirmRef = useRef<StripeCardConfirm | null>(null);
   const [message, setMessage] = useState("");
   const onReady = useCallback((confirm: StripeCardConfirm | null) => { confirmRef.current = confirm; }, []);
@@ -486,12 +512,12 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid, onPr
   // added BEFORE the approval so the card is approved once for order + tip
   // (owner, 2026-10-31: "$30 order + $5 tip → one $35 charge").  A tip on the
   // signed slip after that is only the extra, added in Deliveries.
-  const delivery = order.fulfillment_type === "delivery";
+  const delivery = amountCents === undefined && order.fulfillment_type === "delivery";
   const [baseCents, setBaseCents] = useState(order.total_cents);
   const [tipCents, setTipCents] = useState(0);
   const [payable, setPayable] = useState(order);
   const [attempt, setAttempt] = useState<KeyedAttempt>({ phase: "idle" });
-  const view = keyedCheckoutView({ orderCents: baseCents, tipCents, delivery, paidBefore: order.paid_cents, busy });
+  const view = keyedCheckoutView({ orderCents: baseCents, tipCents, delivery, paidBefore: amountCents !== undefined ? Math.max(1, order.paid_cents) : order.paid_cents, busy });
   const locked = busy || tipLocked(attempt);
   useEffect(() => { onPreview?.(view.tipOffered ? { orderCents: view.orderCents, tipCents: view.tipCents, chargeCents: view.chargeCents } : null); }, [onPreview, view.tipOffered, view.orderCents, view.tipCents, view.chargeCents]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
@@ -515,7 +541,7 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid, onPr
       onPaid({ order: current, method: "card", changeCents: 0, tenderedCents: null, held: outcome.kind === "authorized", tipCents: amounts.tipCents });
       return;
     }
-    if (outcome.kind === "declined") throw new Error(stripeError ?? "The card was declined. Try another card.");
+    if (outcome.kind === "declined") { onLock?.(false); requestKey.current = `pos-keyed-card-${order.id}-${uuid()}`; throw new Error(stripeError ?? "The card was declined. Try another card."); }
     throw new Error(`We couldn't confirm the card for ${formatCents(amounts.amountCents)}. Don't key the card in again — tap "Check the card again".`);
   }
 
@@ -554,11 +580,12 @@ function KeyedStripeTender({ order, config, busy, setBusy, onError, onPaid, onPr
       }
       const amounts = { amountCents: current.total_cents, tipCents: view.tipOffered ? wantTip : 0 };
       // 2. From here the amount is locked: the tip can't change while this approval is open.
+      onLock?.(true);
       setAttempt({ phase: "authorizing", ...amounts });
       started = true;
       const intentResponse = await fetch("/api/pos/keyed-card/intent", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: order.id, idempotency_key: `pos-keyed-card-${order.id}-${uuid()}`, expected_amount_cents: amounts.amountCents, expected_tip_cents: amounts.tipCents }),
+        body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: order.id, idempotency_key: requestKey.current, expected_amount_cents: amounts.amountCents, expected_tip_cents: amounts.tipCents }),
         signal: AbortSignal.timeout(15_000),
       });
       if (!intentResponse.ok) throw new Error(await readError(intentResponse, "The payment could not be prepared."));
@@ -675,11 +702,12 @@ function TipPicker({ baseCents, tipCents, onChange, disabled, delivery = false, 
  * reader, a card keyed in over the phone, a delivery card approved now and
  * charged with the tip at cash-out — but simulated, so nothing is charged.
  */
-function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStart = false }: TenderProps & { entry: "card_reader" | "test_keyed"; autoStart?: boolean }) {
+function TestCardTender({ amountCents, order, entry, busy, setBusy, onError, onPaid, autoStart = false }: TenderProps & { entry: "card_reader" | "test_keyed"; autoStart?: boolean }) {
+  const requestKey = useRef(`pos-test-card-${order.id}-${uuid()}`);
   const delivery = order.fulfillment_type === "delivery" && entry === "test_keyed";
   // No tip on what is still owed after items were added to a paid order.  A delivery
   // takes the phone tip before the approval too, like a real keyed card (owner, 2026-10-31).
-  const askTip = entry === "test_keyed" && order.paid_cents === 0;
+  const askTip = amountCents === undefined && entry === "test_keyed" && order.paid_cents === 0;
   const [baseCents, setBaseCents] = useState(order.total_cents);
   const [tipCents, setTipCents] = useState(0);
   const [tipSaved, setTipSaved] = useState(0);
@@ -704,7 +732,7 @@ function TestCardTender({ order, entry, busy, setBusy, onError, onPaid, autoStar
       const response = await fetch("/api/pos/test-payment", {
         method: "POST", headers: { "Content-Type": "application/json" },
         // Like a real card: a delivery is approved and held for the driver's slip; anything else is charged now (owner, 2026-10-13).
-        body: JSON.stringify({ order_id: order.id, entry, authorize_only: order.fulfillment_type === "delivery", idempotency_key: `pos-test-card-${order.id}-${uuid()}` }),
+        body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: order.id, entry, authorize_only: amountCents === undefined && order.fulfillment_type === "delivery", idempotency_key: requestKey.current }),
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) throw new Error(await readError(response, "The test payment could not be recorded."));
