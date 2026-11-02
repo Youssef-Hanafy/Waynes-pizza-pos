@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PosAddressInput } from "@/components/checkout/google-address-input";
@@ -10,7 +10,8 @@ import type { DraftAddress, PosDraft } from "@/lib/orders/drafts";
 import { formatPhone } from "@/lib/phone/normalize";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { orderActions, orderStore } from "@/stores/order-store";
-import { alreadySaved, rememberCustomer, rememberPayload, savedAddressId } from "@/lib/pos/remember-customer";
+import { alreadySaved, rememberCustomer, rememberPayload, savedAddressId, typingSavePayload } from "@/lib/pos/remember-customer";
+import { saveCustomerQuietly } from "@/stores/customer-autosave";
 import { draftFromCall } from "@/lib/orders/drafts";
 import { callerCardInfo, customerName } from "@/lib/phone/caller-display";
 import { callOnLine, type PhoneCallView } from "@/lib/phone/phone-state";
@@ -29,7 +30,9 @@ type Props = {
 export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
   const update = orderActions.update;
   const fromCall = Boolean(draft.phoneCallKey);
-  const [kind, setKind] = useState<OrderKind | null>(() => (draft.orderKind || draft.cart.length || draft.started || draft.customer || draft.firstName.trim() ? orderKind(draft) : null));
+  // Only a type that was actually picked is lit up: a customer found by phone, then Back to before
+  // Delivery was tapped, used to show Pickup lit with no address box (test run, 2026-11-01).
+  const [kind, setKind] = useState<OrderKind | null>(() => (draft.orderKind || draft.cart.length || draft.started ? orderKind(draft) : null));
   const [error, setError] = useState("");
   const [searchField, setSearchField] = useState<"phone" | "name">(() => phoneDigits(draft.phone).length >= 3 ? "phone" : "name");
   // "In the store" chosen on purpose for a pickup / delivery (otherwise it's a phone order).
@@ -100,7 +103,31 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     if (patch.phone !== undefined) setSearchField("phone");
     else if (patch.firstName !== undefined || patch.lastName !== undefined) setSearchField("name");
     update(editCustomerDetails(draft, patch));
+    scheduleTypingSave();
   }
+
+  /**
+   * Saved a moment after typing stops (owner's dad, 2026-11-01: "I know I saved
+   * them and they don't show up"), not only when an order type is tapped, so a
+   * caller whose ticket is never started still pops up next time.
+   */
+  const typingSave = useRef<{ timer: number; draftId: string } | null>(null);
+  function runTypingSave(draftId: string) {
+    typingSave.current = null;
+    const latest = orderStore.get().drafts.find((candidate) => candidate.id === draftId);
+    const payload = latest ? typingSavePayload(latest) : null;
+    if (payload) void saveCustomerQuietly(payload);
+  }
+  function scheduleTypingSave() {
+    if (typingSave.current) window.clearTimeout(typingSave.current.timer);
+    const draftId = draft.id;
+    typingSave.current = { draftId, timer: window.setTimeout(() => runTypingSave(draftId), 1500) };
+  }
+  // Leaving the card (order started, another ticket, a reload) saves what was typed right away.
+  useEffect(() => () => {
+    const pending = typingSave.current;
+    if (pending) { window.clearTimeout(pending.timer); runTypingSave(pending.draftId); }
+  }, []);
 
   function start(jump = false) {
     const nextKind = kind ?? (jump ? fromCall ? "pickup" : "walkin" : null);
@@ -127,7 +154,9 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
     if (auto && alreadySaved(target, payload)) return;
     if (!auto) setSaveNote({ tone: "busy", text: "Saving…" });
     try {
-      const saved = await rememberCustomer(payload);
+      // Automatic saves never fail silently: a save that doesn't go through is kept and retried (owner's dad, 2026-11-01).
+      const saved = auto ? await saveCustomerQuietly(payload) : await rememberCustomer(payload);
+      if (!saved) return;
       // The ticket uses the saved profile (and its saved address), so sending the order never adds them again.
       if (orderStore.get().activeId === target.id) {
         const addressId = payload.address ? savedAddressId(saved, target.address) : "";
@@ -135,8 +164,11 @@ export function StartOrderCard({ draft, settings, onOpenPhone }: Props) {
       }
       setSaveNote({ tone: "ok", text: `✓ Saved ${customerName(saved) || formatPhone(saved.phone)}` });
     } catch (cause) {
-      // Offline or a hiccup: the order itself still saves the customer when it is sent.
-      if (!auto) setSaveNote({ tone: "bad", text: cause instanceof Error ? cause.message : "The customer could not be saved." });
+      // The Save button says why, and the save is kept and retried by itself.
+      if (!auto) {
+        setSaveNote({ tone: "bad", text: `${cause instanceof Error ? cause.message : "The customer could not be saved."} It will keep trying by itself.` });
+        void saveCustomerQuietly(payload);
+      }
     }
   }
 

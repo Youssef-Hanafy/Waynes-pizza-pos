@@ -8,6 +8,8 @@ import { orderStore } from "./order-store";
 import { phoneActions, phoneStore } from "./phone-store";
 import { ACTIVE_STATUSES } from "@/lib/phone/phone-state";
 import { noteClosedUnsent } from "./pos-history";
+import { closeOutSavePayload } from "@/lib/pos/remember-customer";
+import { saveCustomerQuietly } from "./customer-autosave";
 
 /**
  * Tickets are never held (owner, 2026-10-19): "the phone line automatically
@@ -56,6 +58,10 @@ export function closeOutUnsentTickets(options: { keepActive?: boolean } = {}) {
     // so it is kept exactly as sent — unpaid, like Pay later — never dropped (owner, 2026-11-01).
     if (draft.replacesOrderId) keepSentOrder(draft.replacesOrderId);
     if (!draftHasContent(draft)) continue;
+    // What was typed for the customer is saved before the ticket goes (owner's dad,
+    // 2026-11-01: customers he had typed in didn't come up on their next call).
+    const unsaved = closeOutSavePayload(draft);
+    if (unsaved) void saveCustomerQuietly(unsaved);
     closeCall(draft);
     void draftSync.discard(draft);
   }

@@ -42,3 +42,39 @@ describe("saving the customer from the order screen (owner, 2026-10-27)", () => 
     expect(savedAddressId(david, { ...street, address1: "99 Oak Ave" })).toBe("");
   });
 });
+
+describe("customers are never lost when a ticket isn't started (owner's dad, 2026-11-01)", () => {
+  it("saves the name a moment after typing — never a half-typed address", async () => {
+    const { typingSavePayload } = await import("./remember-customer");
+    expect(typingSavePayload(blankDraft({ phone: "5084509547" }))).toBeNull(); // no name yet: nothing new to keep
+    expect(typingSavePayload(blankDraft({ phone: "50845", firstName: "Rosa" }))).toBeNull();
+    expect(typingSavePayload(blankDraft({ phone: "(508) 450-9547", firstName: "Rosa", address: { ...street, address1: "12 E" }, orderKind: "delivery" })))
+      .toEqual({ phone: "5084509547", first_name: "Rosa", last_name: "", email: "" });
+    // Already the saved profile: nothing to send.
+    expect(typingSavePayload(blankDraft({ phone: "5084509547", firstName: "David", lastName: "Strub", customer: david }))).toBeNull();
+    // A name changed on a saved customer ("roda" → "rosa") is saved.
+    expect(typingSavePayload(blankDraft({ phone: "5084509547", firstName: "Dave", lastName: "Strub", customer: david }))?.first_name).toBe("Dave");
+  });
+
+  it("saves what was typed when a ticket is closed out without being sent", async () => {
+    const { closeOutSavePayload } = await import("./remember-customer");
+    // Another call came in while Destinie's delivery address was being typed.
+    const destinie = blankDraft({ phone: "5085556117", firstName: "Destinie", orderKind: "delivery", address: street });
+    expect(closeOutSavePayload(destinie)).toMatchObject({ phone: "5085556117", first_name: "Destinie", address: { address1: "12 Elm St" } });
+    // Kind not picked yet, address finished: kept.  Half-typed street: name only.
+    expect(closeOutSavePayload(blankDraft({ phone: "5085556117", address: street }))?.address?.address1).toBe("12 Elm St");
+    expect(closeOutSavePayload(blankDraft({ phone: "5085556117", firstName: "Destinie", address: { ...street, address1: "12" } }))?.address).toBeUndefined();
+    // A pickup keeps the name, not an address.
+    expect(closeOutSavePayload(blankDraft({ phone: "5085556117", firstName: "Destinie", orderKind: "pickup", address: street }))?.address).toBeUndefined();
+    // Nothing worth saving, or not a customer ticket at all.
+    expect(closeOutSavePayload(blankDraft({ phone: "5085556117" }))).toBeNull();
+    expect(closeOutSavePayload(blankDraft({ firstName: "Destinie" }))).toBeNull();
+    expect(closeOutSavePayload(blankDraft({ phone: "5085556117", firstName: "X", replacesOrderId: "7c4e1d20-841a-4c1a-99d8-9302d6f96be2" }))).toBeNull();
+  });
+
+  it("knows a finished street from a half-typed one", async () => {
+    const { looksLikeStreet } = await import("./remember-customer");
+    for (const good of ["12 Elm St", "93 West Boylston St", "12A Main Street", "10-12 Park Ave"]) expect(looksLikeStreet(good)).toBe(true);
+    for (const bad of ["", "12", "12 E", "Elm St", "12 El"]) expect(looksLikeStreet(bad)).toBe(false);
+  });
+});

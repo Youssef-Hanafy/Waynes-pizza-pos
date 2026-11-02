@@ -161,8 +161,8 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
             {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
-          {/* As many options per row as the width allows (wider for the Left / Whole / Right buttons). */}
-          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}>{[...group.choices].sort((a, b) => Number(isIncludedChoice(b)) - Number(isIncludedChoice(a))).map((choice) => {
+          {/* Keep category order and the audited touch-target widths on every item. */}
+          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}>{group.choices.map((choice) => {
           const count = selectedChoices[choice.id] ?? 0;
           const delta = choicePriceDeltaCents(choice, variantId);
           const comesWith = isIncludedChoice(choice);

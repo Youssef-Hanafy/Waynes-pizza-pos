@@ -21,6 +21,7 @@ import { FitToSpace } from "./fit-to-space";
 import { takenBack, useHistoryRestores } from "@/stores/pos-history";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { PosItemDialog } from "./item-dialog";
+import { uuid } from "@/lib/uuid";
 import { PaymentPrompt, type Done } from "./payments-screen";
 import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-print";
 import { StartOrderCard } from "./start-order-card";
@@ -184,6 +185,20 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   }, [lineCount]);
 
   function setCart(next: CartLine[]) { update({ cart: next }); }
+
+  /**
+   * An item with nothing to pick — no options and one size, like a 20 oz Coke —
+   * goes straight on the ticket (test run, 2026-11-01: it opened an empty
+   * options window that said "No modifier group is assigned").  Tapping it on
+   * the ticket still opens it for notes.
+   */
+  function tapMenuItem(item: PublicMenu[number]["items"][number]) {
+    if (item.modifier_groups.length || item.variants.length > 1) { setSelectedItem(item); return; }
+    const variantId = item.variants[0]?.id ?? null;
+    const same = cart.find((line) => !line.open_item && line.menu_item_id === item.id && line.variant_id === variantId && !line.modifiers.length && !line.special_instructions);
+    setCart(same ? cart.map((line) => line.line_id === same.line_id ? { ...line, quantity: Math.min(20, line.quantity + 1) } : line)
+      : [...cart, { line_id: uuid(), menu_item_id: item.id, variant_id: variantId, quantity: 1, special_instructions: "", modifiers: [] }]);
+  }
 
   /** An original line changed in the item box (owner, 2026-10-24): it is replaced by the edited copy when saved. */
   const [replacing, setReplacing] = useState<string | null>(null);
@@ -448,7 +463,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
           return shownItems.map((item) => {
             // The item's colour, else its category's (Admin → Menu → colour), so groups are easy to spot (owner, 2026-10-19).
             const color = safeColor(item.pos_color);
-            return <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-16 px-2 py-1.5" : roomy ? "px-3 py-2" : "px-2 py-1.5"}`} disabled={item.sold_out} key={item.id} onClick={() => setSelectedItem(item)} style={color ? { borderColor: color, borderLeftWidth: 6, backgroundColor: `${color}26` } : undefined} type="button"><FitName lines={lines} size={nameSize} text={`${item.special ? "⭐ " : ""}${item.name}`} />{item.special && item.special_note && roomy ? <span className="line-clamp-1 text-xs font-bold text-wayne-muted">{item.special_note}</span> : null}<span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-xs"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>;
+            return <button className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-wayne-border bg-white text-left shadow-sm transition active:scale-95 disabled:opacity-50 ${cellHeight === null ? "min-h-16 px-2 py-1.5" : roomy ? "px-3 py-2" : "px-2 py-1.5"}`} disabled={item.sold_out} key={item.id} onClick={() => tapMenuItem(item)} style={color ? { borderColor: color, borderLeftWidth: 6, backgroundColor: `${color}26` } : undefined} type="button"><FitName lines={lines} size={nameSize} text={`${item.special ? "⭐ " : ""}${item.name}`} />{item.special && item.special_note && roomy ? <span className="line-clamp-1 text-xs font-bold text-wayne-muted">{item.special_note}</span> : null}<span className={`mt-auto font-black text-wayne-red ${roomy ? "pt-1 text-base" : "text-xs"}`}>{item.variants.length > 1 ? `From ${formatCents(Math.min(...item.variants.map((variant) => variant.price_cents)))}` : formatCents(item.variants[0]?.price_cents ?? item.base_price_cents)}{item.sold_out ? <span className="ml-1 text-wayne-ink">· Sold out</span> : null}</span></button>;
           });
         }}</FitGrid> : <p className="rounded-xl bg-white p-6 text-center text-wayne-muted">{itemSearch.trim() ? `Nothing on the menu matches “${itemSearch}”.` : selectedCategory === SPECIALS ? "No active specials. Create specials and set their prices in Admin → Menu → Specials." : "Nothing in this category."}</p>}
       </section>

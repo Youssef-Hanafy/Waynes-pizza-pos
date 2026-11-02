@@ -57,3 +57,38 @@ export async function rememberCustomer(payload: PosSaveCustomer): Promise<PosCus
   if (!parsed.success) throw new Error("The saved customer was invalid.");
   return parsed.data;
 }
+
+/**
+ * A street that looks finished ("12 Elm St"), so a half-typed one ("12 E") is
+ * never kept as a saved address.
+ */
+export function looksLikeStreet(street: string): boolean {
+  return /^\d+[a-z]?(-\d+)?\s+\S.{2,}$/i.test(street.trim());
+}
+
+/**
+ * While the cashier types (owner's dad, 2026-11-01: "I know I saved them and
+ * they don't show up"): the name and phone are saved a moment after typing
+ * stops, not only when an order type is tapped.  The address waits for the
+ * order or for the ticket being closed, so half-typed streets are never saved.
+ */
+export function typingSavePayload(draft: PosDraft): PosSaveCustomer | null {
+  if (draft.addTo) return null;
+  const payload = rememberPayload(draft, null);
+  if (!payload || !(payload.first_name || payload.last_name)) return null;
+  return alreadySaved(draft, payload) ? null : payload;
+}
+
+/**
+ * A ticket closed out without being sent (another call, New order, Clear, a
+ * reload): what was typed for the customer is saved before the ticket goes,
+ * so the next call from that number pops their profile.
+ */
+export function closeOutSavePayload(draft: PosDraft): PosSaveCustomer | null {
+  if (draft.addTo || draft.replacesOrderId) return null;
+  const street = draft.address.address1.trim();
+  const keepAddress = !draft.addressId && looksLikeStreet(street) && (draft.orderKind === "delivery" || draft.orderKind === null);
+  const payload = rememberPayload(draft, keepAddress ? "delivery" : null);
+  if (!payload || !(payload.first_name || payload.last_name || payload.address)) return null;
+  return alreadySaved(draft, payload) ? null : payload;
+}
