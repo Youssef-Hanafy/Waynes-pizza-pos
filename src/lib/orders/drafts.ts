@@ -114,6 +114,8 @@ export const posDraftSchema = z.object({
     dailyNumber: z.number().int().nullable(),
     customerName: z.string(),
     fulfillment: z.enum(["pickup", "delivery"]),
+    deliveryFeeCents: z.number().int().nonnegative().optional(),
+    tipCents: z.number().int().nonnegative().optional(),
     /** Already paid: the items still go on the same order; what is still owed is paid after (owner, 2026-10-19). */
     paid: z.boolean(),
     /**

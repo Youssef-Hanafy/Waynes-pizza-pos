@@ -88,28 +88,26 @@ export function CustomerSignStep({ order, tipCents, onFinished }: { order: OpenO
   useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "customer_signature", order: order.order_number }); }, [error, order.order_number]);
   const step = useRef<SignStep | null>(null);
   const finish = useEffectEvent(onFinished);
-  const orderId = order.id;
-  const orderNumber = ticketNumber(order);
-  const totalCents = order.total_cents;
-
+  // An approved checkout owns one signature step. Refreshed totals/tip snapshots
+  // belong to that same checkout and must not cancel its request or pending save.
+  const begin = useEffectEvent((orderId: string) => startSignStep({
+    ask: () => askCustomer({ phase: "sign", order_number: ticketNumber(order), total_cents: order.total_cents, tip_cents: tipCents }),
+    saveSignature: async (svg) => {
+      const response = await fetch(`/api/pos/orders/${orderId}/signature`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signature_svg: svg, tip_cents: tipCents }), signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) throw new Error(await readError(response, "The signature could not be saved."));
+    },
+    thank: () => thankCustomer(),
+    onFinished: () => finish(),
+    onView: setView,
+  }));
   useEffect(() => {
-    const started = startSignStep({
-      ask: () => askCustomer({ phase: "sign", order_number: orderNumber, total_cents: totalCents, tip_cents: tipCents }),
-      saveSignature: async (svg) => {
-        const response = await fetch(`/api/pos/orders/${orderId}/signature`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signature_svg: svg, tip_cents: tipCents }), signal: AbortSignal.timeout(12_000),
-        });
-        if (!response.ok) throw new Error(await readError(response, "The signature could not be saved."));
-      },
-      thank: () => thankCustomer(),
-      onFinished: () => finish(),
-      onView: setView,
-    });
+    const started = begin(order.id);
     step.current = started;
     return () => { started.stop(); };
-  // A refreshed order object or parent callback must not cancel an active save.
-  }, [orderId, orderNumber, totalCents, tipCents]);
+  }, [order.id]);
 
   const saving = view.stage === "saving";
   const note = saving ? "Saving the signature…" : error ? "The signature wasn't saved." : "Waiting for the customer to sign on the screen…";

@@ -29,6 +29,7 @@ import { OpenItemDialog } from "./open-item-dialog";
 import { DiscountDialog, type AppliedDiscount } from "./discount-dialog";
 import { closeOutUnsentTickets, keepSentOrder, restoreLastClosed, unsettledOrder, useLastClosed } from "@/stores/ticket-closeout";
 import { beginOfflineOrder, offlineProblem } from "@/stores/offline-orders";
+import { FulfillmentEditor } from "./fulfillment-editor";
 import { OfflinePayment } from "./offline-payment";
 
 type MenuItem = PublicMenu[number]["items"][number];
@@ -158,8 +159,8 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   // The $2 delivery fee is not taxed (owner, 2026-10-11) — same as the database.
   const tax = Math.round((ticketSubtotal - previewDiscount - editDiscount) * settings.tax_rate_basis_points / 10_000);
   // An edited delivery keeps its delivery fee in the new total.
-  const editFee = editing && addTo!.fulfillment === "delivery" ? settings.delivery_fee_cents : 0;
-  const previewTotal = ticketSubtotal - previewDiscount - editDiscount + deliveryFee + editFee + tax;
+  const editFee = editing ? addTo!.deliveryFeeCents ?? (addTo!.fulfillment === "delivery" ? settings.delivery_fee_cents : 0) : 0;
+  const previewTotal = ticketSubtotal - previewDiscount - editDiscount + deliveryFee + editFee + tax + (editing ? addTo!.tipCents ?? 0 : 0);
 
   // The customer screen follows the ticket as it is rung up (owner, 2026-10-11).
   useEffect(() => {
@@ -389,6 +390,10 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <span className="block truncate text-base font-black">{summary.title}</span>
         <span className="block truncate text-sm font-bold text-wayne-muted">{summary.detail}</span>
       </span>
+      <FulfillmentEditor orderId={addTo.orderId} onChanged={(changed) => {
+        update({ fulfillment: changed.fulfillment_type, addTo: { ...addTo, fulfillment: changed.fulfillment_type, deliveryFeeCents: changed.delivery_fee_cents } });
+        setReturnTo(current => current?.order.id === changed.order_id ? { ...current, delivery: changed.fulfillment_type === "delivery", order: { ...current.order, fulfillment_type: changed.fulfillment_type, total_cents: changed.total_cents, payment_status: changed.payment_status } } : current);
+      }} />
       <button className="ml-auto min-h-11 shrink-0 rounded-lg border border-wayne-border bg-white px-3 text-sm font-bold" onClick={cancelAddition} type="button">{returnTo && returnTo.order.id === addTo.orderId ? "‹ Back to payment" : "Cancel"}</button>
     </div> : draft.started ? <button aria-label="Edit order details" className="flex min-h-11 min-w-0 max-w-full items-center gap-3 rounded-xl px-2 text-left hover:bg-wayne-cream" onClick={() => update({ started: false })} type="button">
       <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-xl ${draft.source === "phone" ? "bg-wayne-green text-white" : "bg-wayne-cream"}`}>{summary.icon}</span>
@@ -488,7 +493,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         <div className="shrink-0 border-t border-wayne-border px-3 pb-3 pt-2">
           {addTo ? <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Note for the kitchen{draft.orderNote ? " •" : ""}</summary><textarea aria-label="Note for the kitchen" className="mb-1 mt-1 w-full rounded-lg border border-wayne-border p-2" maxLength={500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></details> : <details className="rounded-xl border border-wayne-border px-2 py-1"><summary className="min-h-9 cursor-pointer content-center text-sm font-bold">Notes &amp; promo code{draft.orderNote || draft.promoCode ? " •" : ""}</summary><label className="mt-2 grid gap-2 text-sm font-bold">Order notes<textarea className="rounded-lg border border-wayne-border p-2 font-normal" maxLength={1500} onChange={(e) => update({ orderNote: e.target.value })} rows={2} value={draft.orderNote} /></label><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-sm font-bold">Promotion code<input className="mt-1 min-h-11 w-full rounded-lg border px-2 font-normal uppercase" disabled={Boolean(draft.manualType)} onChange={(e) => update({ promoCode: e.target.value })} value={draft.promoCode} /></label><label className="text-sm font-bold">Payment<select className="mt-1 min-h-11 w-full rounded-lg border bg-white px-2 font-normal" onChange={(e) => update({ paymentMethod: e.target.value as "test_manual" | "cash" })} value={draft.paymentMethod}><option value="test_manual">Normal (pay in Payments)</option><option value="cash">Cash (unpaid)</option></select></label></div>{draft.manualType ? <p className="mt-1 text-xs font-bold text-wayne-muted">A discount is on this ticket — remove it to use a promotion code.</p> : null}</details>}
           {discount ? <div className="mt-2 flex items-center gap-2 rounded-xl bg-wayne-red-soft px-2 py-1 text-sm font-bold text-wayne-red"><button className="min-h-9 min-w-0 flex-1 truncate text-left" onClick={() => setDiscountOpen(true)} type="button">Discount · {discount.reason || "Discount"} · {discount.type === "percent" ? `${discount.value}% off` : `$${discount.value} off`}</button><button aria-label="Remove the discount" className="grid size-9 place-items-center rounded-lg text-lg font-black hover:bg-white" onClick={() => update({ manualType: "", manualValue: "", manualReason: "", presetDiscountId: "" })} type="button">✕</button></div> : null}
-          <div className="mt-2 flex flex-wrap justify-between gap-x-3 text-sm text-wayne-muted"><span>Subtotal {formatCents(ticketSubtotal)}</span>{previewDiscount || editDiscount ? <span>Discount −{formatCents(previewDiscount + editDiscount)}</span> : null}{deliveryFee ? <span>Delivery {formatCents(deliveryFee)}</span> : null}<span>Tax {formatCents(tax)}</span></div>
+          <div className="mt-2 flex flex-wrap justify-between gap-x-3 text-sm text-wayne-muted"><span>Subtotal {formatCents(ticketSubtotal)}</span>{previewDiscount || editDiscount ? <span>Discount −{formatCents(previewDiscount + editDiscount)}</span> : null}{deliveryFee + editFee ? <span>Delivery {formatCents(deliveryFee + editFee)}</span> : null}{editing && addTo!.tipCents ? <span>Tip {formatCents(addTo!.tipCents)}</span> : null}<span>Tax {formatCents(tax)}</span></div>
           <div className="mt-0.5 flex items-baseline justify-between text-2xl font-black"><span>{editing ? "New total" : addTo ? "Adding" : draft.promoCode ? "Est. total*" : "Total"}</span><span>{formatCents(previewTotal)}</span></div>
           {draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">Not sent yet — waiting for the connection. It sends by itself; pressing the button again is safe.</p> : null}
           {error && !draft.submitPending ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-alert-soft p-2 text-sm font-bold text-wayne-alert">{error}</p> : null}

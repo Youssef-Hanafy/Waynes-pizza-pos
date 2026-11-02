@@ -55,6 +55,8 @@ let lastSent = 0;
 let timer: number | null = null;
 let sending = false;
 let waiter: Waiter | null = null;
+// The request stays active while its answer is being saved on the register.
+let activeRequestId: string | null = null;
 let snapshot: LinkState = { screenOnline: false, key: "", showing: true };
 let lastSentOk = 0;
 let lastScreenOnline = 0;
@@ -98,7 +100,7 @@ async function send() {
 
 function tick() {
   if (document.visibilityState !== "visible") return;
-  const interval = waiter ? 1000 : 4000;
+  const interval = activeRequestId ? 1000 : 4000;
   if (dirty || Date.now() - lastSent >= interval) void send();
 }
 
@@ -127,7 +129,7 @@ export function showOnCustomerScreen(next: Partial<DisplayState>) {
   // confirmed thanks until its timer expires; an actual next order still wins.
   if (current.phase === "thanks" && next.phase === "idle" && Date.now() < thanksUntil) return;
   // A request in progress (tip / signature) isn't replaced by ticket updates.
-  if (waiter && next.phase !== "tip" && next.phase !== "sign" && next.request_id !== current.request_id) return;
+  if (activeRequestId && next.phase !== "tip" && next.phase !== "sign" && next.request_id !== activeRequestId) return;
   const parsed = displayStateSchema.safeParse({ ...next });
   if (!parsed.success) return;
   if (JSON.stringify(parsed.data) === JSON.stringify(current)) return;
@@ -164,12 +166,14 @@ export function customerScreenRecentlyOnline() {
 export function askCustomer(next: Partial<DisplayState> & { phase: "tip" | "sign" }): { answer: Promise<Answer | null>; cancel: () => void } {
   if (waiter) { const old = waiter; waiter = null; old.resolve(null); }
   const requestId = uuid();
+  activeRequestId = requestId;
   current = displayStateSchema.parse({ ...(next.phase === "tip" ? tipOptions : {}), ...next, request_id: requestId });
   dirty = true;
   let cancel = () => {};
   const answer = new Promise<Answer | null>((resolve) => {
     waiter = { requestId, resolve };
     cancel = () => {
+      if (activeRequestId === requestId) activeRequestId = null;
       if (waiter?.requestId === requestId) { waiter = null; resolve(null); }
     };
   });
@@ -177,6 +181,7 @@ export function askCustomer(next: Partial<DisplayState> & { phase: "tip" | "sign
 }
 
 export function clearCustomerRequest() {
+  activeRequestId = null;
   if (waiter) { const old = waiter; waiter = null; old.resolve(null); }
 }
 

@@ -95,7 +95,7 @@ export function paymentBanner(order: PrintDocument["order"], withAmount = true):
         ]
         : [
           { kind: "text", text: "** PAID - CARD **", align: "center", bold: true, large: true },
-          { kind: "text", text: "Tip can be added on the slip", align: "center" },
+          { kind: "text", text: order.tip_cents > 0 ? "Tip included - get the slip signed" : "Tip can be added on the slip", align: "center" },
         ];
     case "refunded":
     case "partially_refunded":
@@ -167,7 +167,7 @@ export function buildReceipt(doc: PrintDocument): PrintLayout {
   lines.push({ kind: "pair", left: "Tax", right: money(order.tax_cents) });
   if (order.tip_cents) lines.push({ kind: "pair", left: "Tip", right: money(order.tip_cents) });
   lines.push({ kind: "pair", left: "TOTAL", right: money(order.total_cents), bold: true, large: true });
-  lines.push({ kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type), align: "center", bold: true });
+  lines.push({ kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type, order.tip_cents), align: "center", bold: true });
   if (order.special_instructions) lines.push({ kind: "text", text: `Notes: ${order.special_instructions}` });
   if (order.taken_by) lines.push({ kind: "text", text: `Taken by ${order.taken_by}`, align: "center" });
   lines.push({ kind: "text", text: "Thank you!", align: "center", bold: true }, { kind: "feed", lines: 3 });
@@ -197,8 +197,8 @@ export function buildOnlineOrderSlip(doc: PrintDocument): PrintLayout {
 /**
  * Tip & signature slip (receipt printer): the copy the customer or driver
  * signs, with blank Tip and Total lines — what Wayne's printer produces for
- * every online order today.  A tip already added online is shown, and the
- * blank line is then for anything extra.
+ * every online order today.  A tip already added online is shown, and
+ * the slip confirms the existing tip and final total without asking again.
  */
 export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
   const store = doc.store;
@@ -219,11 +219,15 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
   if (order.tip_cents) lines.push({ kind: "pair", left: order.source === "online" ? "Tip added online" : "Tip already added", right: money(order.tip_cents) });
   lines.push(
     { kind: "pair", left: "AMOUNT", right: money(order.total_cents), bold: true, large: true },
-    { kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type), align: "center", bold: true },
+    { kind: "text", text: paymentLine(order.payment_method, order.payment_status, order.fulfillment_type, order.tip_cents), align: "center", bold: true },
     { kind: "feed", lines: 2 },
-    { kind: "pair", left: order.tip_cents ? "Extra tip:" : "Tip:", right: "______________", bold: true },
-    { kind: "feed", lines: 2 },
-    { kind: "pair", left: "Total:", right: "______________", bold: true },
+    ...(order.tip_cents > 0 ? [
+      { kind: "pair" as const, left: "Total including tip", right: money(order.total_cents), bold: true },
+    ] : [
+      { kind: "pair" as const, left: "Tip:", right: "______________", bold: true },
+      { kind: "feed" as const, lines: 2 },
+      { kind: "pair" as const, left: "Total:", right: "______________", bold: true },
+    ]),
     { kind: "feed", lines: 3 },
     { kind: "text", text: "X______________________________" },
     { kind: "text", text: order.customer_name || "Signature", align: "center" },
@@ -234,9 +238,9 @@ export function buildTipSignatureSlip(doc: PrintDocument): PrintLayout {
   return { title: `Tip & signature ${order.order_number}`, lines: readableSlipLines(lines) };
 }
 
-function paymentLine(method: string, status: string, fulfillment: string) {
+function paymentLine(method: string, status: string, fulfillment: string, tipCents = 0) {
   if (status === "paid") return method === "cash" ? "PAID — CASH" : "PAID";
-  if (status === "authorized") return "CARD APPROVED — ADD TIP BELOW";
+  if (status === "authorized") return tipCents > 0 ? "CARD APPROVED — TIP INCLUDED" : "CARD APPROVED — ADD TIP BELOW";
   // "test_manual" is the old internal name for "pay at the counter / in Payments" — a real order not paid yet.
   if (method === "test_manual") return "NOT PAID YET";
   if (method === "cash") return fulfillment === "delivery" ? "CASH — COLLECT ON DELIVERY" : "CASH — DUE AT PICKUP";

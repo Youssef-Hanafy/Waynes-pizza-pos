@@ -135,7 +135,7 @@ export const orderActions = {
    * original lines on the ticket, to change, take off or add to.  Opened fresh
    * every time, so it always shows the order as it is now.
    */
-  editOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; paid: boolean; discount_cents: number },
+  editOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; paid: boolean; discount_cents: number; delivery_fee_cents?: number; tip_cents?: number },
     existing: NonNullable<PosDraft["addTo"]>["existing"]) {
     orderStore.set((state) => {
       const stale = state.drafts.find((draft) => draft.addTo?.orderId === order.id);
@@ -146,7 +146,7 @@ export const orderActions = {
         addTo: {
           orderId: order.id, orderNumber: order.order_number, dailyNumber: order.daily_number, customerName: order.customer_name,
           fulfillment: order.fulfillment_type === "delivery" ? "delivery" : "pickup", paid: order.paid,
-          editing: true, existing, removed: [], quantities: {}, discountCents: order.discount_cents,
+          editing: true, existing, removed: [], quantities: {}, discountCents: order.discount_cents, deliveryFeeCents: order.delivery_fee_cents, tipCents: order.tip_cents ?? 0,
         },
       });
     });

@@ -127,7 +127,7 @@ export function PosApp(props: Props) {
       if (["cancelled", "draft", "payment_pending"].includes(order.status) || ["refunded", "partially_refunded"].includes(order.payment_status)) throw new Error("That order can't be changed.");
       orderActions.editOrder({
         id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name,
-        fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0, discount_cents: order.discount_cents,
+        fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0, discount_cents: order.discount_cents, delivery_fee_cents: order.delivery_fee_cents, tip_cents: order.tip_cents,
       }, existingLinesFrom(menu, lines));
       setPayFocus(null); setSection("order");
     } catch (cause) {

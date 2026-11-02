@@ -33,7 +33,7 @@ const savedMessages: Record<string, string> = {
   voided: "Payment voided.",
 };
 
-export default async function AdminOrderDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
+export default async function AdminOrderDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string; refund_amount?: string; refund_reason?: string }> }) {
   const [{ id }, notice] = await Promise.all([params, searchParams]);
   const access = await requirePermission("orders.view", `/admin/orders/${id}`);
   if (!z.uuid().safeParse(id).success) notFound();
@@ -72,7 +72,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
           <Card className="p-6"><h2 className="text-xl font-black">Customer</h2><p className="mt-3 font-bold">{order.customer_name_snapshot}</p><p><a className="underline" href={`tel:${order.customer_phone_snapshot}`}>{order.customer_phone_snapshot}</a></p>{order.customer_email_snapshot ? <p><a className="break-all underline" href={`mailto:${order.customer_email_snapshot}`}>{order.customer_email_snapshot}</a></p> : null}{address ? <div className="mt-4 border-t border-wayne-border pt-4"><strong>Delivery address</strong><p>{[address.address1, address.address2, [address.city, address.state, address.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", ")}</p>{address.delivery_instructions ? <p className="mt-2 text-sm text-wayne-muted">{address.delivery_instructions}</p> : null}</div> : null}</Card>
           <Card className="p-6"><h2 className="text-xl font-black">Totals</h2><div className="mt-4 grid gap-2"><Total label="Subtotal" value={order.subtotal_cents} />{order.discount_cents ? <Total label="Discount" value={-order.discount_cents} /> : null}{order.delivery_fee_cents ? <Total label="Delivery fee" value={order.delivery_fee_cents} /> : null}<Total label="Tax" value={order.tax_cents} />{order.tip_cents ? <Total label="Tip" value={order.tip_cents} /> : null}<Total emphasis label="Total" value={order.total_cents} /></div>{order.discounts.map((discount) => <p className="mt-3 text-sm text-wayne-muted" key={discount.id}>{discount.code_snapshot}: −{formatCents(discount.amount_cents)}</p>)}</Card>
           <Card className="p-6"><h2 className="text-xl font-black">Operations</h2><Info label="Source" value={titleCase(order.source)} /><Info label="Payment" value={`${titleCase(order.payment_method)} · ${titleCase(order.payment_status)}`} /><Info label="Promised" value={formatAdminDateTime(order.promised_at, settings.timezone)} /><Info label="Accepted" value={formatAdminDateTime(order.accepted_at, settings.timezone)} /><Info label="Ready" value={formatAdminDateTime(order.ready_at, settings.timezone)} /><Info label="Completed" value={formatAdminDateTime(order.completed_at, settings.timezone)} />{order.status === "cancelled" ? <Info label="Cancelled" value={formatAdminDateTime(order.cancelled_at, settings.timezone)} /> : null}</Card>
-          <PaymentsCard canManage={canManagePayments} orderId={order.id} payments={payments} timeZone={settings.timezone} />
+          <PaymentsCard refundAmount={notice.refund_amount} refundReason={notice.refund_reason} canManage={canManagePayments} orderId={order.id} payments={payments} timeZone={settings.timezone} />
           {order.special_instructions ? <Card className="p-6"><h2 className="text-xl font-black">Order note</h2><p className="mt-3">{order.special_instructions}</p></Card> : null}
         </aside>
       </div>
@@ -111,7 +111,7 @@ function CancellationNotice({ events }: { events: Array<{ event_type: string; me
 }
 
 /** Processor payments on this order, with refund and void for whoever may issue them. */
-function PaymentsCard({ canManage, orderId, payments, timeZone }: { canManage: boolean; orderId: string; payments: OrderPayment[]; timeZone: string }) {
+function PaymentsCard({ canManage, orderId, payments, timeZone, refundAmount, refundReason }: { canManage: boolean; orderId: string; payments: OrderPayment[]; timeZone: string; refundAmount?: string; refundReason?: string }) {
   return (
     <Card className="p-6">
       <h2 className="text-xl font-black">Card payments</h2>
@@ -143,9 +143,9 @@ function PaymentsCard({ canManage, orderId, payments, timeZone }: { canManage: b
                     <input name="payment_id" type="hidden" value={payment.id} />
                     <input name="idempotency_key" type="hidden" value={`refund-${randomUUID()}`} />
                     <p className="text-sm font-bold">Refund up to {formatCents(refundable)}</p>
-                    <Input defaultValue={(refundable / 100).toFixed(2)} id={`refund-amount-${payment.id}`} inputMode="decimal" label="Total refund" name="amount" required />
+                    <Input defaultValue={refundAmount && /^\d+(\.\d{1,2})?$/.test(refundAmount) && Number(refundAmount) * 100 <= refundable ? refundAmount : (refundable / 100).toFixed(2)} id={`refund-amount-${payment.id}`} inputMode="decimal" label="Total refund" name="amount" required />
                     {payment.provider === "stripe" ? <><Input defaultValue="0.00" id={`refund-tip-${payment.id}`} inputMode="decimal" label="Tip included in refund (explicit amount)" name="tip_amount" required /><p className="text-sm">The rest refunds the order amount. Tips already paid to a driver are recorded as recovery due.</p></> : null}
-                    <Input id={`refund-reason-${payment.id}`} label="Reason" maxLength={1000} name="reason" placeholder="Order was wrong" required />
+                    <Input defaultValue={refundReason?.slice(0, 1000)} id={`refund-reason-${payment.id}`} label="Reason" maxLength={1000} name="reason" placeholder="Order was wrong" required />
                     <Button type="submit" variant="danger">Refund</Button>
                   </form>
                 ) : null}

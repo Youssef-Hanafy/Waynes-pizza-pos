@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { FulfillmentEditor } from "../../src/app/pos/fulfillment-editor";
 import { CustomerScreen } from "../../src/app/pos/display/customer-screen";
 import { CustomerSignStep } from "../../src/app/pos/customer-steps";
 import type { OpenOrder } from "../../src/lib/orders/status";
@@ -14,8 +15,12 @@ function Register() {
     return () => window.removeEventListener("fixture:refresh", refresh);
   }, []);
   return <><p>Revision {revision} · Finished {finished}</p><CustomerSignStep
-    order={{ id: "00000000-0000-4000-8000-000000000001", order_number: "W1", total_cents: 1200 } as OpenOrder}
-    tipCents={0} onFinished={() => setFinished(revision + 1)} /></>;
+    order={{ id: "00000000-0000-4000-8000-000000000001", order_number: "W1", total_cents: revision ? 1700 : 1200 } as OpenOrder}
+    tipCents={revision ? 0 : 500} onFinished={() => setFinished(revision + 1)} /></>;
+}
+function Fulfillment() {
+ const [result, setResult] = useState("No change saved");
+ return <><p>{result}</p><FulfillmentEditor orderId="00000000-0000-4000-8000-000000000001" onChanged={value => setResult(`Saved ${value.fulfillment_type} ${value.total_cents}`)} /></>;
 }
 localStorage.setItem("wayne-customer-screen-register", "Front");
-createRoot(document.getElementById("root")!).render(location.pathname === "/register" ? <Register /> : <CustomerScreen storeName="Test store" />);
+createRoot(document.getElementById("root")!).render(location.pathname === "/fulfillment" ? <Fulfillment /> : location.pathname === "/register" ? <Register /> : <CustomerScreen storeName="Test store" />);

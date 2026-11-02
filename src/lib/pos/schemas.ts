@@ -138,7 +138,7 @@ export const posOrderLinesSchema = z.object({
   order: z.object({
     id: z.uuid(), order_number: z.string(), daily_number: z.number().int().nullable(), customer_name: z.string().nullable().transform((value) => value ?? ""),
     fulfillment_type: z.string(), status: z.string(), payment_status: z.string(), total_cents: z.number().int(), paid_cents: z.number().int(),
-    discount_cents: z.number().int(), source: z.string(), placed_at: z.string().nullable(),
+    discount_cents: z.number().int(), delivery_fee_cents: z.number().int().optional(), tip_cents: z.number().int().optional(), source: z.string(), placed_at: z.string().nullable(),
   }),
   lines: z.array(z.object({
     id: z.uuid(), menu_item_id: z.uuid().nullable(), variant_id: z.uuid().nullable(), name: z.string(), variant: z.string().nullable(),

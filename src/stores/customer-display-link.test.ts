@@ -130,3 +130,19 @@ describe("screen transitions", () => {
     expect(lastState()).toMatchObject({ phase: "idle" });
   });
 });
+
+it("ticket refreshes cannot replace a signature after its answer while the signature is saving", async () => {
+  const request = link.askCustomer({ phase: "sign", total_cents: 2500 });
+  await advance(600);
+  const requestId = lastState().request_id;
+  publish.mockResolvedValue(online({ response: { request_id: requestId, kind: "signature", signature_svg: "<svg/>" } }));
+  await advance(1500);
+  await expect(request.answer).resolves.toMatchObject({ kind: "signature" });
+  link.showOnCustomerScreen({ phase: "pay", total_cents: 2500 });
+  await advance(4500);
+  expect(lastState()).toMatchObject({ phase: "sign", request_id: requestId });
+  request.cancel();
+  link.thankCustomer();
+  await advance(600);
+  expect(lastState()).toMatchObject({ phase: "thanks" });
+});

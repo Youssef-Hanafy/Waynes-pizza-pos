@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
+import { FulfillmentEditor } from "./fulfillment-editor";
 import { Button } from "@/components/ui/button";
 import { fetchPrintDocument } from "@/hardware/printers/provider";
 import { formatCents } from "@/lib/menu/schemas";
@@ -150,13 +151,13 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems, onEdit }: { timeZ
     <section aria-label="Order details" className={`flex-1 rounded-2xl bg-white p-4 shadow-sm lg:min-h-0 lg:basis-1/2 lg:overflow-y-auto ${selected ? "block" : "hidden lg:block"}`}>
       {selected ? <>
         <Button className="mb-3 lg:hidden" onClick={() => setSelectedId(null)} size="lg" variant="secondary">‹ All orders</Button>
-        <OrderDetail addOns={addOns(selected.id)} key={selected.id} onAddItems={onEdit ?? onAddItems} onPay={onPay} onSelect={setSelectedId} order={selected} time={time} />
+        <OrderDetail addOns={addOns(selected.id)} key={selected.id} onAddItems={onEdit ?? onAddItems} onPay={onPay} onSelect={setSelectedId} onChanged={() => { void load(); }} order={selected} time={time} />
       </> : <div className="grid h-full place-items-center p-8 text-center text-wayne-muted"><p className="text-lg font-bold">Tap an order to change its items or add to it. Tap ⓘ Details to see who ordered, how it was paid, and to take payment or reprint.</p></div>}
     </section>
   </div>;
 }
 
-function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { order: DayOrder; addOns: DayOrder[]; time: (value: string | null) => string; onPay?: (orderId: string) => void; onAddItems?: (order: DayOrder) => void; onSelect: (orderId: string) => void }) {
+function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect, onChanged }: { order: DayOrder; addOns: DayOrder[]; time: (value: string | null) => string; onPay?: (orderId: string) => void; onAddItems?: (order: DayOrder) => void; onSelect: (orderId: string) => void; onChanged: () => void }) {
   const [doc, setDoc] = useState<PrintDocument | null>(null);
   const [itemsError, setItemsError] = useState("");
   const [note, setNote] = useState("");
@@ -263,6 +264,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect }: { ord
     </div> : null}
 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      {!["completed", "cancelled", "draft", "payment_pending"].includes(order.status) ? <FulfillmentEditor orderId={order.id} onChanged={() => { setDoc(null); onChanged(); void fetchPrintDocument(order.id).then(setDoc).catch(() => setItemsError("The changed order could not be loaded.")); }} /> : null}
       {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">✏️ Edit items / add items · same order</Button> : null}
       {unpaidOpen && onPay ? <Button className="sm:col-span-2" onClick={() => onPay(order.id)} size="lg" variant="brand">Take payment · {formatCents(Math.max(0, order.total_cents - order.paid_cents))}</Button> : null}
       <Button disabled={busy} onClick={() => { void printReceipt(); }} size="lg" variant="secondary">Print receipt</Button>

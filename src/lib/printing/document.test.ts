@@ -126,8 +126,8 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const text = tip.join("\n");
     expect(text).toContain("TIP & SIGNATURE - STORE COPY");
     expect(text).toMatch(/Tip added online\s+\$3\.00/);
-    expect(text).toMatch(/Extra tip:\s+_+/);
-    expect(text).toMatch(/Total:\s+_+/);
+    expect(text).not.toContain("Extra tip:");
+    expect(text).toMatch(/Total including tip\s+\$36\.99/);
     expect(text).toContain("X____");
     expect(text).toContain("PAID");
     expect(tip.every((line) => line.length <= 48)).toBe(true);
@@ -292,4 +292,16 @@ describe("receipts and kitchen tickets (build sheet §23)", () => {
     const receipt = layoutToText(buildReceipt({ ...doc, items: rung }), 48).join("\n");
     expect(receipt.indexOf("Coke")).toBeLessThan(receipt.indexOf("Two Topping Pizza"));
   });
+});
+
+it.each(["phone", "pos", "online"])("a prepaid tip on a %s slip never asks for another tip or a blank total", (source) => {
+ const tipped = { ...doc, order: { ...doc.order, source, tip_cents: 500, total_cents: 4000, payment_status: "authorized" } };
+ for (const columns of [32, 40, 48]) {
+  const text = layoutToText(buildTipSignatureSlip(tipped), columns).join("\n");
+  expect(text).not.toMatch(/Extra tip|ADD TIP BELOW|Total:\s+_|\nTip:\s+_/);
+  expect(text).toContain("TIP INCLUDED");
+  expect(text).toContain("$5.00");
+  expect(text).toContain("$40.00");
+  expect(text).toContain("X____");
+ }
 });
