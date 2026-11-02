@@ -7,6 +7,7 @@ import { cartLineUnitCents, choiceAllowsExtra, choicePriceDeltaCents, countedPor
 import type { CartLine, ToppingPlacement } from "@/lib/orders/schemas";
 import { uuid } from "@/lib/uuid";
 import { FitToSpace } from "./fit-to-space";
+import { ReorderTiles } from "./reorder-tiles";
 
 type MenuItem = PublicMenu[number]["items"][number];
 
@@ -161,8 +162,8 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
             {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
-          {/* Keep category order and the audited touch-target widths on every item. */}
-          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}>{group.choices.map((choice) => {
+          {/* The same option group shares its register layout across items. */}
+          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}><ReorderTiles key={group.id} label="modifiers" scope={`modifiers:${group.id}`}>{group.choices.map((choice) => {
           const count = selectedChoices[choice.id] ?? 0;
           const delta = choicePriceDeltaCents(choice, variantId);
           const comesWith = isIncludedChoice(choice);
@@ -188,7 +189,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
               </div> : null}</div>
             <button aria-label={`Add ${choice.name}`} className="min-h-16 bg-wayne-ok px-2 text-2xl font-black text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={count > 0 && !choiceAllowsExtra(group, choice)} onClick={() => setChoiceCount(group, choice.id, count + 1)} type="button">+</button>
           </div>;
-        })}</div></fieldset>;
+        })}</ReorderTiles></div></fieldset>;
         }) : <div className="mt-5 rounded-xl border-2 border-dashed border-wayne-border bg-wayne-cream p-5"><strong>No modifier group is assigned to this item yet.</strong><p className="mt-1 text-sm text-wayne-muted">The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.</p></div>}
         <label className="mt-3 grid gap-1 font-bold">Item notes<textarea className="rounded-xl border p-2 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={1} value={instructions} /></label>
       </FitToSpace>
