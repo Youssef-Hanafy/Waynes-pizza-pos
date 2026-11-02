@@ -1,0 +1,11 @@
+# Customer signature Done fix — November 2, 2026
+
+The register signature effect depended on the parent callback and the entire order object. A background refresh creates new identities, cleans up the active signature step and creates a new request. If a save is in flight, it still saves but the stopped step cannot finish checkout. The customer pad also reused ink/countdown/sent state across request IDs. Separately, pressing Done unmounted the pad before the send completed, losing the ink on a failed send and returning a disabled Done button; successful read polls immediately erased the send error.
+
+The signature effect now follows primitive order/signature inputs and calls the latest completion callback through React's Effect Event. The customer pad is keyed by request ID and remains mounted while submission is pending. A rejected send releases its submission guard and preserves the existing ink for Done. Submission errors are scoped to the request and are not cleared by successful heartbeat reads. Completion still requires the existing signature save and register confirmation.
+
+Before the fix, all three targeted browser regressions failed against the real React components. After the fix, five browser tests pass: failed-send ink preservation/exact resubmission; a fresh pad for a new request; parent refresh during a held signature save using the latest completion callback exactly once; manual Done; automatic submission. These run in CI. Local lint, TypeScript, all 999 existing Vitest tests (4 skipped), and the Next production build passed.
+
+APK 1.5.2 (version code 8) and subsequent native builds load the shared hosted POS at https://app.hanafymedia.com/pos. The signature UI is web code, not assets bundled in the APK. Deploying this code delivers the correction to both without replacing or re-signing the existing 1.5.2 installer. Already-open register and customer-screen documents must load the deployed website build through the normal safe update/reopen flow. No schema, native bridge, payment initiation, or APK identity change is required.
+
+Browser checks use synthetic data and controlled transport failures. Physical Elo/Fire tablet operation and the installed device's loaded build remain store acceptance checks; no real card charge is part of these tests.

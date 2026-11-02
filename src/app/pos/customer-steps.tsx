@@ -1,7 +1,7 @@
 "use client";
 
 import { logDevice } from "@/lib/pos/device-log";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
 import type { OpenOrder } from "@/lib/orders/status";
@@ -87,24 +87,29 @@ export function CustomerSignStep({ order, tipCents, onFinished }: { order: OpenO
   const error = view.stage === "failed" ? view.error : "";
   useEffect(() => { if (error) logDevice("pos.error_shown", error, { screen: "customer_signature", order: order.order_number }); }, [error, order.order_number]);
   const step = useRef<SignStep | null>(null);
+  const finish = useEffectEvent(onFinished);
+  const orderId = order.id;
+  const orderNumber = ticketNumber(order);
+  const totalCents = order.total_cents;
 
   useEffect(() => {
     const started = startSignStep({
-      ask: () => askCustomer({ phase: "sign", order_number: ticketNumber(order), total_cents: order.total_cents, tip_cents: tipCents }),
+      ask: () => askCustomer({ phase: "sign", order_number: orderNumber, total_cents: totalCents, tip_cents: tipCents }),
       saveSignature: async (svg) => {
-        const response = await fetch(`/api/pos/orders/${order.id}/signature`, {
+        const response = await fetch(`/api/pos/orders/${orderId}/signature`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ signature_svg: svg, tip_cents: tipCents }), signal: AbortSignal.timeout(12_000),
         });
         if (!response.ok) throw new Error(await readError(response, "The signature could not be saved."));
       },
       thank: () => thankCustomer(),
-      onFinished,
+      onFinished: () => finish(),
       onView: setView,
     });
     step.current = started;
     return () => { started.stop(); };
-  }, [order, tipCents, onFinished]);
+  // A refreshed order object or parent callback must not cancel an active save.
+  }, [orderId, orderNumber, totalCents, tipCents]);
 
   const saving = view.stage === "saving";
   const note = saving ? "Saving the signature…" : error ? "The signature wasn't saved." : "Waiting for the customer to sign on the screen…";

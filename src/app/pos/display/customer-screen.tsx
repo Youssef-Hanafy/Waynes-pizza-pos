@@ -66,6 +66,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   const [registerOnline, setRegisterOnline] = useState(true);
   const [answered, setAnswered] = useState("");
   const [problem, setProblem] = useState("");
+  const [answerProblem, setAnswerProblem] = useState<{ requestId: string; message: string } | null>(null);
   const full = useFullscreen();
   useAppUpdate(() => state.phase === "idle" || state.phase === "thanks");
 
@@ -100,27 +101,38 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
   }, [key]);
 
   const respond = useCallback(async (answer: Record<string, unknown>) => {
-    setAnswered(String(answer.request_id ?? ""));
+    const requestId = String(answer.request_id ?? "");
+    setAnswered(requestId);
+    setAnswerProblem(null);
     try {
       await respondToCustomerDisplay(key, answer);
+      return true;
     } catch {
-      setAnswered("");
-      setProblem("That didn't go through. Please tap again.");
+      setAnswered(current => current === requestId ? "" : current);
+      setAnswerProblem({ requestId, message: "That didn't go through. Please tap again." });
+      return false;
     }
   }, [key]);
 
   if (choosing || !key) return <RegisterPicker current={key} onPick={(value) => { saveKey(value); setKey(value); setChoosing(false); }} />;
 
   const waitingOnRegister = answered && answered === state.request_id;
+  const visibleProblem = answerProblem?.requestId === state.request_id ? answerProblem.message : problem;
 
   return <div className="fixed inset-0 flex select-none flex-col overflow-hidden bg-wayne-cream text-wayne-ink">
     {!full ? <button className="absolute inset-0 z-20 flex items-center justify-center bg-wayne-cream/95 text-3xl font-black text-wayne-green" onClick={goFullscreen} type="button">Tap anywhere to start</button> : null}
     <button aria-label="Screen settings" className="absolute right-2 top-2 z-10 size-10 rounded-full text-xl text-wayne-muted opacity-40 hover:opacity-100" onClick={() => setChoosing(true)} type="button">⚙</button>
-    {problem || !registerOnline ? <p className="absolute left-2 top-2 rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-wayne-muted">{problem || "Waiting for the register…"}</p> : null}
+    {visibleProblem || !registerOnline ? <p className="absolute left-2 top-2 rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-wayne-muted">{visibleProblem || "Waiting for the register…"}</p> : null}
 
     {state.phase === "idle" ? <Welcome storeName={storeName} />
       : state.phase === "tip" && !waitingOnRegister ? <TipChooser onAnswer={(tip) => { void respond({ request_id: state.request_id, kind: "tip", tip_cents: tip }); }} state={state} />
-      : state.phase === "sign" && !waitingOnRegister ? <SignaturePad onAnswer={(svg) => { void respond({ request_id: state.request_id, kind: "signature", signature_svg: svg }); }} state={state} />
+      : state.phase === "sign" ? <>
+        {/* Keep the ink while sending; only a different request gets a fresh pad. */}
+        <div className={waitingOnRegister ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+          <SignaturePad key={state.request_id} onAnswer={(svg) => respond({ request_id: state.request_id, kind: "signature", signature_svg: svg })} state={state} />
+        </div>
+        {waitingOnRegister ? <Centered><p className="text-4xl font-black">One moment…</p></Centered> : null}
+      </>
       : state.phase === "thanks" ? <Thanks state={state} storeName={storeName} />
       : waitingOnRegister ? <Centered>{state.phase === "tip"
         ? <><p className="text-4xl font-black">Thank you!</p><p className="mt-3 text-2xl">Please follow the card reader.</p></>
@@ -211,7 +223,7 @@ function TipChooser({ state, onAnswer }: { state: DisplayState; onAnswer: (tipCe
   </Centered>;
 }
 
-function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg: string) => void }) {
+function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg: string) => Promise<boolean> }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const strokes = useRef<Array<Array<[number, number]>>>([]);
   const drawing = useRef(false);
@@ -264,12 +276,13 @@ function SignaturePad({ state, onAnswer }: { state: DisplayState; onAnswer: (svg
     setHasInk(false);
     setSendIn(null);
   }
-  function done() {
+  async function done() {
     const element = canvas.current;
     if (!element || !strokes.current.length || sent.current) return;
     sent.current = true;
     setSendIn(null);
-    onAnswer(signatureSvg(strokes.current, element.clientWidth, element.clientHeight));
+    const accepted = await onAnswer(signatureSvg(strokes.current, element.clientWidth, element.clientHeight));
+    if (!accepted) sent.current = false;
   }
   // Counts down while the pen is up; touching the pad again starts over.
   useEffect(() => {
