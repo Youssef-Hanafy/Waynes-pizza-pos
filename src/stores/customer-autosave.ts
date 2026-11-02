@@ -20,6 +20,7 @@ const KEEP_FOR_MS = 3 * 24 * 60 * 60_000;
 const RETRY_EVERY_MS = 60_000;
 
 type Pending = { payload: PosSaveCustomer; queuedAt: number };
+let memoryPending: Pending[] | null = null;
 
 /** What each phone number was last saved as on this register, so the same save isn't sent twice. */
 const lastSaved = new Map<string, string>();
@@ -31,8 +32,7 @@ function storage(): Storage | null {
 
 export function readPendingSaves(): Pending[] {
   try {
-    const raw = storage()?.getItem(QUEUE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    const parsed: unknown = memoryPending ?? JSON.parse(storage()?.getItem(QUEUE_KEY) ?? "[]");
     if (!Array.isArray(parsed)) return [];
     const now = Date.now();
     return parsed.filter((item): item is Pending => Boolean(item && typeof item === "object"
@@ -42,6 +42,7 @@ export function readPendingSaves(): Pending[] {
 }
 
 function writePendingSaves(items: Pending[]) {
+  memoryPending = items;
   try { storage()?.setItem(QUEUE_KEY, JSON.stringify(items)); } catch { /* storage full or blocked: the next save tries again */ }
 }
 
@@ -67,47 +68,47 @@ function label(payload: PosSaveCustomer) {
  * profile, or null when it was already saved or is waiting to retry.
  */
 export function saveCustomerQuietly(payload: PosSaveCustomer): Promise<PosCustomer | null> {
-  startCustomerSaveRetry();
   const signature = JSON.stringify(payload);
-  if (lastSaved.get(payload.phone) === signature) return Promise.resolve(null);
-  const running = inFlight.get(signature);
+  if (lastSaved.get(payload.phone) === signature && !readPendingSaves().some(item => item.payload.phone === payload.phone)) return Promise.resolve(null);
+  // Persist before the request: a reload must not lose an unacknowledged save.
+  writePendingSaves(mergePending(readPendingSaves(), payload));
+  const attempt = sendPendingCustomer(payload.phone);
+  startCustomerSaveRetry();
+  return attempt;
+}
+
+/** Serialize each customer's writes so an older response cannot overwrite newer typing. */
+function sendPendingCustomer(phone: string): Promise<PosCustomer | null> {
+  const running = inFlight.get(phone);
   if (running) return running;
   const attempt = (async () => {
-    try {
-      const saved = await rememberCustomer(payload);
-      lastSaved.set(payload.phone, signature);
-      writePendingSaves(readPendingSaves().filter((item) => item.payload.phone !== payload.phone || JSON.stringify(item.payload) !== signature));
-      return saved;
-    } catch {
-      writePendingSaves(mergePending(readPendingSaves(), payload));
-      notify(`${label(payload)} isn't saved yet — the POS will keep trying by itself.`, "warn");
-      return null;
-    } finally {
-      inFlight.delete(signature);
+    let saved: PosCustomer | null = null;
+    for (;;) {
+      const item = readPendingSaves().find(item => item.payload.phone === phone);
+      if (!item) return saved;
+      const signature = JSON.stringify(item.payload);
+      try {
+        saved = await rememberCustomer(item.payload);
+        lastSaved.set(phone, signature);
+        // Only acknowledge this exact payload; keep anything typed during the request.
+        writePendingSaves(readPendingSaves().filter(other => other.payload.phone !== phone || JSON.stringify(other.payload) !== signature));
+      } catch {
+        notify(`${label(item.payload)} isn't saved yet — the POS will keep trying by itself.`, "warn");
+        return null;
+      }
     }
-  })();
-  inFlight.set(signature, attempt);
+  })().finally(() => inFlight.delete(phone));
+  inFlight.set(phone, attempt);
   return attempt;
 }
 
 let flushing = false;
-/** Send the saves still waiting on this register. */
+/** Send the saves still waiting on this register through the same per-phone queue. */
 export async function flushCustomerSaves() {
   if (flushing) return;
   flushing = true;
   try {
-    const waiting = readPendingSaves();
-    writePendingSaves(waiting); // drops expired ones
-    for (const item of waiting) {
-      try {
-        await rememberCustomer(item.payload);
-        lastSaved.set(item.payload.phone, JSON.stringify(item.payload));
-        writePendingSaves(readPendingSaves().filter((other) => other.payload.phone !== item.payload.phone || other.queuedAt > item.queuedAt));
-        notify(`✓ Saved ${label(item.payload)}`);
-      } catch {
-        continue; // still not through: tried again next time
-      }
-    }
+    for (const item of readPendingSaves()) await sendPendingCustomer(item.payload.phone);
   } finally {
     flushing = false;
   }
@@ -120,5 +121,5 @@ export function startCustomerSaveRetry() {
   started = true;
   window.addEventListener("online", () => void flushCustomerSaves());
   window.setInterval(() => void flushCustomerSaves(), RETRY_EVERY_MS);
-  void flushCustomerSaves();
+  queueMicrotask(() => void flushCustomerSaves());
 }

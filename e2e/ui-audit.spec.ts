@@ -15,7 +15,7 @@ async function boot(page: Page) {
   await expect(page.getByRole('navigation',{name:'POS sections'})).toBeVisible();
 }
 async function menu(page: Page) { await page.getByRole('button',{name:'Jump to take order →'}).click(); }
-async function item(page: Page) { await page.getByRole('button',{name:'Pizza 1 $12.00',exact:true}).click(); }
+async function item(page: Page) { await page.getByRole('button',{name:'Pizza 1 From $12.00',exact:true}).click(); }
 async function fits(page: Page) { expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true); }
 for(const [width,height,dpr] of [[1920,1080,1],[1280,720,1.5],[1024,600,1],[960,540,2],[800,600,1],[768,500,1],[767,600,1],[1280,400,1]]) {
   test(`register and item dialog ${width}x${height} DPR ${dpr}`,async ({browser},testInfo)=>{
