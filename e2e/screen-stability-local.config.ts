@@ -5,6 +5,7 @@ const port = Number(process.env.STABILITY_FIXTURE_PORT ?? 4177);
 export default defineConfig({
   testDir: ".",
   testMatch: ["screen-stability-local.spec.ts"],
+  outputDir: "../test-results/screen-stability",
   fullyParallel: false,
   workers: 1,
   reporter: "list",

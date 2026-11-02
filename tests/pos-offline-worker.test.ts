@@ -48,6 +48,23 @@ describe("network-only POS worker", () => {
     expect(await offline.text()).toContain("Can't reach the POS");
     expect(await (await navigate(w))!.text()).toContain('content="B"');
   });
+  it("shows recovery when headers arrive but the document body stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn<typeof fetch>((_request, init) => Promise.resolve(new Response(new ReadableStream({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode("<!doctype html><html>"));
+          init!.signal!.addEventListener("abort", () => stream.error(new Error("document timed out")));
+        },
+      }), { headers: { "content-type": "text/html" } })));
+      const pending = navigate(worker(fetcher));
+      await vi.advanceTimersByTimeAsync(45_000);
+      const response = (await pending)!;
+      expect(response.status).toBe(503);
+      expect(await response.text()).toContain("Can't reach the POS");
+      expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
   it.each([401, 403, 404, 500, 503])("preserves server status %s and authentication responses", async status => {
     const w = worker(vi.fn().mockResolvedValue(new Response("server response", { status })));
     expect((await navigate(w))!.status).toBe(status);

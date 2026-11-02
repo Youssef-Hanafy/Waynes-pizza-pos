@@ -49,3 +49,5 @@ jobs:
           path: |
             docs/elo-ui-audit/
             test-results/ui-audit/
+            test-results/screen-stability/
+            test-results/signature/

@@ -3,7 +3,7 @@
  * Never cache executable POS documents or substitute a previous deployment.
  * Activation removes only disposable Wayne frontend caches, never operational
  * localStorage, IndexedDB, cookies, drafts, or payment records. */
-const WORKER = "pos-sw 5 (network-only)";
+const WORKER = "pos-sw 6 (bounded recovery)";
 const PAGE_TIMEOUT_MS = 45000;
 
 self.addEventListener("install", () => { self.skipWaiting(); });
@@ -23,8 +23,28 @@ function isPosPage(url) {
 function recovery() {
   return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>POS connection recovery</title></head>
 <body><main><h1>Can't reach the POS</h1><p>Check the connection, then try again. Saved register work has been kept on this device.</p><a href="/pos">Try again now</a></main>
-<script>setTimeout(function(){location.reload()},10000);addEventListener('online',function(){location.reload()})</script></body></html>`, {
-    status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'" },
+<script>
+// Stay on this recovery screen while offline. A reconnect notification alone
+// does not mean the POS is reachable (store Wi-Fi can still have no internet).
+var checking = false;
+async function retry() {
+  if (checking) return;
+  checking = true;
+  var controller = new AbortController();
+  var timer = setTimeout(function(){controller.abort()}, 45000);
+  try {
+    var response = await fetch(location.href, {cache:'no-store', credentials:'same-origin', signal:controller.signal});
+    if (response.ok && (response.headers.get('content-type') || '').includes('text/html')) {
+      await response.arrayBuffer();
+      location.reload();
+    }
+  } catch (_) { /* Keep the recovery screen available for the next attempt. */ }
+  finally { clearTimeout(timer); checking = false; }
+}
+setInterval(retry, 10000);
+addEventListener('online', retry);
+</script></body></html>`, {
+    status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'" },
   });
 }
 
@@ -32,7 +52,12 @@ async function networkPage(request) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
   try {
-    return await fetch(request, { cache: "no-store", signal: controller.signal });
+    const response = await fetch(request, { cache: "no-store", signal: controller.signal });
+    // Fetch resolves at the headers. Keep the deadline until the entire HTML
+    // arrives, so a stalled response body cannot leave navigation loading forever.
+    // Return the original response to preserve authentication redirects and URLs.
+    await response.clone().arrayBuffer();
+    return response;
   } catch {
     return recovery();
   } finally { clearTimeout(timer); }

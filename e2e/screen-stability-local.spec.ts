@@ -31,7 +31,7 @@ async function boot(context: BrowserContext, build: string) {
   await page.clock.install();
   await page.goto("/pos");
   await expect(page.locator("#design")).toHaveText(`design ${build}`);
-  // First visit installs the offline worker; the second load is controlled by it and is saved as the offline copy.
+  // First visit installs the worker; the second load verifies it controls navigation.
   await expect.poll(() => page.evaluate(async () => Boolean((await navigator.serviceWorker.ready).active)), { timeout: 10_000 }).toBe(true);
   await page.reload();
   await expect(page.locator("#design")).toHaveText(`design ${build}`);
@@ -75,7 +75,7 @@ test("rapid back-to-back deployments (three in six minutes, as on 2026-10-31) ca
 test("slow store network after a deployment never brings the OLD design back (offline-copy rollback)", async ({ context }) => {
   test.setTimeout(240_000);
   const page = await boot(context, "dpl_A");
-  // The store's connection is slow (slower than the worker's 10 s page timeout) when a deployment goes live.
+  // The store's connection is slow when a deployment goes live.
   await control(page, "network", { delayMs: 12_000, targetDelayMs: 12_000 });
   await deploy(page, "dpl_B");
   await pass(page, 4 * MINUTE);
@@ -141,22 +141,28 @@ test("cached legacy UI is purged; offline refresh and restart recover without re
   await control(page, "reset"); await deploy(page, "dpl_CURRENT");
   await page.goto("/pos");
   await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
     localStorage.setItem("pos-drafts.v2", "unsynchronized-order-preservation-marker");
     localStorage.setItem("wayne.tip-drafts", "pending-tip-preservation-marker");
     for (const name of ["wayne-pos-v1-pages", "wayne-pos-v1-static", "wayne-pos-v1-meta"]) {
       await (await caches.open(name)).put("/pos", new Response("OBSOLETE POS DESIGN"));
     }
     await (await caches.open("operational-outbox")).put("/pending", new Response("unsynced operation"));
-    const registration = await navigator.serviceWorker.ready;
-    // Reinstall the real worker over seeded legacy caches to exercise migration.
-    await registration.unregister();
+    // Upgrade the installed worker as production does, without dropping its scope.
     await navigator.serviceWorker.register("/pos-sw.js?migration=1", { scope: "/pos", updateViaCache: "none" });
   });
+  // Cache deletion happens during activation, before clients.claim completes.
+  // Wait for the replacement to control this document before testing navigation.
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain("migration=1");
   await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(n => /^wayne-pos-.*-(pages|static|meta)$/.test(n)))).toEqual([]);
   await page.reload(); await expect(page.locator("#design")).toHaveText("design dpl_CURRENT");
   await control(page, "network", { mode: "fail-all" });
   await page.reload(); await expect(page.getByRole("heading", { name: "Can't reach the POS" })).toBeVisible();
   expect(await page.content()).not.toContain("OBSOLETE POS DESIGN");
+  await page.evaluate(() => { document.documentElement.dataset.recoveryDocument = "stable"; });
+  await page.clock.install();
+  await page.clock.runFor(30_000);
+  expect(await page.evaluate(() => document.documentElement.dataset.recoveryDocument)).toBe("stable");
   await page.close();
   const restarted = await context.newPage();
   await restarted.goto("/pos?shortcut=1");
@@ -167,4 +173,20 @@ test("cached legacy UI is purged; offline refresh and restart recover without re
   expect(await restarted.evaluate(() => localStorage.getItem("pos-drafts.v2"))).toBe("unsynchronized-order-preservation-marker");
   expect(await restarted.evaluate(() => localStorage.getItem("wayne.tip-drafts"))).toBe("pending-tip-preservation-marker");
   expect(await restarted.evaluate(async () => (await (await caches.open("operational-outbox")).match("/pending"))?.text())).toBe("unsynced operation");
+});
+
+test("offline recovery stays on one document and reconnects only when the POS is reachable", async ({ context }) => {
+  const page = await boot(context, "dpl_CURRENT");
+  await control(page, "network", { mode: "fail-all" });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Can't reach the POS" })).toBeVisible();
+  await page.evaluate(() => { document.documentElement.dataset.recoveryDocument = "stable"; });
+  await page.clock.runFor(30_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => document.documentElement.dataset.recoveryDocument)).toBe("stable");
+  await control(page, "network", { mode: "ok" });
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator("#design")).toHaveText("design dpl_CURRENT");
+  expect(await designs(page)).toEqual(["dpl_CURRENT"]);
 });

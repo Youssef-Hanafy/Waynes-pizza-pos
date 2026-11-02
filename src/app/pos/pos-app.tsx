@@ -10,11 +10,11 @@ import type { PublicMenu } from "@/lib/menu/schemas";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { activeDraft, draftFromCall, draftHasContent, isDraftIdle } from "@/lib/orders/drafts";
 import { customerDetailsPatch } from "@/lib/orders/start-order";
-import { callOnLine, ringingCallsToOpen } from "@/lib/phone/phone-state";
+import { callOnLine } from "@/lib/phone/phone-state";
 import type { PosCustomer } from "@/lib/pos/schemas";
 import { useHardwareState } from "@/stores/hardware-store";
 import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts } from "@/stores/order-store";
-import { getAutoOpenCalls, getTerminalLabel, phoneActions, phoneStore, setAutoOpenCalls, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
+import { getTerminalLabel, phoneActions, phoneStore, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
 import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
@@ -44,10 +44,8 @@ import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
 import { PhoneScreen, type StartPhoneOrder } from "./phone-screen";
-import { RingingBanner } from "./ringing-banner";
 import { usePosHistory } from "./use-pos-history";
 import { describeStep, useHistoryState } from "@/stores/pos-history";
-import { useStore } from "@/stores/create-store";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
 import { appUpdateStore, requestAppUpdate, useAppUpdateState } from "@/stores/app-update";
@@ -100,7 +98,6 @@ export function PosApp(props: Props) {
   useEffect(() => { void fetch("/api/admin-lock", { method: "POST" }).catch(() => undefined); }, []);
   const [section, setSection] = useState<Section>("order");
   const [customerFocus, setCustomerFocus] = useState<PosCustomer | null>(null);
-  const [phoneFocus, setPhoneFocus] = useState<{ key: string; n: number } | null>(null);
   const [payFocus, setPayFocus] = useState<{ orderId: string; n: number } | null>(null);
   /** Open the Payments screen on one order (from the order-sent screen or the Orders list). */
   function takePayment(orderId: string) {
@@ -253,51 +250,6 @@ export function PosApp(props: Props) {
     setSection("order");
   }
 
-  /**
-   * Auto pick-up.  When Line 1 or Line 2 rings, the call opens on this register
-   * by itself if the register is idle: an empty ticket or the order lists.
-   * Someone in the middle of a ticket, a customer form, settings, or another
-   * caller on the phone screen is never pulled away; the PHONE button and the
-   * ringing line card light up instead (§34.1).
-   */
-  useEffect(() => {
-    const seen = new Set<string>();
-    // Calls already on the lines when the POS opens are not popped.
-    for (const call of Object.values(phoneStore.get().calls)) seen.add(call.key);
-    let n = 0;
-    if (!callerIdEnabled) return;
-    return phoneStore.subscribe(() => {
-      const ringing = ringingCallsToOpen(phoneStore.get(), seen);
-      if (!ringing.length) return;
-      for (const call of ringing) seen.add(call.key);
-      if (!getAutoOpenCalls()) return;
-      // A list screen can still own an active dialog, PIN or field.
-      // Keep the ringing banner available without unmounting that work.
-      if (document.visibilityState !== "visible" || document.querySelector('[role="dialog"]')
-        || document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
-      const current = sectionRef.current;
-      const idle = current === "orders" || current === "delivery"
-        || (current === "order" && isDraftIdle(activeDraft(orderStore.get())) && !paymentPromptStore.get());
-      if (!idle) return;
-      n += 1;
-      setPhoneFocus({ key: ringing[0]!.key, n });
-      setSection("phone");
-    });
-  }, [callerIdEnabled]);
-
-  // Caller ID on every screen (owner, 2026-10-27).  A ticket with items, or a
-  // payment in progress, is never closed by the banner's one-tap Take order.
-  const paymentOpen = useStore(paymentPromptStore, (open) => open, false);
-  const ticketBusy = paymentOpen || (section === "order" && !isDraftIdle(currentDraft));
-  function openLineFromBanner(key: string) {
-    setPhoneFocus((current) => ({ key, n: (current?.n ?? 0) + 1000 }));
-    setSection("phone");
-  }
-  async function takeOrderFromBanner(call: Parameters<StartPhoneOrder>[0]) {
-    const result = await startPhoneOrder(call, call.matches.length === 1 ? call.matches[0]! : null);
-    if (!result.ok) notify(result.message, "warn");
-  }
-
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
   const warning = appBuild.offlineCopy && connectivity.reachable ? "Older saved POS screen detected — finish active work, then use More → This app to update"
@@ -340,7 +292,7 @@ export function PosApp(props: Props) {
               : update.status === "reloading" ? "Loading verified update…" : "Update available · More → This app"
           : ""}</span>
       </div>
-      {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
+      {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
       <PrintStationBadge />
       <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />
@@ -349,20 +301,19 @@ export function PosApp(props: Props) {
       {canOpenAdmin ? <Button asChild size="sm" variant="secondary"><Link href="/admin">🔒 Admin</Link></Button> : null}
     </header>
     {warning ? <p className="shrink-0 bg-wayne-warn-soft px-3 py-1.5 text-sm font-bold" role="status">⚠ {warning}</p> : null}
-    {callerIdEnabled && section !== "phone" ? <RingingBanner busy={ticketBusy} profileId={profileId} onOpenLine={(call) => openLineFromBanner(call.key)} onTakeOrder={(call) => void takeOrderFromBanner(call)} /> : null}
     {onlineAlerts.alerts.length ? <div className="flex shrink-0 flex-wrap items-center gap-3 bg-wayne-gold px-3 py-2 text-wayne-ink" role="alert">
       <span aria-hidden className="animate-bounce text-2xl">🔔</span>
       <p className="min-w-0 flex-1 font-black">
         {onlineAlerts.alerts.length === 1 ? "New online order" : `${onlineAlerts.alerts.length} new online orders`}
         <span className="ml-2 font-bold">{onlineAlerts.alerts.slice(-3).map((order) => `#${ticketNumber(order)} · ${order.customer_name || "Customer"} · ${order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · ${formatCents(order.total_cents)}`).join("   |   ")}</span>
       </p>
-      <Button onClick={() => { const delivery = onlineAlerts.alerts.every((order) => order.fulfillment_type === "delivery") && deliveryEnabled && settings.delivery_enabled; onlineAlerts.acknowledge(); setPhoneFocus(null); setPayFocus(null); setSection(delivery ? "delivery" : "orders"); }} size="sm" variant="brand">View</Button>
+      <Button onClick={() => { const delivery = onlineAlerts.alerts.every((order) => order.fulfillment_type === "delivery") && deliveryEnabled && settings.delivery_enabled; onlineAlerts.acknowledge(); setPayFocus(null); setSection(delivery ? "delivery" : "orders"); }} size="sm" variant="brand">View</Button>
       <Button onClick={onlineAlerts.acknowledge} size="sm" variant="secondary">Got it</Button>
     </div> : null}
     <OfflineOrdersBar />
     {notices.map((notice) => <div className={`flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 text-sm font-bold ${notice.tone === "warn" ? "bg-wayne-alert-soft text-wayne-alert" : "bg-wayne-ok-soft text-wayne-ok"}`} key={notice.id} role="status"><span>{notice.text}</span><button aria-label="Dismiss" className="min-h-9 px-2" onClick={() => dismissNotice(notice.id)} type="button">×</button></div>)}
     <nav aria-label="POS sections" className="flex shrink-0 gap-1 overflow-x-auto border-b border-wayne-border bg-white px-2 py-1.5">
-      {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPhoneFocus(null); setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
+      {tabs.map((tab) => <button aria-current={section === tab.id ? "page" : undefined} className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition ${section === tab.id ? "bg-wayne-green text-wayne-cream" : tab.id === "phone" && badge.ringing ? "bg-wayne-ok-soft text-wayne-ok" : "text-wayne-ink hover:bg-wayne-cream"}`} key={tab.id} onClick={() => { setPayFocus(null); setSection(tab.id); }} type="button">{tab.label}</button>)}
       {/* Open this on the tablet that faces the customer (owner, 2026-10-11). */}
       {/* A full page load (not a client-side link), so this tablet stops acting as a register. */}
       <a className="ml-auto flex min-h-11 items-center whitespace-nowrap rounded-xl border border-dashed border-wayne-border-strong px-4 text-sm font-black text-wayne-ink hover:bg-wayne-cream" href="/pos/display">🖥 Customer screen</a>
@@ -379,7 +330,7 @@ export function PosApp(props: Props) {
       orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 });
       setPayFocus(null); setSection("order");
     }} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
-    {section === "phone" && callerIdEnabled ? <PhoneScreen focusKey={phoneFocus?.key ?? null} key={phoneFocus ? `focus-${phoneFocus.n}` : "phone"} onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
+    {section === "phone" && callerIdEnabled ? <PhoneScreen onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
       // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items,
       // and they go on that same order even if it was paid (owner, 2026-10-19).
@@ -413,11 +364,10 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady, onApplyUpdate }
   const { statuses, online } = useHardwareState();
   const [terminal, setTerminal] = useState("");
   const [saved, setSaved] = useState(false);
-  const [autoOpen, setAutoOpen] = useState(true);
   const [chime, setChime] = useState(true);
   const [keyboard, setKeyboard] = useState<"auto" | "on" | "off">("auto");
   useEffect(() => {
-    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setAutoOpen(getAutoOpenCalls()); setChime(getOnlineChimeEnabled()); setKeyboard(getPosKeyboardSetting()); }, 0);
+    const timer = window.setTimeout(() => { setTerminal(getTerminalLabel()); setChime(getOnlineChimeEnabled()); setKeyboard(getPosKeyboardSetting()); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -433,10 +383,6 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady, onApplyUpdate }
         <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
           <input checked={chime} className="mt-1 size-5" onChange={(event) => { setChime(event.target.checked); setOnlineChimeEnabled(event.target.checked); }} type="checkbox" />
           <span><strong className="block text-base">Chime for new online orders</strong>Rings when an order comes in from the website, and again every 30 seconds until someone taps <em>Got it</em>. <button className="font-bold underline" onClick={(event) => { event.preventDefault(); playOrderChime(); }} type="button">Test the chime</button></span>
-        </label>
-        <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
-          <input checked={autoOpen} className="mt-1 size-5" onChange={(event) => { setAutoOpen(event.target.checked); setAutoOpenCalls(event.target.checked); }} type="checkbox" />
-          <span><strong className="block text-base">Pick up calls automatically</strong>When Line 1 or Line 2 rings and this register isn&apos;t in the middle of a ticket, the caller&apos;s card opens by itself. Turn off on a register that shouldn&apos;t jump to the phone (e.g. a kitchen tablet).</span>
         </label>
         <div className="mt-4 text-sm">
           <strong className="block text-base">On-screen keyboard</strong>

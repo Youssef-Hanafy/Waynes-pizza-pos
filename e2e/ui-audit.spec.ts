@@ -124,9 +124,34 @@ test('rich dinner modifiers, discount and open item dialogs can be dismissed',as
   await page.getByRole('dialog').getByRole('button',{name:/Cancel|Close/}).first().tap();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
-test('idle caller auto pickup remains available',async ({page})=>{
-  await boot(page);await page.evaluate(()=>window.dispatchEvent(new Event('audit:ring')));
-  await expect(page.getByRole('navigation',{name:'POS sections'}).getByRole('button',{name:/^Phone/})).toHaveAttribute('aria-current','page');
+for (const busy of [false, true]) test(`incoming call waits for Phone without a banner on ${busy ? 'active' : 'idle'} ticket`,async ({page})=>{
+  // Existing registers may still have the old automatic pickup preference.
+  await page.addInitScript(()=>localStorage.setItem('wayne.pos.autoOpenCalls','on'));
+  await boot(page);
+  if(busy){await menu(page);await item(page);await page.getByRole('button',{name:/Add to ticket/}).tap();}
+  const nav=page.getByRole('navigation',{name:'POS sections'});
+  const headerBefore=await page.locator('header').boundingBox();
+  const navBefore=await nav.boundingBox();
+  await page.evaluate(()=>window.dispatchEvent(new Event('audit:ring')));
+  const phone=page.getByRole('button',{name:'Phone lines, 1 waiting',exact:true});
+  await expect(phone).toBeVisible();
+  await expect(nav.getByRole('button',{name:/^(New|Current) Order/})).toHaveAttribute('aria-current','page');
+  await expect(page.getByText('Fixture caller')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Hide',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Open line now',exact:true})).toHaveCount(0);
+  expect(await page.locator('header').boundingBox()).toEqual(headerBefore);
+  expect(await nav.boundingBox()).toEqual(navBefore);
+  if(busy)await expect(page.getByRole('button',{name:'Increase item',exact:true})).toHaveCount(1);
+  await phone.tap();
+  await expect(nav.getByRole('button',{name:/^Phone/})).toHaveAttribute('aria-current','page');
+  await expect(page.getByText('Fixture caller')).toBeVisible();
+  await nav.getByRole('button',{name:/^(New|Current) Order/}).tap();
+  await expect(page.getByText('Fixture caller')).toHaveCount(0);
+  if(busy){
+    // Explicitly leaving a ticket shelves it under the existing Bring back control.
+    await page.getByRole('button',{name:/^↩ Bring back Walk-in/}).tap();
+    await expect(page.getByRole('button',{name:'Increase item',exact:true})).toHaveCount(1);
+  }
 });
 test('slow rendering, latency and repeated dialog cycles keep navigation and ticket positions',async ({page,context})=>{
   test.setTimeout(120_000);
