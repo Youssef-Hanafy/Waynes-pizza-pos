@@ -64,6 +64,7 @@ export function offlineTotals(draft: PosDraft, menu: PublicMenu, settings: Store
 /** Why this ticket can't be finished offline, or "" when it can. */
 export function offlineProblem(draft: PosDraft) {
   if (draft.addTo) return "Adding items to an order already sent needs the connection. Try again when it is back.";
+  if (draft.replacesOrderId) return "This ticket changes an order already sent, which needs the connection. Try again when it is back (the order is kept).";
   if (draft.promoCode.trim()) return "Promotion codes can't be checked offline. Take the code off (or use Discount), or wait for the connection.";
   if (!draft.cart.length) return "Add at least one item to the ticket.";
   return "";

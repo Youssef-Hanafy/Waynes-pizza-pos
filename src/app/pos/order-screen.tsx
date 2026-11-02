@@ -26,7 +26,7 @@ import { releaseOrderPrint, releaseOrderPrintNow } from "@/lib/printing/release-
 import { StartOrderCard } from "./start-order-card";
 import { OpenItemDialog } from "./open-item-dialog";
 import { DiscountDialog, type AppliedDiscount } from "./discount-dialog";
-import { closeOutUnsentTickets, restoreLastClosed, unsettledOrder, useLastClosed } from "@/stores/ticket-closeout";
+import { closeOutUnsentTickets, keepSentOrder, restoreLastClosed, unsettledOrder, useLastClosed } from "@/stores/ticket-closeout";
 import { beginOfflineOrder, offlineProblem } from "@/stores/offline-orders";
 import { OfflinePayment } from "./offline-payment";
 
@@ -92,15 +92,14 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   const [returnTo, setReturnTo] = useState<{ order: OpenOrder; delivery: boolean; fresh: boolean } | null>(null);
   /**
    * The order sent from this screen that nobody has paid or put on Pay later
-   * yet.  Leaving New Order (another tab, the phone) while it is open means it
-   * was never submitted: the server cancels it before anything prints, unless
-   * it was paid or printed meanwhile (owner, 2026-10-19).
+   * yet.  Leaving New Order (another tab, the phone, paying another order) keeps
+   * it like Pay later: unpaid in Today's Orders, kitchen slip printed (owner,
+   * 2026-11-01 — it used to be cancelled, which looked like orders cancelling
+   * themselves and coming back under the same name).
    */
   useEffect(() => () => {
     const orderId = unsettledOrder.id;
-    if (!orderId) return;
-    unsettledOrder.id = null;
-    void fetch(`/api/pos/orders/${orderId}/abandon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", keepalive: true }).catch(() => undefined);
+    if (orderId) keepSentOrder(orderId);
   }, []);
   const ticketListRef = useRef<HTMLDivElement>(null);
   // Taking payment for an order saved offline (owner, 2026-10-24).
@@ -356,7 +355,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         {printNote ? <p aria-live="polite" className="-mt-1 mb-2 text-sm font-bold">{printNote}</p> : null}
         <h1 className="sr-only">How are they paying?</h1>
         <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
-        {created.fresh ? <p className="mt-2 border-t border-wayne-border pt-1.5 text-sm font-bold text-wayne-muted">Leaving this screen without a payment or {created.delivery ? "Cash at the door" : "Pay later"} closes the order out — it is not sent.</p> : null}
+        {created.fresh ? <p className="mt-2 border-t border-wayne-border pt-1.5 text-sm font-bold text-wayne-muted">Back (‹) changes this same order #{ticketNumber(created.order)}. Leaving this screen keeps it unpaid, like {created.delivery ? "Cash at the door" : "Pay later"}.</p> : null}
       </section>
     </FitToSpace>;
   }

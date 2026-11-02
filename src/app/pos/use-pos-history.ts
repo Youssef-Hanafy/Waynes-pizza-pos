@@ -78,8 +78,8 @@ export function usePosHistory<S extends string>(section: S, setSection: (next: S
 
   useEffect(() => () => { if (settle.current !== null) window.clearTimeout(settle.current); }, []);
 
-  /** Put a step's ticket back on the screen. "revive" = the ticket was just taken back from the payment screen. */
-  function putBack(step: HistoryStep, revive: boolean) {
+  /** Put a step's ticket back on the screen. `revive` = the order the ticket was just taken back from (payment screen). */
+  function putBack(step: HistoryStep, revive: string | null) {
     if (step.section !== shown.current) setSection(step.section as S);
     if (step.section !== "order" || !step.ticket) return;
     const state = orderStore.get();
@@ -90,7 +90,7 @@ export function usePosHistory<S extends string>(section: S, setSection: (next: S
       if (revive || wasClosedUnsent(step.draftId)) {
         if (step.draftId && lastClosedStore.get()?.draft.id === step.draftId) lastClosedStore.set(null);
         if (step.draftId) forgetClosedUnsent(step.draftId);
-        const fresh = reviveTicket(step.ticket);
+        const fresh = reviveTicket(step.ticket, revive);
         historyStore.set((current) => remapDraft(current, step.draftId ?? "", fresh));
         return;
       }
@@ -115,20 +115,25 @@ export function usePosHistory<S extends string>(section: S, setSection: (next: S
     if (!moved) return;
     let revive = false;
     if (paymentPromptStore.get()) {
-      // On the payment screen of an order just sent, Back takes the ticket back to change it:
-      // the order is closed out exactly as leaving the screen does (cancelled only if nothing
-      // was paid or printed for it), and only once the server confirms is the ticket put back.
+      // On the payment screen of an order just sent, Back takes the ticket back to change it.
+      // The order is NOT cancelled any more (owner, 2026-11-01: orders "cancelling themselves and
+      // then getting recreated with the same names"): it stays on the server, unpaid and with its
+      // kitchen slip still held, and sending the changed ticket updates that same order — same
+      // slip number.  It stays this register's open order, so leaving keeps it like Pay later.
       const orderId = unsettledOrder.id;
       if (direction !== "back" || !orderId) { notify("Finish this payment, or tap Pay later, first.", "warn"); return; }
       busy.current = true;
       try {
-        const response = await fetch(`/api/pos/orders/${orderId}/abandon`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10_000) });
-        const body = (await response.json().catch(() => null)) as { cancelled?: boolean } | null;
-        if (!response.ok || !body?.cancelled) { notify("That order already has a payment or a printed slip, so it stays — open it from Today's Orders to change it.", "warn"); return; }
-        unsettledOrder.id = null;
+        const response = await fetch(`/api/pos/orders/${orderId}/lines`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+        const body = (await response.json().catch(() => null)) as { order?: { status?: string; payment_status?: string; paid_cents?: number } } | null;
+        if (!response.ok || !body?.order) { notify("No answer from the server — try Back again in a moment.", "warn"); return; }
+        if (body.order.status !== "placed" || body.order.payment_status !== "unpaid" || (body.order.paid_cents ?? 0) > 0) {
+          notify("That order already has a payment, so it stays — open it from Today's Orders to change it.", "warn");
+          return;
+        }
         takenBack.orderId = orderId;
         revive = true;
-        logDevice("pos.history_back_from_payment", "", { order_id: orderId });
+        logDevice("pos.history_back_from_payment", "", { order_id: orderId, kept: true });
       } catch {
         notify("No answer from the server — try Back again in a moment.", "warn");
         return;
@@ -138,7 +143,7 @@ export function usePosHistory<S extends string>(section: S, setSection: (next: S
     }
     restoring.current = true;
     historyStore.set(moved.state);
-    putBack(moved.target, revive);
+    putBack(moved.target, revive ? takenBack.orderId : null);
     // Once the screen has changed, this is where the register is.
     window.setTimeout(() => {
       restoring.current = false;
@@ -163,10 +168,13 @@ function tappedChange(before: HistoryStep, after: HistoryStep) {
     || JSON.stringify(a.cart) !== JSON.stringify(b.cart) || JSON.stringify(a.addTo) !== JSON.stringify(b.addTo);
 }
 
-/** The same ticket again under a new id and key (the order it became was cancelled), on screen. */
-function reviveTicket(ticket: TicketSnapshot): string {
+/**
+ * The same ticket again under a new id and key, on screen.  Taken back from the payment
+ * screen, it is tied to that order (replacesOrderId): sending it again updates the order.
+ */
+function reviveTicket(ticket: TicketSnapshot, replacesOrderId: string | null): string {
   const base = blankDraft();
-  const fresh: PosDraft = { ...base, ...ticket, id: base.id, idempotencyKey: base.idempotencyKey, createdAt: base.createdAt, updatedAt: base.updatedAt };
+  const fresh: PosDraft = { ...base, ...ticket, id: base.id, idempotencyKey: base.idempotencyKey, createdAt: base.createdAt, updatedAt: base.updatedAt, replacesOrderId };
   orderStore.set((state) => {
     const current = activeDraft(state);
     const drafts = state.drafts.filter((candidate) => candidate.id !== current.id || draftHasContent(candidate));
