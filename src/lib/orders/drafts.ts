@@ -133,6 +133,12 @@ export const posDraftSchema = z.object({
   }).nullable().optional().default(null),
   /** Taken while offline (owner, 2026-10-24); null for every normal ticket. */
   offline: offlineOrderSchema.nullable().optional().default(null),
+  /**
+   * Taken back from the payment screen to change it (owner, 2026-11-01): sending
+   * it again updates THIS order — same order, same slip number — instead of
+   * cancelling it and making a new one.  null for every other ticket.
+   */
+  replacesOrderId: z.uuid().nullable().optional().default(null),
 });
 export type PosDraft = z.infer<typeof posDraftSchema>;
 
@@ -173,6 +179,7 @@ export function blankDraft(patch: Partial<PosDraft> = {}, now = new Date().toISO
     presetDiscountId: "",
     paymentMethod: "test_manual",
     isTest: false,
+    replacesOrderId: null,
     syncedVersion: null,
     syncedAt: null,
     submitPending: false,
@@ -316,6 +323,8 @@ export function draftToOrderPayload(draft: PosDraft) {
       special_instructions: line.special_instructions, modifiers: line.open_item ? [] : line.modifiers, lists_included: !line.open_item,
       ...(line.open_item ? { open_item: line.open_item } : {}),
     })),
+    // Changed after Back from the payment screen: the same order is updated (owner, 2026-11-01).
+    ...(draft.replacesOrderId ? { replaces_order_id: draft.replacesOrderId } : {}),
     // Taken offline: the counter handled the kitchen ticket, so the server never prints it (owner, 2026-10-24).
     ...(draft.offline ? { offline_printed: true, offline_taken_at: draft.offline.takenAt, offline_local_number: draft.offline.localNumber } : {}),
   };

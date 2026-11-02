@@ -26,6 +26,6 @@ export async function POST(request: Request) {
 }
 
 function safePosError(message: string) {
-  const allowed = ["required", "valid", "unavailable", "minimum", "modifier", "variant", "Ticket", "quantity", "Promotion", "discount", "address", "customer", "TEST", "cash", "pickup", "delivery"];
+  const allowed = ["sent again", "required", "valid", "unavailable", "minimum", "modifier", "variant", "Ticket", "quantity", "Promotion", "discount", "address", "customer", "TEST", "cash", "pickup", "delivery"];
   return allowed.some((part) => message.toLowerCase().includes(part.toLowerCase())) ? message : "The POS order could not be submitted.";
 }

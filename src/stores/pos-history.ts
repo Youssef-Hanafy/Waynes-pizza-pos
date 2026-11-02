@@ -18,7 +18,9 @@ import { createStore, useStore } from "./create-store";
  * revive an order that was sent, and never re-open a phone line.
  */
 
-export const NOT_RESTORED = ["id", "idempotencyKey", "createdAt", "updatedAt", "held", "syncedVersion", "syncedAt", "submitPending", "offline", "phoneCallKey", "phoneCallId"] as const;
+// replacesOrderId (owner, 2026-11-01): a ticket taken back from the payment screen stays tied to its
+// order whatever step Back / Forward shows, so sending it again can never make a second order.
+export const NOT_RESTORED = ["id", "idempotencyKey", "createdAt", "updatedAt", "held", "syncedVersion", "syncedAt", "submitPending", "offline", "phoneCallKey", "phoneCallId", "replacesOrderId"] as const;
 export type TicketSnapshot = Omit<PosDraft, (typeof NOT_RESTORED)[number]>;
 
 export type HistoryStep = {
@@ -109,7 +111,7 @@ export function forgetClosedUnsent(id: string) {
   closedUnsent.delete(id);
 }
 
-/** The order Back took back from its payment screen (cancelled on the server), so that screen closes. */
+/** The order Back took back from its payment screen (kept on the server, unpaid, to be changed), so that screen closes. */
 export const takenBack: { orderId: string | null } = { orderId: null };
 
 const initial: HistoryState = { back: [], current: null, forward: [], restores: 0 };

@@ -76,6 +76,8 @@ export const posOrderInputSchema = z.object({
   offline_printed: z.boolean().optional().default(false),
   offline_taken_at: z.union([z.literal(""), z.iso.datetime({ offset: true })]).optional().default(""),
   offline_local_number: z.string().trim().max(20).optional().default(""),
+  /** The unpaid, unprinted order this ticket was taken back from (owner, 2026-11-01): updated in place. */
+  replaces_order_id: z.uuid().optional(),
 }).superRefine((value, context) => {
   // A phone caller who does not want a profile is still a phone order, but
   // without an address on file it can only be picked up.
@@ -102,6 +104,8 @@ export const posOrderCreatedSchema = z.object({
   daily_number: z.number().int().nullable().optional().default(null),
   total_cents: z.number().int(),
   duplicate: z.boolean(),
+  /** Sent again after Back: the same order was updated (owner, 2026-11-01). */
+  replaced: z.boolean().optional().default(false),
 });
 
 /**

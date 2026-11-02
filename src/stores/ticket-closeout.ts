@@ -1,8 +1,9 @@
 "use client";
 
 import { activeDraft, blankDraft, draftHasContent, removeDraft, type PosDraft } from "@/lib/orders/drafts";
+import { releaseOrderPrint } from "@/lib/printing/release-print";
 import { createStore, useStore } from "./create-store";
-import { draftSync } from "./draft-sync";
+import { draftSync, notify } from "./draft-sync";
 import { orderStore } from "./order-store";
 import { phoneActions, phoneStore } from "./phone-store";
 import { ACTIVE_STATUSES } from "@/lib/phone/phone-state";
@@ -51,6 +52,9 @@ export function closeOutUnsentTickets(options: { keepActive?: boolean } = {}) {
     window.setTimeout(() => { if (lastClosedStore.get()?.closedAt === closedAt) lastClosedStore.set(null); }, RESTORE_FOR_MS);
   }
   for (const draft of closing) {
+    // A ticket taken back from the payment screen to change it: its order was already sent,
+    // so it is kept exactly as sent — unpaid, like Pay later — never dropped (owner, 2026-11-01).
+    if (draft.replacesOrderId) keepSentOrder(draft.replacesOrderId);
     if (!draftHasContent(draft)) continue;
     closeCall(draft);
     void draftSync.discard(draft);
@@ -86,10 +90,20 @@ export function useLastClosed() {
 
 /**
  * The order just sent from New Order that has no payment and no Pay later yet.
- * Leaving New Order closes it out (the server cancels it if nothing was paid or
- * printed); opening that same order to pay it elsewhere keeps it.
+ * Leaving it (another tab, another order, the phone) keeps it exactly like Pay
+ * later: it stays an unpaid order in Today's Orders and its kitchen slip prints,
+ * so the food is made (owner, 2026-11-01 — it used to be cancelled, and orders
+ * looked like they cancelled themselves).  Opening that same order to pay it
+ * elsewhere keeps it too.
  */
 export const unsettledOrder: { id: string | null } = { id: null };
+
+/** Keep a sent order as it is, unpaid (Pay later): its held kitchen slip prints. */
+export function keepSentOrder(orderId: string) {
+  if (unsettledOrder.id === orderId) unsettledOrder.id = null;
+  releaseOrderPrint(orderId);
+  notify("The order you left was kept as sent, unpaid (like Pay later) — take its payment from Today's Orders.", "warn");
+}
 
 export function keepUnsettledOrder(orderId: string) {
   if (unsettledOrder.id === orderId) unsettledOrder.id = null;
