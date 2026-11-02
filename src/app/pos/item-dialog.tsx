@@ -161,8 +161,11 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
             {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
-          {/* As many options per row as the width allows (wider for the Left / Whole / Right buttons). */}
-          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "15rem" : "12rem"}), 1fr))` }}>{[...group.choices].sort((a, b) => Number(isIncludedChoice(b)) - Number(isIncludedChoice(a))).map((choice) => {
+          {/* As many options per row as the width allows (wider for the Left / Whole / Right buttons).
+              Always in the menu's own order, the same spot on every item (Ehab, 2026-11-01: "the
+              modifiers are moving around") — what the item comes with is shown in the strip above
+              and highlighted here, never moved to the front. */}
+          <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "15rem" : "12rem"}), 1fr))` }}>{group.choices.map((choice) => {
           const count = selectedChoices[choice.id] ?? 0;
           const delta = choicePriceDeltaCents(choice, variantId);
           const comesWith = isIncludedChoice(choice);

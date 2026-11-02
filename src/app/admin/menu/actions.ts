@@ -296,6 +296,8 @@ async function writeMenuItem(id: string | null, formData: FormData) {
     return { error: result.error.message };
   }
   if (!z.uuid().safeParse(result.data).success || (id && result.data !== id)) return { error: "The database did not confirm this save. Reload before retrying." };
+  // Same option order on every item in the category (Ehab, 2026-11-01: "the modifiers are moving around").
+  await alignCategoryOptionOrder(supabase, payload.data.category_id);
   revalidateMenu();
   if (id) revalidatePath(`/admin/menu/items/${id}`);
   menuRedirect();
@@ -453,6 +455,20 @@ const categoryOptionsSchema = z.object({
     .max(50),
 });
 
+/**
+ * One option order per category, the same on every item (Ehab, 2026-11-01:
+ * "the modifiers are moving around and in different spots").  Only moves
+ * options, never changes them, so a failure here never blocks the save.
+ */
+async function alignCategoryOptionOrder(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, categoryId: string) {
+  if (!z.uuid().safeParse(categoryId).success) return;
+  try {
+    await supabase.rpc("wayne_align_category_option_order", { target_category_id: categoryId });
+  } catch {
+    // Re-aligned on the next save of this category.
+  }
+}
+
 export async function saveCategoryOptionsAction(
   categoryId: string,
   formData: FormData,
@@ -480,6 +496,8 @@ export async function saveCategoryOptionsAction(
       })
     : { data: {}, error: null };
   if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
+  // A new option used to go to the end of each item's copy, so it sat in a different spot on every item.
+  await alignCategoryOptionOrder(supabase, categoryId);
   // Included portions per size ("a Large comes with 3 sauces").
   if (parsed.data!.size_rules.length) {
     const saved = await supabase.rpc("wayne_save_category_size_rules", {
