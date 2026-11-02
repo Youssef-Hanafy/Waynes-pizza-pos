@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ import { MAX_RELOADS_PER_HOUR, SETTLE_MS, STALL_MS } from "../src/lib/pos/update
  * instead of reaching the store.  If one of these must change, change it here on
  * purpose, with the reason, in the same commit.
  */
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(join(root, dir))) {

@@ -40,4 +40,25 @@ describe("customer autosave and order submission across PostgreSQL sessions", ()
     expect((await db.admin.query("select count(*)::int n from public.customers where phone_normalized='+15085550182'")).rows[0].n).toBe(1);
     expect((await db.admin.query("select count(*)::int n from public.customer_addresses a join public.customers c on c.id=a.customer_id where c.phone_normalized='+15085550182'")).rows[0].n).toBe(1);
   });
+  it("recalls an autosaved profile and delivery address on the next real caller event", async () => {
+    const saved = await call("wayne_pos_remember_customer", {
+      phone: "5085550183", first_name: "Returning", last_name: "Caller", email: "",
+      address: { address1: "93 West Boylston St", address2: "2", city: "Worcester", state: "MA", postal_code: "01606" },
+    });
+    const ring = await db.admin.query("select public.wayne_record_phone_call($1::jsonb) value", [JSON.stringify({
+      line_number: 1, caller_number: "+15085550183", caller_name: "CALLER ID NAME", event: "start", direction: "inbound",
+    })]);
+    expect(ring.rows[0].value).toMatchObject({ ok: true, matched: true });
+    const client = await db.connect();
+    await client.query("begin; set local role authenticated");
+    await client.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+    const board = (await client.query("select public.wayne_phone_board() value")).rows[0].value;
+    await client.query("commit");
+    const incoming = board.lines.find((line: { line_number: number }) => line.line_number === 1).call;
+    expect(incoming.matches).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: saved.id, first_name: "Returning", last_name: "Caller",
+      addresses: expect.arrayContaining([expect.objectContaining({ address1: "93 West Boylston St", address2: "2" })]),
+    })]));
+  });
+
 });

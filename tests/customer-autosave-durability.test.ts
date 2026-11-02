@@ -14,6 +14,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("durable customer save coordination", () => {
+  it("retains an unsaved customer through a long outage and saves after restart", async () => {
+    values.set(key, JSON.stringify([{ payload, queuedAt: Date.now() - 7 * 24 * 60 * 60_000 }]));
+    const store = await import("@/stores/customer-autosave");
+    expect(store.readPendingSaves()).toHaveLength(1);
+    mocks.remember.mockResolvedValue({ first_name: "First" });
+    await store.flushCustomerSaves();
+    expect(mocks.remember).toHaveBeenCalledWith(payload);
+    expect(store.readPendingSaves()).toEqual([]);
+  });
+
   it("persists before sending and serializes newer typing after an unacknowledged save", async () => {
     let finish!: (value: unknown) => void;
     mocks.remember.mockImplementationOnce(() => {

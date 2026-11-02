@@ -171,3 +171,20 @@ test('customer lookup opens a representative customer without saving records',as
   await page.screenshot({path:`${root}/customer-lookup-run${testInfo.repeatEachIndex+1}.png`});
   await nav.getByRole('button',{name:'New Order',exact:true}).tap();
 });
+
+test('modifier controls keep their positions when reopening and switching between category items',async ({page})=>{
+  await page.setViewportSize({width:1280,height:720});await boot(page);await menu(page);
+  await page.getByRole('button',{name:'Dinners',exact:true}).tap();
+  const positions=async()=>page.getByRole('dialog').getByRole('button',{name:/^(Add|Remove) /}).evaluateAll(buttons=>buttons.map(button=>{
+    const box=button.getBoundingClientRect();return {name:button.getAttribute('aria-label'),x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)};
+  }));
+  await page.getByRole('button',{name:'Dinners 1 $12.00',exact:true}).tap();
+  await expect(page.getByRole('button',{name:'Add French Fries',exact:true})).toBeVisible();
+  await page.waitForTimeout(250);
+  const reference=await positions();
+  for(const name of ['Dinners 2 $12.00','Dinners 1 $12.00']){
+    await page.getByRole('button',{name:'Close item'}).tap();
+    await page.getByRole('button',{name,exact:true}).tap();
+    await expect.poll(positions).toEqual(reference);
+  }
+});

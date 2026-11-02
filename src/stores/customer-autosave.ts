@@ -16,7 +16,6 @@ import { notify } from "./draft-sync";
  */
 
 const QUEUE_KEY = "wayne.pos.pendingCustomerSaves.v1";
-const KEEP_FOR_MS = 3 * 24 * 60 * 60_000;
 const RETRY_EVERY_MS = 60_000;
 
 type Pending = { payload: PosSaveCustomer; queuedAt: number };
@@ -34,9 +33,8 @@ export function readPendingSaves(): Pending[] {
   try {
     const parsed: unknown = memoryPending ?? JSON.parse(storage()?.getItem(QUEUE_KEY) ?? "[]");
     if (!Array.isArray(parsed)) return [];
-    const now = Date.now();
     return parsed.filter((item): item is Pending => Boolean(item && typeof item === "object"
-      && typeof (item as Pending).queuedAt === "number" && now - (item as Pending).queuedAt < KEEP_FOR_MS
+      && typeof (item as Pending).queuedAt === "number"
       && typeof (item as Pending).payload?.phone === "string"));
   } catch { return []; }
 }

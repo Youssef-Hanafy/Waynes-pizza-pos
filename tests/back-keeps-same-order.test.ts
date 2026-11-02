@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,7 +80,7 @@ describe("leaving keeps a sent order (like Pay later), never cancels it", () => 
 });
 
 describe("guard: no register screen cancels a sent order by itself any more", () => {
-  const root = new URL("..", import.meta.url).pathname;
+  const root = fileURLToPath(new URL("..", import.meta.url));
   function files(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(join(root, dir))) {
       const path = join(dir, name);
