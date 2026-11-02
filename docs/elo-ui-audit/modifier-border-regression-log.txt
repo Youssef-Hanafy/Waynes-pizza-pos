@@ -1,0 +1,111 @@
+
+> waynes-pizza-pos@0.1.0 test:ui-audit
+> playwright test -c e2e/ui-audit.config.ts --repeat-each=2 --grep-invert slow rendering
+
+[WebServer] (node:33776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:33794) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:33795) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 32 tests using 1 worker
+
+(node:33819) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1920x1080 DPR 1 (967ms)
+  ✓   2 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x720 DPR 1.5 (831ms)
+  ✓   3 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1024x600 DPR 1 (787ms)
+  ✓   4 e2e/ui-audit.spec.ts:21:3 › register and item dialog 960x540 DPR 2 (827ms)
+  ✓   5 e2e/ui-audit.spec.ts:21:3 › register and item dialog 800x600 DPR 1 (790ms)
+  ✓   6 e2e/ui-audit.spec.ts:21:3 › register and item dialog 768x500 DPR 1 (774ms)
+  ✓   7 e2e/ui-audit.spec.ts:21:3 › register and item dialog 767x600 DPR 1 (774ms)
+  ✓   8 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x400 DPR 1 (797ms)
+  ✓   9 e2e/ui-audit.spec.ts:38:1 › item notes keyboard leaves footer usable and preserves single-tap add (616ms)
+  ✓  10 e2e/ui-audit.spec.ts:48:1 › repeated section navigation, Back, refresh, offline and reconnect preserve loaded document (8.2s)
+  ✓  11 e2e/ui-audit.spec.ts:68:1 › second register waits without evicting first (761ms)
+  ✓  12 e2e/ui-audit.spec.ts:75:1 › ringing call does not dismiss driver clock dialog (646ms)
+  ✓  13 e2e/ui-audit.spec.ts:89:1 › a deployment waits for operator approval and a later target requires new approval (19.5s)
+  ✘  14 e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed (545ms)
+(node:34888) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 e2e/ui-audit.spec.ts:127:1 › idle caller auto pickup remains available (349ms)
+  ✓  16 e2e/ui-audit.spec.ts:143:1 › open synthetic order and payment selection without submitting a charge (913ms)
+(node:34899) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1920x1080 DPR 1 (1.0s)
+  ✓  18 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x720 DPR 1.5 (995ms)
+  ✓  19 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1024x600 DPR 1 (857ms)
+  ✓  20 e2e/ui-audit.spec.ts:21:3 › register and item dialog 960x540 DPR 2 (773ms)
+  ✓  21 e2e/ui-audit.spec.ts:21:3 › register and item dialog 800x600 DPR 1 (749ms)
+  ✓  22 e2e/ui-audit.spec.ts:21:3 › register and item dialog 768x500 DPR 1 (762ms)
+  ✓  23 e2e/ui-audit.spec.ts:21:3 › register and item dialog 767x600 DPR 1 (763ms)
+  ✓  24 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x400 DPR 1 (773ms)
+  ✓  25 e2e/ui-audit.spec.ts:38:1 › item notes keyboard leaves footer usable and preserves single-tap add (576ms)
+  ✓  26 e2e/ui-audit.spec.ts:48:1 › repeated section navigation, Back, refresh, offline and reconnect preserve loaded document (7.2s)
+  ✓  27 e2e/ui-audit.spec.ts:68:1 › second register waits without evicting first (514ms)
+  ✓  28 e2e/ui-audit.spec.ts:75:1 › ringing call does not dismiss driver clock dialog (510ms)
+  ✓  29 e2e/ui-audit.spec.ts:89:1 › a deployment waits for operator approval and a later target requires new approval (18.3s)
+  ✘  30 e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed (519ms)
+(node:35037) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  31 e2e/ui-audit.spec.ts:127:1 › idle caller auto pickup remains available (278ms)
+  ✓  32 e2e/ui-audit.spec.ts:143:1 › open synthetic order and payment selection without submitting a charge (803ms)
+
+
+  1) e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed
+
+    Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 44
+    Received:    42.796875
+
+      113 |   const modifier=page.getByRole('button',{name:'Add French Fries',exact:true});
+      114 |   await expect.poll(async()=> (await modifier.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    > 115 |   expect((await modifier.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+          |                                                  ^
+      116 |   await modifier.tap();
+      117 |   await page.screenshot({path:`${root}/dinner-modifiers-run${testInfo.repeatEachIndex+1}.png`});
+      118 |   await page.getByRole('button',{name:'Close item'}).tap();
+        at /Users/youssefhanafy/Downloads/hanafy-retention-v1/e2e/ui-audit.spec.ts:115:50
+
+    Error Context: test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed
+
+    Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 44
+    Received:    42.796875
+
+      113 |   const modifier=page.getByRole('button',{name:'Add French Fries',exact:true});
+      114 |   await expect.poll(async()=> (await modifier.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    > 115 |   expect((await modifier.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+          |                                                  ^
+      116 |   await modifier.tap();
+      117 |   await page.screenshot({path:`${root}/dinner-modifiers-run${testInfo.repeatEachIndex+1}.png`});
+      118 |   await page.getByRole('button',{name:'Close item'}).tap();
+        at /Users/youssefhanafy/Downloads/hanafy-retention-v1/e2e/ui-audit.spec.ts:115:50
+
+    Error Context: test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed-repeat1/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/ui-audit/ui-audit-rich-dinner-modif-b68fe-em-dialogs-can-be-dismissed-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed
+    e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed
+  30 passed (1.3m)

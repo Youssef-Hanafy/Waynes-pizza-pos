@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { requestAppUpdate, useAppUpdateState } from "@/stores/app-update";
+import { useAppUpdateState } from "@/stores/app-update";
 import { Button } from "@/components/ui/button";
 import { useAppBuild, isBehindServer } from "@/stores/app-build";
 import { describeNativeApp } from "@/stores/stripe-reader";
@@ -25,7 +25,7 @@ const date = (value: string | number | undefined) => {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
-export function AppInfoPanel() {
+export function AppInfoPanel({ onApplyUpdate }: { onApplyUpdate: () => void }) {
   const build = useAppBuild();
   const update = useAppUpdateState();
   const [loadedUrl, setLoadedUrl] = useState("");
@@ -50,7 +50,7 @@ export function AppInfoPanel() {
   const rows: [string, string][] = [
     ["Website build", build.current ? `${build.current}${build.commit ? ` · commit ${build.commit.slice(0, 7)}` : ""}${build.builtAt ? ` · built ${date(build.builtAt)}` : ""}` : "local build (no deploy id)"],
     ["Server is on", !build.live ? "checking…" : behind ? `${build.live} — different build; check update status below` : `${build.live} — the same build ✓`],
-    ["Opened from", build.offlineCopy ? `the saved offline copy${build.savedAt ? ` (saved ${date(build.savedAt)})` : ""}${build.stale ? " — older than the live version; it moves to the live version once the connection is back" : ""}` : "the server ✓"],
+    ["Opened from", build.offlineCopy ? `the saved offline copy${build.savedAt ? ` (saved ${date(build.savedAt)})` : ""}${build.stale ? " — older than the live version; choose Update below once connected" : ""}` : "the server ✓"],
     ["Android app", native ? `${native.version ?? "?"}${native.versionCode ? ` (code ${native.versionCode})` : " (1.5 or older)"}${native.buildType ? ` · ${native.buildType}` : ""}` : "not in the Android app (browser)"],
     ...(native?.package ? [["App id", native.package] as [string, string]] : []),
     ...(native?.signer ? [["Signing key", native.signer] as [string, string]] : []),
@@ -66,10 +66,10 @@ export function AppInfoPanel() {
   ];
   return <section className="rounded-3xl bg-white p-5 shadow-sm">
     <h2 className="text-xl font-black">This app</h2>
-    <p className="mt-1 text-sm text-wayne-muted">Which version this register is running. Every register should show the same website build as the server.</p>
+    <p className="mt-1 text-sm text-wayne-muted">Which version this register is running. New versions wait for you to choose Update below. Finish active work first; the register updates once it is safely idle.</p>
     <dl className="mt-3 divide-y divide-wayne-border text-sm">
       {rows.map(([label, value]) => <div className="flex flex-wrap justify-between gap-3 py-2" key={label}><dt className="font-bold">{label}</dt><dd className="max-w-full break-all text-right font-mono text-xs sm:text-sm">{value || "—"}</dd></div>)}
     </dl>
-    {behind || build.offlineCopy ? <Button className="mt-3" onClick={requestAppUpdate} variant="secondary">Check for a safe update</Button> : null}
+    {behind || build.offlineCopy || !["checking", "current"].includes(update.status) ? <Button className="mt-3" onClick={onApplyUpdate} variant="secondary">Update when register is idle</Button> : null}
   </section>;
 }

@@ -1,0 +1,51 @@
+[WebServer] (node:28994) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:29013) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:29014) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:29075) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 e2e/ui-audit.spec.ts:74:1 › ringing call does not dismiss driver clock dialog (5.5s)
+
+
+  1) e2e/ui-audit.spec.ts:74:1 › ringing call does not dismiss driver clock dialog ─────────────────
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByRole('navigation', { name: 'POS sections' }).getByRole('button', { name: 'Deliveries', exact: true })
+    Expected: "page"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveAttribute" getByRole('navigation', { name: 'POS sections' }).getByRole('button', { name: 'Deliveries', exact: true }) with timeout 5000ms
+      - waiting for getByRole('navigation', { name: 'POS sections' }).getByRole('button', { name: 'Deliveries', exact: true })
+        14 × locator resolved to <button type="button" class="min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-black transition text-wayne-ink hover:bg-wayne-cream">Deliveries</button>
+           - unexpected value "null"
+
+
+      78 |   await expect(page.getByRole('dialog')).toBeVisible();
+      79 |   await page.evaluate(()=>window.dispatchEvent(new Event('audit:ring')));
+    > 80 |   await expect(page.getByRole('navigation',{name:'POS sections'}).getByRole('button',{name:'Deliveries',exact:true})).toHaveAttribute('aria-current','page');
+         |                                                                                                                       ^
+      81 |   await expect(page.getByRole('dialog')).toBeVisible();
+      82 |   await page.screenshot({path:`${root}/driver-ring-run${testInfo.repeatEachIndex+1}.png`});
+      83 | });
+        at /Users/youssefhanafy/Downloads/hanafy-retention-v1/e2e/ui-audit.spec.ts:80:119
+
+    Error Context: test-results/ui-audit/ui-audit-ringing-call-does-not-dismiss-driver-clock-dialog/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/ui-audit/ui-audit-ringing-call-does-not-dismiss-driver-clock-dialog/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/ui-audit/ui-audit-ringing-call-does-not-dismiss-driver-clock-dialog/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    e2e/ui-audit.spec.ts:74:1 › ringing call does not dismiss driver clock dialog ──────────────────

@@ -49,7 +49,7 @@ import { describeStep, useHistoryState } from "@/stores/pos-history";
 import { useStore } from "@/stores/create-store";
 import { SimulatorPanel } from "./simulator-panel";
 import { installDeviceErrorLogging, logDevice } from "@/lib/pos/device-log";
-import { useAppUpdateState } from "@/stores/app-update";
+import { appUpdateStore, requestAppUpdate, useAppUpdateState } from "@/stores/app-update";
 import { useAppUpdate } from "@/stores/use-app-update";
 import { configureOfflineOrders, startOfflineOrders, offlineDrafts } from "@/stores/offline-orders";
 import { useConnectivity, watchConnectivity } from "@/stores/connectivity";
@@ -211,7 +211,15 @@ export function PosApp(props: Props) {
     // Screens with local forms must be explicitly left before an update.
     return ["order", "orders", "today", "phone", "more"].includes(sectionRef.current) && Date.now() - lastTouch.current > 60_000;
   };
-  useAppUpdate(idleForUpdate);
+  // A deployment may be discovered during service, but the cashier chooses
+  // when this register changes builds. Approval applies to this target only.
+  const approvedUpdate = useRef("");
+  const applyUpdate = () => {
+    approvedUpdate.current = appUpdateStore.get().latest?.build ?? "";
+    requestAppUpdate();
+  };
+  useAppUpdate(() => Boolean(approvedUpdate.current)
+    && approvedUpdate.current === appUpdateStore.get().latest?.build && idleForUpdate());
   const idleForRefresh = idleForUpdate;
   const appBuild = useAppBuild();
   const update = useAppUpdateState();
@@ -260,6 +268,10 @@ export function PosApp(props: Props) {
       if (!ringing.length) return;
       for (const call of ringing) seen.add(call.key);
       if (!getAutoOpenCalls()) return;
+      // A list screen can still own an active dialog, PIN or field.
+      // Keep the ringing banner available without unmounting that work.
+      if (document.visibilityState !== "visible" || document.querySelector('[role="dialog"]')
+        || document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
       const current = sectionRef.current;
       const idle = current === "orders" || current === "delivery"
         || (current === "order" && isDraftIdle(activeDraft(orderStore.get())) && !paymentPromptStore.get());
@@ -285,7 +297,7 @@ export function PosApp(props: Props) {
 
   const callerStatus = hardwareState.statuses.caller_id;
   const syncStatus = hardwareState.statuses.caller_sync;
-  const warning = appBuild.offlineCopy && connectivity.reachable ? "Running the saved offline copy of the POS — it reloads onto the current version by itself as soon as nothing is on screen"
+  const warning = appBuild.offlineCopy && connectivity.reachable ? "Older saved POS screen detected — finish active work, then use More → This app to update"
     : !hardwareState.online || !connectivity.reachable
     ? `No connection — keep taking orders: they are saved on this register${pendingCount ? `; ${pendingCount} will send when it is back` : " and sent when it is back"}`
     : pendingCount ? `${pendingCount} ticket${pendingCount === 1 ? "" : "s"} waiting to send`
@@ -306,7 +318,7 @@ export function PosApp(props: Props) {
   ];
 
   // --pos-kb-h: the on-screen keyboard's height, so the page sits above it.
-  return <div className={`flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden ${section === "order" ? "md:h-screen md:overflow-hidden" : ""}`} style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
+  return <div data-pos-ui className={`flex min-h-screen flex-col bg-wayne-cream-deep lg:h-screen lg:overflow-hidden ${section === "order" ? "md:h-screen md:overflow-hidden" : ""}`} style={{ paddingBottom: "var(--pos-kb-h, 0px)" }}>
     <PosKeyboard />
     <PosAutoRefresh isSafe={idleForRefresh} onData={setRuntime} />
     <header className="flex shrink-0 flex-wrap items-center gap-2 bg-wayne-green px-3 py-2 text-wayne-cream">
@@ -317,9 +329,15 @@ export function PosApp(props: Props) {
           return <button aria-label={label} className="grid h-11 w-12 place-items-center rounded-xl bg-white/15 text-3xl font-black leading-none text-wayne-cream transition hover:bg-white/25 active:scale-95 disabled:opacity-30" disabled={!step} key={direction} onClick={direction === "back" ? history.back : history.forward} title={label} type="button">{arrow}</button>;
         })}
       </div>
-      <strong className="mr-auto text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
+      <div className="mr-auto flex h-11 w-60 shrink-0 flex-col justify-center">
+        <strong className="truncate text-lg font-black uppercase tracking-[0.08em]">{workspaceName}</strong>
+        <span className="h-4 truncate text-xs leading-4" title={update.message}>{!["current", "checking"].includes(update.status)
+          ? update.status === "blocked" ? "Update needs attention · More → This app"
+            : update.status === "offline" ? "Version check offline · More → This app"
+              : update.status === "reloading" ? "Loading verified update…" : "Update available · More → This app"
+          : ""}</span>
+      </div>
       {callerIdEnabled ? <button aria-label={badge.waiting ? `Phone lines, ${badge.waiting} waiting` : "Phone lines"} className={`min-h-11 rounded-xl px-4 text-base font-black uppercase tracking-wider transition ${badge.ringing ? "animate-pulse bg-wayne-ok text-white ring-4 ring-white/60" : badge.waiting ? "bg-wayne-cream text-wayne-green" : "bg-white/10 text-wayne-cream hover:bg-white/20"}`} onClick={() => { setPhoneFocus(null); setSection("phone"); }} type="button">☎ Phone{badge.waiting ? ` (${badge.waiting})` : ""}</button> : null}
-      {!["current", "checking"].includes(update.status) ? <span className="text-xs" title={update.message}>{update.status === "blocked" ? "Update needs attention · More → This app" : update.status === "offline" ? "Version check offline · More → This app" : update.status === "reloading" ? "Loading verified update…" : "Update available · waiting for safe idle"}</span> : null}
       <PrintStationBadge />
       <OpenDrawerButton />
       <DrawerPanel timeZone={settings.timezone} />
@@ -370,7 +388,7 @@ export function PosApp(props: Props) {
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
     {section === "tips" && canCloseOut ? <TipsScreen onOpenDeliveries={canManageOrders && deliveryEnabled && settings.delivery_enabled ? () => setSection("delivery") : undefined} /> : null}
     {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
-    {section === "more" ? <MoreScreen canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
+    {section === "more" ? <MoreScreen onApplyUpdate={applyUpdate} canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
 }
 
@@ -388,7 +406,7 @@ const deviceNames: Record<string, string> = {
   kitchen_printer: "Kitchen printer", cash_drawer: "Cash drawer", payment_terminal: "Card terminal",
 };
 
-function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHardware: boolean; hardware: HardwareSettings; runtimeReady: boolean }) {
+function MoreScreen({ canManageHardware, hardware, runtimeReady, onApplyUpdate }: { onApplyUpdate: () => void; canManageHardware: boolean; hardware: HardwareSettings; runtimeReady: boolean }) {
   const { statuses, online } = useHardwareState();
   const [terminal, setTerminal] = useState("");
   const [saved, setSaved] = useState(false);
@@ -438,7 +456,7 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady }: { canManageHa
         {canManageHardware ? <Button asChild className="mt-3" variant="secondary"><Link href="/admin/hardware">Admin → Hardware</Link></Button> : null}
       </section>
       {hardware.payment_terminal_mode === "integrated" ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Card reader</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Stripe Reader M2 over Bluetooth. Press its button once to wake it; it stays connected to this tablet.</p><StripeReaderStatus /></section> : null}
-      <AppInfoPanel />
+      <AppInfoPanel onApplyUpdate={onApplyUpdate} />
       <PrintStationPanel />
       <TestOrdersPanel />
       {hardware.simulator_enabled ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Test calls</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Rings a line through the same path the real caller ID box will use.</p><SimulatorPanel lineCount={hardware.caller_line_count} /></section> : null}

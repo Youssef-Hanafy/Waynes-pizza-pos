@@ -1,0 +1,11 @@
+HTTP/2 307
+cache-control: no-store, max-age=0
+content-type: text/plain
+date: Mon, 02 Nov 2026 00:38:30 GMT
+location: /login?next=%2Fpos
+server: Vercel
+strict-transport-security: max-age=63072000
+x-vercel-id: iad1::bh6bj-1793579910723-a6587deb3863
+x-wayne-server-build: dpl_9tWgkv2NFuWcaYuBNF8ZA7BFRRnt
+x-wayne-server-built-at: 2026-11-01T21:05:51.665Z
+x-wayne-server-contract: 1

@@ -1,0 +1,33 @@
+
+> waynes-pizza-pos@0.1.0 test:screen-stability
+> playwright test -c e2e/screen-stability-local.config.ts --repeat-each=2
+
+[WebServer] (node:27503) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:27583) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:27585) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 14 tests using 1 worker
+
+(node:27627) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › e2e/screen-stability-local.spec.ts:45:1 › two consecutive deployments: updates to each newest build once, idle, and never shows an older design again (11.5s)
+  ✓   2 [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest (7.2s)
+  ✓   3 [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) (58.9s)
+  ✓   4 [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates (20.3s)
+  ✓   5 [chromium] › e2e/screen-stability-local.spec.ts:115:1 › an open order holds the update for as long as it stays open; idle register then updates once (9.2s)
+  ✓   6 [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log (5.2s)
+  ✓   7 [chromium] › e2e/screen-stability-local.spec.ts:139:1 › cached legacy UI is purged; offline refresh and restart recover without reviving it (3.2s)
+(node:29160) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [chromium] › e2e/screen-stability-local.spec.ts:45:1 › two consecutive deployments: updates to each newest build once, idle, and never shows an older design again (10.3s)
+  ✓   9 [chromium] › e2e/screen-stability-local.spec.ts:62:1 › rapid back-to-back deployments (three in six minutes, as on 2026-10-31) cause ONE screen change, straight to the newest (6.9s)
+  ✓  10 [chromium] › e2e/screen-stability-local.spec.ts:75:1 › slow store network after a deployment never brings the OLD design back (offline-copy rollback) (58.8s)
+  ✓  11 [chromium] › e2e/screen-stability-local.spec.ts:95:1 › an update reload that does not leave the page (navigation answered 204) recovers instead of silently stopping updates (21.2s)
+  ✓  12 [chromium] › e2e/screen-stability-local.spec.ts:115:1 › an open order holds the update for as long as it stays open; idle register then updates once (9.3s)
+  ✓  13 [chromium] › e2e/screen-stability-local.spec.ts:129:1 › each update leaves a durable trail: reload and confirmation reach the server log (5.2s)
+  ✓  14 [chromium] › e2e/screen-stability-local.spec.ts:139:1 › cached legacy UI is purged; offline refresh and restart recover without reviving it (3.2s)
+
+  14 passed (3.9m)

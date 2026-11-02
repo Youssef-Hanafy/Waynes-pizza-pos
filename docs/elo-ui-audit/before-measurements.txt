@@ -1,0 +1,464 @@
+1920 1080 {
+  sw: 1920,
+  sh: 1080,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ '5x5', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 1579, y: 167, width: 36, height: 40 }
+1280 720 {
+  sw: 1280,
+  sh: 720,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ '5x5', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 1003, y: 167, width: 36, height: 40 }
+1024 600 {
+  sw: 1024,
+  sh: 600,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 747, y: 219, width: 36, height: 40 }
+960 540 {
+  sw: 960,
+  sh: 540,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 715, y: 220, width: 36, height: 40 }
+800 600 {
+  sw: 800,
+  sh: 600,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 555, y: 220, width: 36, height: 40 }
+768 500 {
+  sw: 768,
+  sh: 500,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', '1' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 523, y: 220, width: 36, height: 40 }
+767 600 {
+  sw: 767,
+  sh: 1196,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', 'scroll' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 74, y: 931.125, width: 36, height: 40 }
+1280 400 {
+  sw: 1280,
+  sh: 400,
+  buttons: [
+    { t: 'Pizza', r: [Object] },
+    { t: 'Pizza 1$12.00', r: [Object] },
+    { t: 'Pizza 2$12.00', r: [Object] },
+    { t: 'Pizza 3$12.00', r: [Object] },
+    { t: 'Pizza 4$12.00', r: [Object] },
+    { t: 'Pizza 5$12.00', r: [Object] },
+    { t: 'Pizza 6$12.00', r: [Object] },
+    { t: 'Pizza 7$12.00', r: [Object] },
+    { t: 'Pizza 8$12.00', r: [Object] },
+    { t: 'Pizza 9$12.00', r: [Object] },
+    { t: 'Pizza 10$12.00', r: [Object] },
+    { t: 'Pizza 11$12.00', r: [Object] },
+    { t: 'Pizza 12$12.00', r: [Object] },
+    { t: 'Pizza 13$12.00', r: [Object] },
+    { t: 'Pizza 14$12.00', r: [Object] },
+    { t: 'Pizza 15$12.00', r: [Object] },
+    { t: 'Pizza 16$12.00', r: [Object] },
+    { t: 'Pizza 17$12.00', r: [Object] },
+    { t: 'Pizza 18$12.00', r: [Object] },
+    { t: 'Pizza 19$12.00', r: [Object] },
+    { t: 'Pizza 20$12.00', r: [Object] },
+    { t: 'Pizza 21$12.00', r: [Object] },
+    { t: 'Pizza 22$12.00', r: [Object] },
+    { t: 'Pizza 23$12.00', r: [Object] },
+    { t: 'Pizza 24$12.00', r: [Object] }
+  ],
+  fits: [ 'scroll', '0.7' ]
+}
+dialog Pizza 1
+
+Representative audit fixture item
+
+×
+
+Nothing comes on this by default — every topping below is an add-on.
+
+on the item
+comes with it, taken off
+not on it
+Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.
+
+Size
+Regular
+$12.00
+No modifier group is assigned to this item yet.
+
+The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.
+
+Item notes
+−
+1
++
+Add to ticket · $12.00
+qty { x: 998.21875, y: 166.71875, width: 33.46875, height: 37.1875 }

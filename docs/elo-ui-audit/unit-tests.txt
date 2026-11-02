@@ -1,0 +1,12 @@
+
+> waynes-pizza-pos@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.0 /Users/youssefhanafy/Downloads/hanafy-retention-v1
+
+
+ Test Files  144 passed | 1 skipped (145)
+      Tests  970 passed | 4 skipped (974)
+   Start at  19:34:39
+   Duration  35.06s (tests 97%, import 2%, transform 1%)

@@ -173,3 +173,23 @@ html[data-pos-ringing] [aria-modal="true"] > * {
   max-height: calc(100vh - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
   max-height: calc(100dvh - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
 }
+
+/* Fixed POS dialogs must use the same space above Wayne's keyboard as the
+ * register. Padding on the shell cannot constrain a position:fixed overlay.
+ * Keep the header/footer visible and scroll the existing dialog body. */
+[data-pos-ui] [aria-modal="true"] {
+  bottom: var(--pos-kb-h, 0px);
+  overflow-y: auto;
+}
+[data-pos-ui] [aria-modal="true"] > * {
+  max-height: calc(100vh - var(--pos-kb-h, 0px) - 1.5rem);
+  max-height: calc(100dvh - var(--pos-kb-h, 0px) - 1.5rem);
+}
+/* PIN windows use a plain div rather than a dialog section/body split. */
+[data-pos-ui] [aria-modal="true"] > div {
+  overflow-y: auto;
+}
+html[data-pos-ringing] [data-pos-ui] [aria-modal="true"] > * {
+  max-height: calc(100vh - var(--pos-kb-h, 0px) - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
+  max-height: calc(100dvh - var(--pos-kb-h, 0px) - var(--pos-ring-bottom, 0px) - 1.5rem) !important;
+}

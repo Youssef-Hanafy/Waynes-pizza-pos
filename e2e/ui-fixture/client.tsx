@@ -1,0 +1,14 @@
+import React from 'react';
+import { phoneStore } from '../../src/stores/phone-store';
+import { receiveIncoming } from '../../src/lib/phone/phone-state';
+window.addEventListener('audit:ring', () => phoneStore.set(state => receiveIncoming(state,{id:crypto.randomUUID(),line:1,phoneNumber:'5085550100',callerName:'Fixture caller',occurredAt:new Date().toISOString(),source:'simulated'}).state));
+import { createRoot } from 'react-dom/client';
+import { PosApp } from '../../src/app/pos/pos-app';
+import { OneTab } from '../../src/app/pos/one-tab';
+import { defaultSettings } from '../../src/lib/content/schemas';
+import { defaultHardwareSettings } from '../../src/lib/hardware/schemas';
+import { publicMenuGroupSchema, type PublicMenu } from '../../src/lib/menu/schemas';
+import dinners from '../../tests/fixtures/dinner-pricing.json';
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const menu: PublicMenu = ['Pizza','Dinners','Sandwiches','Sides','Drinks','Desserts'].map((name,c) => ({id:id(c+1),name,description:'',image_path:null,image_alt:'',items:Array.from({length: c === 0 ? 24 : 8},(_,i)=>({id:id(100+c*100+i),name:`${name} ${i+1}`,description:'Representative audit fixture item',image_path:null,image_alt:'',base_price_cents:1200,included_count_label:'',sold_out:false,featured:false,available_days:[],available_start:null,available_end:null,variants:[{id:id(2000+c*100+i),name:'Regular',price_cents:1200,sort_order:0,sku:''}],modifier_groups:c === 1 ? dinners[0].modifier_groups.map((group,g)=>publicMenuGroupSchema.parse({...group,id:id(5000+g),choices:group.choices.map((choice,j)=>({...choice,id:id(6000+g*100+j)}))})) : []}))}));
+createRoot(document.getElementById('root')!).render(<OneTab><PosApp menu={menu} settings={{...defaultSettings,store_name:"Wayne's Pizza",delivery_enabled:true}} hardware={defaultHardwareSettings} staffName="Audit cashier" profileId={id(9999)} canManageDiscount canManageOrders canOpenAdmin canManageHardware canCloseOut callerIdEnabled deliveryEnabled workspaceName="Wayne's Pizza" keyedCardConfig={null}/></OneTab>);

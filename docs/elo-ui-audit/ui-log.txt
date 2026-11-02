@@ -1,0 +1,51 @@
+
+> waynes-pizza-pos@0.1.0 test:ui-audit
+> playwright test -c e2e/ui-audit.config.ts --repeat-each=2 --grep-invert slow rendering
+
+[WebServer] (node:35075) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:35093) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:35094) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 32 tests using 1 worker
+
+(node:35100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1920x1080 DPR 1 (1.1s)
+  ✓   2 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x720 DPR 1.5 (873ms)
+  ✓   3 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1024x600 DPR 1 (840ms)
+  ✓   4 e2e/ui-audit.spec.ts:21:3 › register and item dialog 960x540 DPR 2 (866ms)
+  ✓   5 e2e/ui-audit.spec.ts:21:3 › register and item dialog 800x600 DPR 1 (842ms)
+  ✓   6 e2e/ui-audit.spec.ts:21:3 › register and item dialog 768x500 DPR 1 (852ms)
+  ✓   7 e2e/ui-audit.spec.ts:21:3 › register and item dialog 767x600 DPR 1 (826ms)
+  ✓   8 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x400 DPR 1 (834ms)
+  ✓   9 e2e/ui-audit.spec.ts:38:1 › item notes keyboard leaves footer usable and preserves single-tap add (687ms)
+  ✓  10 e2e/ui-audit.spec.ts:48:1 › repeated section navigation, Back, refresh, offline and reconnect preserve loaded document (8.3s)
+  ✓  11 e2e/ui-audit.spec.ts:68:1 › second register waits without evicting first (916ms)
+  ✓  12 e2e/ui-audit.spec.ts:75:1 › ringing call does not dismiss driver clock dialog (671ms)
+  ✓  13 e2e/ui-audit.spec.ts:89:1 › a deployment waits for operator approval and a later target requires new approval (18.6s)
+  ✓  14 e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed (1.1s)
+  ✓  15 e2e/ui-audit.spec.ts:127:1 › idle caller auto pickup remains available (328ms)
+  ✓  16 e2e/ui-audit.spec.ts:143:1 › open synthetic order and payment selection without submitting a charge (878ms)
+(node:36277) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1920x1080 DPR 1 (1.1s)
+  ✓  18 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x720 DPR 1.5 (910ms)
+  ✓  19 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1024x600 DPR 1 (1.1s)
+  ✓  20 e2e/ui-audit.spec.ts:21:3 › register and item dialog 960x540 DPR 2 (812ms)
+  ✓  21 e2e/ui-audit.spec.ts:21:3 › register and item dialog 800x600 DPR 1 (752ms)
+  ✓  22 e2e/ui-audit.spec.ts:21:3 › register and item dialog 768x500 DPR 1 (789ms)
+  ✓  23 e2e/ui-audit.spec.ts:21:3 › register and item dialog 767x600 DPR 1 (814ms)
+  ✓  24 e2e/ui-audit.spec.ts:21:3 › register and item dialog 1280x400 DPR 1 (778ms)
+  ✓  25 e2e/ui-audit.spec.ts:38:1 › item notes keyboard leaves footer usable and preserves single-tap add (649ms)
+  ✓  26 e2e/ui-audit.spec.ts:48:1 › repeated section navigation, Back, refresh, offline and reconnect preserve loaded document (7.4s)
+  ✓  27 e2e/ui-audit.spec.ts:68:1 › second register waits without evicting first (562ms)
+  ✓  28 e2e/ui-audit.spec.ts:75:1 › ringing call does not dismiss driver clock dialog (507ms)
+  ✓  29 e2e/ui-audit.spec.ts:89:1 › a deployment waits for operator approval and a later target requires new approval (18.5s)
+  ✓  30 e2e/ui-audit.spec.ts:108:1 › rich dinner modifiers, discount and open item dialogs can be dismissed (896ms)
+  ✓  31 e2e/ui-audit.spec.ts:127:1 › idle caller auto pickup remains available (308ms)
+  ✓  32 e2e/ui-audit.spec.ts:143:1 › open synthetic order and payment selection without submitting a charge (700ms)
+
+  32 passed (1.3m)

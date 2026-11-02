@@ -1,0 +1,3 @@
+
+> waynes-pizza-pos@0.1.0 typecheck
+> tsc --noEmit

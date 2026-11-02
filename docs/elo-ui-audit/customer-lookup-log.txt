@@ -1,0 +1,21 @@
+
+> waynes-pizza-pos@0.1.0 test:ui-audit
+> playwright test -c e2e/ui-audit.config.ts --grep customer lookup --repeat-each=2 --reporter=list
+
+[WebServer] (node:36464) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:36482) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:36483) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:36503) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/ui-audit.spec.ts:159:1 › customer lookup opens a representative customer without saving records (1.1s)
+(node:36653) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 e2e/ui-audit.spec.ts:159:1 › customer lookup opens a representative customer without saving records (1.1s)
+
+  2 passed (3.9s)
