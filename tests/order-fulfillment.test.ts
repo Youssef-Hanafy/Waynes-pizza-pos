@@ -41,9 +41,19 @@ describe("changing the real order fulfillment", () => {
   it("does not remove a paid fee until a real refund is recorded, then applies the net paid amount", async () => {
     const id=await order("delivery","paid"); const p=await payment(id); const input=body("pickup","delivery",1800);
     await expect(change(id,input)).rejects.toThrow("Refund the delivery fee");
-    await db.admin.query("insert into public.refunds(payment_id,order_id,amount_cents,tip_cents,reason,status,idempotency_key) values($1,$2,200,0,'Delivery fee - changed to pickup','completed',$3)",[p,id,randomUUID()]);
+    await db.admin.query("begin; set local role authenticated");
+    await db.admin.query("select set_config('request.jwt.claim.sub',$1,true)",[ownerId]);
+    const allocation=(await db.admin.query("select public.wayne_begin_allocated_refund($1::jsonb) value",[JSON.stringify({payment_id:p,order_id:id,amount_cents:200,tip_cents:0,idempotency_key:randomUUID(),reason:"Delivery fee - changed to pickup"})])).rows[0].value;
+    await db.admin.query("commit");
+    await db.admin.query("select public.wayne_settle_refund($1::jsonb)",[JSON.stringify({refund_id:allocation.legs[0].id,status:"completed",provider_refund_id:`re_fee_${id}`})]);
     expect(await change(id,input)).toMatchObject({fulfillment_type:"pickup",total_cents:1600,payment_status:"paid"});
     expect((await db.admin.query("select amount_cents from public.payments where id=$1",[p])).rows[0].amount_cents).toBe(1800);
+    await db.admin.query("begin; set local role authenticated");
+    await db.admin.query("select set_config('request.jwt.claim.sub',$1,true)",[ownerId]);
+    try {
+      const remaining=(await db.admin.query("select public.wayne_begin_allocated_refund($1::jsonb) value",[JSON.stringify({payment_id:p,order_id:id,amount_cents:1600,tip_cents:500,idempotency_key:randomUUID(),reason:"Refund the remaining adjusted order"})])).rows[0].value;
+      expect(remaining.legs[0].amount_cents).toBe(1600);
+    } finally { await db.admin.query("rollback"); }
   });
   it("rejects incomplete delivery addresses without changing the order", async () => {
     const id=await order(); await expect(change(id,{...body(),delivery_address:null})).rejects.toThrow("street address");
