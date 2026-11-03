@@ -178,7 +178,11 @@ test('open synthetic order and payment selection without submitting a charge',as
   await page.getByRole('button',{name:/Fixture pickup/}).tap();
   await expect(page.getByRole('region',{name:'Take payment'})).toContainText('Amount due');
   await page.getByRole('button',{name:/Cash Change shown/}).tap();
-  await expect(page.getByRole('button',{name:'Record cash',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Pay',exact:true})).toBeVisible();
+  await page.getByLabel('Cash amount',{exact:true}).tap();
+  await expect(page.getByRole('group',{name:'Keyboard',exact:true})).toHaveCount(0);
+  await page.getByLabel('Cash amount',{exact:true}).fill('5.00');
+  await expect(page.getByRole('button',{name:'Pay $5.00',exact:true})).toBeEnabled();
   await fits(page);await page.screenshot({path:`${root}/cash-selection-run${testInfo.repeatEachIndex+1}.png`});
 });
 test('customer lookup opens a representative customer without saving records',async ({page},testInfo)=>{

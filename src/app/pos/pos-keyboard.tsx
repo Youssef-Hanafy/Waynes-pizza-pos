@@ -101,6 +101,8 @@ type Field = HTMLInputElement | HTMLTextAreaElement;
 const TEXT_TYPES = new Set(["", "text", "search", "tel", "email", "number", "url", "password"]);
 
 function isField(node: unknown): node is Field {
+  // Payment amounts already have their own keypad; hardware typing still works.
+  if (node instanceof HTMLElement && node.hasAttribute("data-pos-keypad")) return false;
   if (node instanceof HTMLTextAreaElement) return !node.readOnly && !node.disabled;
   if (!(node instanceof HTMLInputElement)) return false;
   return TEXT_TYPES.has((node.getAttribute("type") ?? "").toLowerCase()) && !node.readOnly && !node.disabled;

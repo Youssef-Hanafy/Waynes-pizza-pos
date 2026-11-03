@@ -60,6 +60,8 @@ test("customer display reconnect, ownership, delayed tip and failed signature fi
     await expect.poll(() => successfulPublishes).toBeGreaterThan(1);
     await expect.poll(() => screenOnline).toBe(true);
     await pos.getByRole("button", { name: /^Card reader/ }).click();
+    await pos.getByRole("button", { name: "Exact", exact: true }).click();
+    await pos.getByRole("button", { name: /^Pay \$/ }).click();
     await expect(display.getByText("Add a tip?", { exact: true })).toBeVisible();
     await expect(pos.getByText("Waiting for the customer to choose a tip on the screen…")).toBeVisible();
 

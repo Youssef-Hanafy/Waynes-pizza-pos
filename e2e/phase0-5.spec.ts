@@ -156,7 +156,7 @@ test.describe("Phase 0–5 staging vertical slice", () => {
     // Exercise a real cash ledger entry through the ordinary drawer workflow.
     await pos.getByRole("button", { name: /^Cash Change shown$/ }).click();
     await pos.getByRole("button", { name: "Exact", exact: true }).click();
-    await pos.getByRole("button", { name: /^Record cash · change/ }).click();
+    await pos.getByRole("button", { name: /^Pay \$/ }).click();
     await expect(pos.getByText(/paid cash · CHANGE DUE/)).toBeVisible();
 
     await pos.getByLabel("First name").fill(`E2E Phone ${runId}`);
