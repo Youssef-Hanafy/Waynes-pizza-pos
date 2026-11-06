@@ -22,13 +22,13 @@ import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
  *   • opens the cash drawer (on the TM-T20III's DK port) for every payment
  *     taken at the store, whichever register or phone took it
  *
- * It is woken by Realtime the moment a job is queued, and checks every 20 s
+ * It is woken by Realtime the moment a job is queued, and checks every 60 s
  * as a safety net.  Several registers switched on by mistake can't double
  * print: the database hands each job to one of them only (row lock + lease).
  */
 
 const STATION_KEY = "wayne.pos.printStation";
-const POLL_MS = 20_000;
+const POLL_MS = 60_000;
 const OFFLINE_BACKOFF_MS = 30_000;
 const JOB_TIMEOUT_MS = 45_000; // below the database's 2-minute lease
 

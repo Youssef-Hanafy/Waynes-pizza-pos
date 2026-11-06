@@ -92,7 +92,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     }
   }, []);
 
-  useVisiblePolling(load, 60_000);
+  useVisiblePolling(load, 120_000);
 
   const here = useMemo(() => cards.filter((card) => !card.with_driver), [cards]);
   const drivers = useMemo(() => cards.filter((card) => card.with_driver), [cards]);

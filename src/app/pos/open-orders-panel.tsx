@@ -79,7 +79,7 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, 
     return () => { mounted.current = false; };
   }, [load]);
 
-  useVisiblePolling(load, 30_000);
+  useVisiblePolling(load, 60_000);
 
   async function move(order: OpenOrder, nextStatus: "completed" | "out_for_delivery") {
     if (pending) return;

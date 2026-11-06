@@ -52,13 +52,15 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
       setReport(parsed.data);
       setError("");
       if (!target) { setToday(parsed.data.day); setDay(parsed.data.day); }
+      return parsed.data;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The close out is unavailable.");
+      return null;
     }
   }, []);
 
-  const refresh = useCallback(() => load(day), [day, load]);
-  useVisiblePolling(refresh, 60_000);
+  const refresh = useCallback(async () => { await load(day); }, [day, load]);
+  useVisiblePolling(refresh, 120_000);
 
   const typed = typedTotal.trim() ? Math.round(Number(typedTotal.replace(/[$,\s]/g, "")) * 100) : null;
   const counted = typed !== null && Number.isFinite(typed) && typed >= 0 ? typed : null;
@@ -109,9 +111,11 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
 
   async function print() {
     if (!report) return;
+    const fresh = await load(report.day);
+    if (!fresh) { setNotice("The latest closeout could not be loaded. Try printing again when the connection is back."); return; }
     const runtime = getHardwareRuntime();
     if (!runtime) { setNotice((previous) => `${previous}${previous ? " " : ""}Printer is not ready; the report can be printed again later.`); return; }
-    const result = await runtime.receiptPrinter.printLayout(closeoutLayout(report, storeName, counted ?? report.saved?.counted_cash_cents ?? null, report.day === today, tipPayoutName));
+    const result = await runtime.receiptPrinter.printLayout(closeoutLayout(fresh, storeName, counted ?? fresh.saved?.counted_cash_cents ?? null, fresh.day === today, tipPayoutName));
     setNotice((previous) => `${previous}${previous ? " " : ""}${result.ok ? "Store close out sent to the receipt printer." : result.reason}`);
   }
 

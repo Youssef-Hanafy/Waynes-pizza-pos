@@ -63,7 +63,7 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  useVisiblePolling(load, 30_000);
+  useVisiblePolling(load, 60_000);
 
   // Paid orders are closed (owner, 2026-10-13): they leave this panel and stay in Today's Orders.
   // A paid delivery stays until it is on the road, so it can be sent out.

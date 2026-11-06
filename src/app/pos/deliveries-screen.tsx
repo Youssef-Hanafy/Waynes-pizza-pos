@@ -127,7 +127,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  useVisiblePolling(load, 30_000);
+  useVisiblePolling(load, 60_000);
 
   async function act(key: string, body: Record<string, string>) {
     setBusy(key); setError("");

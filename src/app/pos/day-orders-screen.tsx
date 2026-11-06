@@ -82,7 +82,7 @@ export function DayOrdersScreen({ timeZone, onPay, onAddItems, onEdit }: { timeZ
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  useVisiblePolling(load, 30_000);
+  useVisiblePolling(load, 60_000);
 
   const shownDay = day ?? today;
   const time = (value: string | null) => value ? new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "";

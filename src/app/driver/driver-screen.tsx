@@ -65,7 +65,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
 
   // The driver board has no safe realtime projection for unclaimed orders.
   // Keep a visible-only reconciliation as the durable fallback.
-  useVisiblePolling(refresh, 30_000);
+  useVisiblePolling(refresh, 60_000);
 
   async function send(orderId: string, body: Record<string, unknown>, success: string) {
     if (busy.current) return false;
@@ -98,7 +98,7 @@ export function DriverScreen({ initialBoard, initialError, staffName, businessNa
     if (saved) { setCashOpen(null); setCash(""); setNote(""); }
   }
 
-  const stale = lastSynced !== null && now !== null && now - lastSynced > 30_000;
+  const stale = lastSynced !== null && now !== null && now - lastSynced > 120_000;
   const active = board.assignments.filter((assignment) => assignment.assignment_status !== "delivered");
   const finished = board.assignments.filter((assignment) => assignment.assignment_status === "delivered");
 

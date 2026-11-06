@@ -54,7 +54,7 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
     return () => { mounted.current = false; };
   }, [load]);
 
-  useVisiblePolling(load, 60_000);
+  useVisiblePolling(load, 120_000);
 
   async function send(body: Record<string, unknown>, success: string) {
     if (pending) return false;
@@ -119,7 +119,7 @@ export function DrawerPanel({ timeZone }: { timeZone: string }) {
   const time = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
   return <>
-    <Button onClick={() => setOpen(true)} variant="secondary">
+    <Button onClick={() => { setOpen(true); void load(); }} variant="secondary">
       {shift ? `Drawer ${formatCents(expected)}` : "Drawer closed"}
     </Button>
     {open ? <div aria-modal="true" aria-label="Cash drawer" className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog">

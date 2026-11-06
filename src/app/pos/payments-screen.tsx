@@ -100,7 +100,7 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
     return () => { mounted.current = false; window.clearTimeout(first); };
   }, [load, loadDrawer]);
 
-  useVisiblePolling(load, 30_000);
+  useVisiblePolling(load, 60_000);
 
   const unpaid = orders.filter((order) => order.payment_status !== "paid" && order.status !== "payment_pending");
   const paid = orders.filter((order) => order.payment_status === "paid");

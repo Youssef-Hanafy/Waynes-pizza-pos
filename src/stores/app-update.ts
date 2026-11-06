@@ -140,7 +140,7 @@ export function retainAppUpdates() {
   }
  };
  const chunkError = (event: PromiseRejectionEvent) => { if (/ChunkLoadError|Loading (?:chunk|CSS)|Failed to fetch dynamically imported module/.test(String(event.reason))) manager?.request("application chunk unavailable"); };
- const first = window.setTimeout(check,3000); const poll = window.setInterval(check,60000); const safe = window.setInterval(()=>manager?.tick(),1000);
+ const first = window.setTimeout(check,3000); const poll = window.setInterval(check,300000); const safe = window.setInterval(()=>manager?.tick(),1000);
  document.addEventListener("visibilitychange",visibility); window.addEventListener("online",check); window.addEventListener("wayne:reconnected",check); window.addEventListener("pageshow",shownAgain);
  window.addEventListener("pointerdown",noteRegisterActivity,true); window.addEventListener("keydown",noteRegisterActivity,true); window.addEventListener("error",assetError,true); window.addEventListener("unhandledrejection",chunkError);
  // The worker's "opened from the saved copy" answer usually arrives after this point.

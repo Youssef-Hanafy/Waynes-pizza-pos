@@ -18,7 +18,7 @@ import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
 const CHIME_KEY = "pos.online-order-chime.v1";
 // Realtime (a new kitchen ticket / print job) asks at once; this is only the safety net
 // (owner, 2026-10-24: 8 s polling all day and night was most of the Vercel compute).
-const POLL_MS = 20_000;
+const POLL_MS = 60_000;
 const REPEAT_MS = 30_000;
 
 export function getOnlineChimeEnabled() {
@@ -86,6 +86,7 @@ export function useOnlineOrderAlerts(enabled: boolean) {
     unlockOnFirstTap();
     let stopped = false;
     async function poll() {
+      if (stopped || document.visibilityState !== "visible") return;
       try {
         const response = await fetch("/api/pos/open-orders", { cache: "no-store", signal: AbortSignal.timeout(8000) });
         const parsed = openOrderSchema.array().safeParse(response.ok ? await response.json() : null);
@@ -112,11 +113,16 @@ export function useOnlineOrderAlerts(enabled: boolean) {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, lookSoon)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "print_jobs", ...workspaceRealtimeFilter() }, lookSoon)
       .subscribe();
+    const visible = () => { if (document.visibilityState === "visible") lookSoon(); };
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("online", lookSoon);
     // Keep chiming until someone acknowledges it (like the old system's printer beep).
     const repeatTimer = window.setInterval(() => { if (pending.current.length && getOnlineChimeEnabled()) playOrderChime(); }, REPEAT_MS);
     return () => {
       stopped = true; window.clearInterval(pollTimer); window.clearInterval(repeatTimer);
       if (soon !== null) window.clearTimeout(soon);
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("online", lookSoon);
       if (client && channel) void client.removeChannel(channel);
     };
   }, [enabled]);
