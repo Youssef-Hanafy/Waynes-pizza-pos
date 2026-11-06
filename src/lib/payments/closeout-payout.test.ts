@@ -5,7 +5,7 @@ import { createCloseoutStripe, payoutTotals, PayoutReview, PayoutWaiting, verify
 const tx = (amount = 100000, fee = 2900, status: "available" | "pending" = "available"): BalanceTransaction => ({ id: "txn_sale", amount, fee, net: amount - fee, status, currency: "usd", available_on: 1 });
 const batch = (): PayoutBatch => ({ id: "batch-1", workspace_id: "workspace-1", location_id: "location-1", business_date: "2026-11-05", account_id: "acct_test", bank_id: "ba_test", connection_id: "connection-1", environment: "sandbox", state: "submitting", net_cents: 97100, submitted_at: new Date().toISOString(), stripe_payout_id: null });
 const item = (): PayoutItem => ({ id: "item-1", source_id: "payment-1", kind: "charge", payment_id: "payment-1", provider_id: "pi_test", ledger_status: "captured", refunded_cents: 0, transaction: null });
-const payout = (): StripePayout => ({ id: "po_test", amount: 97100, currency: "usd", status: "pending", arrival_date: 1, destination: "ba_test", method: "standard", livemode: false, metadata: { wayne_closeout_payout: "batch-1" } });
+const payout = (): StripePayout => ({ id: "po_test", amount: 97100, currency: "usd", status: "pending", arrival_date: 1, destination: "ba_test", method: "standard", type: "bank_account", livemode: false, metadata: { wayne_closeout_payout: "batch-1" } });
 afterEach(() => { vi.unstubAllGlobals(); });
 describe("Standard closeout payout accounting", () => {
   it("uses exact Stripe fees and refund ledger net, including fee adjustments", () => {
@@ -25,6 +25,20 @@ describe("Standard closeout payout accounting", () => {
       expect(url).toBe("https://api.stripe.com/v1/payouts"); expect(init.headers["Idempotency-Key"]).toBe("closeout-bank-payout-batch-1");
       expect(Object.fromEntries(init.body)).toMatchObject({ amount: "97100", method: "standard", destination: "ba_test", source_type: "card" });
     }
+  });
+  it("uses Stripe's configured default bank without reading or changing bank details", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => Response.json(payout())); vi.stubGlobal("fetch", fetcher);
+    const b = { ...batch(), bank_id: "default" };
+    await createCloseoutStripe("sk_test_secret").create(b);
+    expect(fetcher.mock.calls[0][1].body.has("destination")).toBe(false);
+    expect(() => verifyPayout(b, payout())).not.toThrow();
+    expect(() => verifyPayout(b, { ...payout(), type: "card", destination: "card_123" })).toThrow(PayoutReview);
+  });
+  it("returns account eligibility when Stripe denies the Connect bank-list endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ id: "acct_own", default_currency: "usd", payouts_enabled: true, settings: { payouts: { schedule: { interval: "manual" } } } }))
+      .mockResolvedValueOnce(Response.json({ error: { code: "permission_denied" } }, { status: 403 })));
+    const account = await createCloseoutStripe("sk_live_secret").account();
+    expect(account).toMatchObject({ id: "acct_own", payouts_enabled: true, default_currency: "usd", bankLookupAvailable: false, banks: [] });
   });
   it("never recreates an ambiguous request after Stripe can expire its key", async () => {
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);

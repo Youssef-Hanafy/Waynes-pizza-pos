@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     const account = await createCloseoutStripe(secrets.secretKey).account();
     return Response.json({ account_id: account.id, name: account.business_profile?.name, payouts_enabled: account.payouts_enabled,
       environment: connection.environment, key_mode: secrets.secretKey.startsWith("sk_live_") ? "production" : "sandbox",
-      schedule: account.settings.payouts.schedule.interval,
+      schedule: account.settings.payouts.schedule.interval, default_currency: account.default_currency, bank_lookup_available: account.bankLookupAvailable,
       banks: account.banks.map(({ id, object, currency, default_for_currency, status, bank_name, last4 }) => ({ id, object, currency, default_for_currency, status, bank_name, last4 })) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Stripe payout settings could not be read." }, { status: 503 });

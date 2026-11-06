@@ -34,7 +34,7 @@ export async function runCloseoutPayout(service: Service) {
     let payout = await stripe.find(batch);
     if (!payout) {
       const bank = account.banks.find((b) => b.id === batch.bank_id && b.currency === "usd" && b.object === "bank_account" && !["errored", "verification_failed"].includes(b.status));
-      if (!account.payouts_enabled || account.settings.payouts.schedule.interval !== "manual" || (batch.environment === "production" && !bank)) throw new PayoutReview("Stripe needs payouts enabled, a linked bank account and a manual payout schedule.");
+      if (!account.payouts_enabled || account.settings.payouts.schedule.interval !== "manual" || (batch.bank_id === "default" ? account.default_currency !== "usd" : batch.environment === "production" && !bank)) throw new PayoutReview("Stripe needs payouts enabled, a linked bank account and a manual payout schedule.");
       if (!batch.submitted_at) {
         const transactions: BalanceTransaction[] = [];
         let waiting: string | null = null;

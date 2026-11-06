@@ -17,7 +17,7 @@ export type PayoutBatch = {
   connection_id: string; environment: "sandbox" | "production"; state: string; net_cents: number | null;
   submitted_at: string | null; stripe_payout_id: string | null;
 };
-export type StripePayout = { id: string; amount: number; currency: string; status: string; arrival_date: number; destination: string; method: string; livemode: boolean; metadata: Record<string, string> };
+export type StripePayout = { id: string; amount: number; currency: string; status: string; arrival_date: number; destination: string; method: string; type: string; livemode: boolean; metadata: Record<string, string> };
 export class PayoutWaiting extends Error {}
 export class PayoutReview extends Error {}
 
@@ -53,12 +53,21 @@ export function createCloseoutStripe(secretKey: string) {
   return {
     call,
     async account() {
-      const account = await call<{ id: string; payouts_enabled: boolean; business_profile?: { name?: string }; settings: { payouts: { schedule: { interval: string } } } }>("/account");
+      const account = await call<{ id: string; default_currency: string; payouts_enabled: boolean; business_profile?: { name?: string }; settings: { payouts: { schedule: { interval: string } } } }>("/account");
       type Bank = { id: string; object: string; currency: string; default_for_currency: boolean; status: string; bank_name: string; last4: string };
       // Stripe exposes external bank listings only to live keys. Sandbox payouts
       // still validate their destination at creation; no real funds can move.
-      const banks = secretKey.startsWith("sk_test_") ? { data: [] as Bank[] } : await call<{ data: Array<{ id: string; object: string; currency: string; default_for_currency: boolean; status: string; bank_name: string; last4: string }> }>(`/accounts/${encodeURIComponent(account.id)}/external_accounts?object=bank_account&limit=100`);
-      return { ...account, banks: banks.data };
+      let banks: Bank[] = [];
+      let bankLookupAvailable = false;
+      if (!secretKey.startsWith("sk_test_")) {
+        try {
+          banks = (await call<{ data: Bank[] }>(`/accounts/${encodeURIComponent(account.id)}/external_accounts?object=bank_account&limit=100`)).data;
+          bankLookupAvailable = true;
+        } catch { /* Standard accounts may not expose Connect's bank-list API.
+                     Stripe supports paying the configured default bank without
+                     retrieving or changing its private banking information. */ }
+      }
+      return { ...account, banks, bankLookupAvailable };
     },
     async transaction(item: PayoutItem): Promise<BalanceTransaction | null> {
       if (item.operation_pending || ["pending", "authorized"].includes(item.ledger_status)) throw new PayoutWaiting("Waiting for card capture and delivery tips to be recorded.");
@@ -110,7 +119,7 @@ export function createCloseoutStripe(secretKey: string) {
       // Stripe can expire idempotency keys after 24 hours. Never POST again
       // outside a shorter retry window, even when the list lookup found nothing.
       if (Date.now() - Date.parse(batch.submitted_at) >= 23 * 60 * 60 * 1000) throw new PayoutReview("The payout outcome needs review in Stripe before another transfer.");
-      const form = new URLSearchParams({ amount: String(batch.net_cents), currency: "usd", method: "standard", source_type: "card", destination: batch.bank_id,
+      const form = new URLSearchParams({ amount: String(batch.net_cents), currency: "usd", method: "standard", source_type: "card", ...(batch.bank_id === "default" ? {} : { destination: batch.bank_id }),
         description: `Store closeout ${batch.business_date}`, "metadata[wayne_closeout_payout]": batch.id, "metadata[wayne_workspace_id]": batch.workspace_id });
       return call<StripePayout>("/payouts", form, `closeout-bank-payout-${batch.id}`);
     },
@@ -118,7 +127,7 @@ export function createCloseoutStripe(secretKey: string) {
 }
 
 export function verifyPayout(batch: PayoutBatch, payout: StripePayout) {
-  if (payout.amount !== Number(batch.net_cents) || payout.currency !== "usd" || payout.destination !== batch.bank_id || payout.method !== "standard"
+  if (payout.amount !== Number(batch.net_cents) || payout.currency !== "usd" || (batch.bank_id === "default" ? payout.type !== "bank_account" || !payout.destination.startsWith("ba_") : payout.destination !== batch.bank_id) || payout.method !== "standard"
     || payout.livemode !== (batch.environment === "production") || payout.metadata.wayne_closeout_payout !== batch.id
     || (batch.stripe_payout_id && batch.stripe_payout_id !== payout.id)) throw new PayoutReview("Stripe's payout does not match this closeout. Review before retrying.");
 }

@@ -35,7 +35,7 @@ function harness(options: { pending?: boolean; lostPlan?: boolean; lostPayout?: 
     if (path === "/v1/balance") return Response.json({ available: [{ currency: "usd", source_types: { card: 97100 } }] });
     if (path === "/v1/payouts" && init.method === "GET") return Response.json({ data: savedPayout ? [savedPayout] : [], has_more: false });
     if (path === "/v1/payouts" && init.method === "POST") {
-      savedPayout = { id: "po_once", amount: 97100, currency: "usd", destination: "ba_test", status: "pending", method: "standard", livemode: false, metadata: { wayne_closeout_payout: batch.id }, arrival_date: 1 };
+      savedPayout = { id: "po_once", amount: 97100, currency: "usd", destination: "ba_test", status: "pending", method: "standard", type: "bank_account", livemode: false, metadata: { wayne_closeout_payout: batch.id }, arrival_date: 1 };
       if (options.lostPayout) throw new Error("Network response lost AFTER Stripe accepted the payout");
       return Response.json(savedPayout);
     }
