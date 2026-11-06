@@ -9,8 +9,8 @@ export const balanceTransactionSchema = z.object({
 });
 export type BalanceTransaction = z.infer<typeof balanceTransactionSchema>;
 export type PayoutItem = {
-  id: string; kind: "charge" | "refund"; source_id: string; provider_id: string | null;
-  payment_id: string; ledger_status: string; refunded_cents: number; transaction: BalanceTransaction | null;
+  id: string; kind: "charge" | "tip_charge" | "refund"; source_id: string; provider_id: string | null;
+  payment_id: string; operation_pending?: boolean; ledger_status: string; refunded_cents: number; transaction: BalanceTransaction | null;
 };
 export type PayoutBatch = {
   id: string; workspace_id: string; location_id: string; business_date: string; account_id: string; bank_id: string;
@@ -61,6 +61,7 @@ export function createCloseoutStripe(secretKey: string) {
       return { ...account, banks: banks.data };
     },
     async transaction(item: PayoutItem): Promise<BalanceTransaction | null> {
+      if (item.operation_pending || ["pending", "authorized"].includes(item.ledger_status)) throw new PayoutWaiting("Waiting for card capture and delivery tips to be recorded.");
       if (item.transaction && item.kind === "refund") {
         if (item.transaction.status === "available") return balanceTransactionSchema.parse(item.transaction);
         return balanceTransactionSchema.parse(await call(`/balance_transactions/${encodeURIComponent(item.transaction.id)}`));
@@ -69,7 +70,7 @@ export function createCloseoutStripe(secretKey: string) {
         if (["failed", "voided", "canceled"].includes(item.ledger_status)) return null;
         throw new PayoutWaiting("Waiting for a card payment or refund to finish.");
       }
-      if (item.kind === "charge") {
+      if (item.kind !== "refund") {
         const pi = await call<{ id: string; status: string; livemode: boolean; latest_charge: null | { id: string; amount_refunded: number; balance_transaction: unknown; payment_method_details: { type: string }; metadata: Record<string,string> }; metadata: Record<string,string> }>(`/payment_intents/${encodeURIComponent(item.provider_id)}?expand[]=latest_charge.balance_transaction`);
         if (pi.livemode !== secretKey.startsWith("sk_live_")) throw new PayoutReview("A card payment belongs to a different Stripe mode.");
         if (pi.id !== item.provider_id || (pi.metadata.wayne_payment_id && pi.metadata.wayne_payment_id !== item.payment_id)) throw new PayoutReview("A card payment does not match this store's closeout.");

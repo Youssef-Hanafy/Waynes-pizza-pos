@@ -45,7 +45,7 @@ export async function runCloseoutPayout(service: Service) {
           const results = await Promise.allSettled(items.slice(offset, offset + 5).map(async (item) => {
             const transaction = await stripe.transaction(item);
             if (transaction) {
-              if ((item.kind === "charge" && transaction.amount < 0) || (item.kind === "refund" && transaction.amount > 0)) throw new PayoutReview("A settlement amount has the wrong sign. Review before payout.");
+              if ((item.kind !== "refund" && transaction.amount < 0) || (item.kind === "refund" && transaction.amount > 0)) throw new PayoutReview("A settlement amount has the wrong sign. Review before payout.");
               await update("item", { item_id: item.id, transaction });
               transactions.push(transaction);
             }

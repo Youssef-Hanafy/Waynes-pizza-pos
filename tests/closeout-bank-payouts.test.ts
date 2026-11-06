@@ -60,6 +60,17 @@ describe("Closeout bank payout queue (real PostgreSQL)", () => {
     expect(p.rows[0].payout_id).not.toBe((await db.admin.query("select id from public.closeout_bank_payouts where stripe_payout_id='po_once'")).rows[0].id);
     expect((await queue()).added).toBe(0);
   });
+  it("includes a separate delivery-tip charge without counting the base payment twice", async () => {
+    const f = await sale();
+    await db.admin.query("update public.payments set status='captured',metadata=metadata||'{\"tip_charge_intent\":\"pi_separate_tip\"}'::jsonb where id=$1", [f.paymentId]);
+    await queue();
+    await db.admin.query("update public.closeout_bank_payouts set lease_until=null,next_attempt_at=now()+interval '1 day'");
+    await db.admin.query("update public.closeout_bank_payouts set next_attempt_at=now() where id=(select payout_id from public.closeout_payout_items where kind='charge' and source_id=$1)", [f.paymentId]);
+    const c = (await claim()).rows[0].value;
+    expect(c.items.filter((i: { source_id: string }) => i.source_id === f.paymentId).map((i: {kind: string;provider_id: string}) => [i.kind,i.provider_id])).toEqual(expect.arrayContaining([["charge",f.originalId],["tip_charge","pi_separate_tip"]]));
+    expect((await db.admin.query("select count(*)::int n from public.closeout_payout_items where source_id=$1", [f.paymentId])).rows[0].n).toBe(2);
+    await db.admin.query("update public.closeout_bank_payouts set lease_until=null,next_attempt_at=now()+interval '1 day'");
+  });
   it("denies non-managers and direct authenticated table access", async () => {
     const c = await db.connect();
     await c.query("set role authenticated");

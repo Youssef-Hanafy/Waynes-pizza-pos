@@ -43,7 +43,7 @@ create table public.closeout_bank_payouts (
 create table public.closeout_payout_items (
   id uuid primary key default gen_random_uuid(),
   payout_id uuid not null references public.closeout_bank_payouts(id),
-  kind text not null check (kind in ('charge','refund')),
+  kind text not null check (kind in ('charge','tip_charge','refund')),
   source_id uuid not null,
   balance_transaction_id text unique,
   transaction_data jsonb,
@@ -129,6 +129,15 @@ begin
     order by q.next_attempt_at,q.created_at limit 1 for update of q skip locked;
   if batch.id is null then return null; end if;
   update public.closeout_bank_payouts set lease_token=worker_token,lease_until=now()+interval '2 minutes' where id=batch.id returning * into batch;
+  -- A delivery card can have a separate tip PaymentIntent. It is still one
+  -- POS payment row, so include both actual Stripe charge legs exactly once.
+  if batch.submitted_at is null then
+    insert into public.closeout_payout_items(payout_id,kind,source_id)
+      select batch.id,'tip_charge',p.id from public.closeout_payout_items i join public.payments p on p.id=i.source_id
+      where i.payout_id=batch.id and i.kind='charge' and p.workspace_id=batch.workspace_id
+        and p.status='captured' and nullif(p.metadata->>'tip_charge_intent','') is not null
+      on conflict(kind,source_id) do nothing;
+  end if;
   -- Refunds added while the day's cards settle must reduce the unsent batch.
   if batch.submitted_at is null then
     insert into public.closeout_payout_items(payout_id,kind,source_id)
@@ -138,12 +147,14 @@ begin
       on conflict(kind,source_id) do nothing;
   end if;
   select coalesce(jsonb_agg(jsonb_build_object('id',i.id,'kind',i.kind,'source_id',i.source_id,'transaction',i.transaction_data,
-    'provider_id',case when i.kind='charge' then p.provider_payment_id else r.provider_refund_id end,
-    'payment_id',case when i.kind='charge' then p.id else r.payment_id end,
-    'ledger_status',case when i.kind='charge' then p.status else r.status end,
-    'refunded_cents',case when i.kind='charge' then (select coalesce(sum(rr.amount_cents),0) from public.refunds rr where rr.payment_id=p.id and rr.status='completed') else 0 end)), '[]'::jsonb) into sources
+    'provider_id',case when i.kind='charge' then p.provider_payment_id when i.kind='tip_charge' then p.metadata->>'tip_charge_intent' else r.provider_refund_id end,
+    'payment_id',case when i.kind<>'refund' then p.id else r.payment_id end,
+    'ledger_status',case when i.kind<>'refund' then p.status else r.status end,
+    'operation_pending',exists(select 1 from public.pos_tip_operations op where op.payment_id=p.id and op.state='pending'),
+    'refunded_cents',case when i.kind<>'refund' then (select coalesce(sum(rr.amount_cents),0) from public.refunds rr where rr.payment_id=p.id and rr.status='completed'
+      and coalesce(rr.provider_payment_id,p.provider_payment_id)=case when i.kind='tip_charge' then p.metadata->>'tip_charge_intent' else p.provider_payment_id end) else 0 end)), '[]'::jsonb) into sources
     from public.closeout_payout_items i
-    left join public.payments p on i.kind='charge' and p.id=i.source_id and p.workspace_id=batch.workspace_id and p.location_id=batch.location_id
+    left join public.payments p on i.kind in ('charge','tip_charge') and p.id=i.source_id and p.workspace_id=batch.workspace_id and p.location_id=batch.location_id
     left join public.refunds r on i.kind='refund' and r.id=i.source_id and r.workspace_id=batch.workspace_id and r.location_id=batch.location_id
     where i.payout_id=batch.id;
   return jsonb_build_object('batch',to_jsonb(batch),'items',sources);
