@@ -20,7 +20,7 @@ async function state(page: Page): Promise<State> { return (await page.request.ge
 /** Builds that actually booted, in order, collapsing repeats (a reload onto the same build is not a design change). */
 async function designs(page: Page) { const builds = (await state(page)).loaded.filter((entry) => !entry.offline).map((entry) => entry.build); return builds.filter((build, index) => build !== builds[index - 1]); }
 async function shown(page: Page) { return page.locator("#design").textContent({ timeout: 2_000 }).catch(() => ""); }
-/** Let fake time pass in steps so the real 1 s safety tick and 60 s poll both run. */
+/** Let fake time pass in steps so the real 1 s safety tick and 5-minute poll both run. */
 async function pass(page: Page, ms: number, step = 15_000) { for (let gone = 0; gone < ms; gone += step) { await page.clock.runFor(Math.min(step, ms - gone)).catch(() => undefined); await page.waitForTimeout(150); } }
 async function deploy(page: Page, build: string) { await control(page, "deploy", { build }); }
 
@@ -46,10 +46,10 @@ test("two consecutive deployments: updates to each newest build once, idle, and 
   test.setTimeout(240_000);
   const page = await boot(context, "dpl_A");
   await deploy(page, "dpl_B");
-  await pass(page, 4 * MINUTE);
+  await pass(page, 8 * MINUTE);
   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_B");
   await deploy(page, "dpl_C");
-  await pass(page, 4 * MINUTE);
+  await pass(page, 8 * MINUTE);
   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_C");
   // Repeated refresh, reconnect and resume after the update: it stays on the newest build.
   for (let i = 0; i < 3; i++) { await page.reload(); await expect(page.locator("#design")).toHaveText("design dpl_C"); }
@@ -78,12 +78,12 @@ test("slow store network after a deployment never brings the OLD design back (of
   // The store's connection is slow when a deployment goes live.
   await control(page, "network", { delayMs: 12_000, targetDelayMs: 12_000 });
   await deploy(page, "dpl_B");
-  await pass(page, 4 * MINUTE);
+  await pass(page, 8 * MINUTE);
   await page.waitForTimeout(25_000);
   // The Android shell's "Can't reach the POS" page retries the plain POS address, as does an app restart.
   for (let i = 0; i < 2; i++) { await page.goto("/pos", { timeout: 60_000 }).catch(() => undefined); await page.waitForTimeout(1_000); }
   await control(page, "network", { delayMs: 0, targetDelayMs: 0 });
-  await pass(page, 4 * MINUTE);
+  await pass(page, 8 * MINUTE);
   if (process.env.STABILITY_DEBUG) console.log("SEQUENCE", JSON.stringify((await state(page)).loaded.map((l) => `${l.build}${l.offline ? " (saved copy)" : ""} ${l.url.replace(/^.*\/pos/, "/pos")}`)), await page.evaluate(() => sessionStorage.getItem("wayne.pos.update-journal.v1")));
   await expect.poll(() => shown(page), { timeout: 40_000 }).toBe("design dpl_B");
   const seen = await designs(page);
@@ -97,7 +97,7 @@ test("an update reload that does not leave the page (navigation answered 204) re
   const page = await boot(context, "dpl_A");
   await control(page, "network", { mode: "no-content-for-target" });
   await deploy(page, "dpl_B");
-  await pass(page, 6 * MINUTE);
+  await pass(page, 10 * MINUTE);
   expect(await shown(page)).toBe("design dpl_A");
   // Bounded: two attempts, then it keeps working on its current build (no reload loop).
   const attempts = (await state(page)).logs.filter((log) => log.kind === "app.reload").length;
@@ -107,7 +107,7 @@ test("an update reload that does not leave the page (navigation answered 204) re
   expect((await state(page)).logs.filter((log) => log.kind === "app.reload").length).toBe(2);
   // The connection problem is fixed: after the 30-minute hold it updates by itself.
   await control(page, "network", { mode: "ok" });
-  await pass(page, 25 * MINUTE, 60_000);
+  await pass(page, 30 * MINUTE, 60_000);
   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_B");
   expect(await designs(page)).toEqual(["dpl_A", "dpl_B"]);
 });
@@ -130,7 +130,7 @@ test("each update leaves a durable trail: reload and confirmation reach the serv
   test.setTimeout(180_000);
   const page = await boot(context, "dpl_A");
   await deploy(page, "dpl_B");
-  await pass(page, 4 * MINUTE);
+  await pass(page, 8 * MINUTE);
   await expect.poll(() => shown(page), { timeout: 30_000 }).toBe("design dpl_B");
   await pass(page, 30_000, 5_000);
   await expect.poll(async () => (await state(page)).logs.map((log) => log.kind), { timeout: 30_000 }).toEqual(expect.arrayContaining(["app.reload", "app.update_confirmed"]));
