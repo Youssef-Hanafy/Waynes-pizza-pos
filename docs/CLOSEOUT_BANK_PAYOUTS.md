@@ -1,6 +1,6 @@
 # Closeout bank payouts
 
-Store close out queues the day's Stripe card proceeds and prints the store report. Reprint store report only prints. Saving the drawer closeout also queues through a database trigger in the same transaction. Printer failure does not undo the queued payout. Only managers can queue payouts.
+Close credit card batch is a dedicated action in Close Out → Credit card day batch. It queues the selected date and confirms the saved batch reference, recorded card/refund totals and actual queue state. A repeated click shows the existing batch status. Store close out prints the store report. Saving the cash closeout records the drawer only. Printing and cash closeout never initiate a card batch. Only managers can queue card payouts.
 
 The queue uses the same local order date as the closeout report and includes online and reader cards, including delivery cards awaiting capture and separately charged delivery-tip intents. Cash, other processors and test orders are excluded. Actual USD Stripe balance transactions supply gross amounts, processing fees and refund adjustments. The worker waits for captures, refunds and settlement; it does not estimate fees or pay pending funds using an older balance. Refunds recorded while a batch waits are included. Refunds for earlier orders can be deducted on their refund date; negative batches carry into the next payout. Refunds created after a payout was submitted are handled by a later closeout. An unrecorded external Stripe refund blocks the affected unsent charge until reconciled in the POS.
 
@@ -8,7 +8,7 @@ Each charge/refund can belong to only one batch. Repeated closeouts add only pre
 
 ## Deployment and activation
 
-1. Apply `20261130080000_closeout_bank_payouts.sql` and `20261202080000_closeout_default_bank_destination.sql` transactionally. Controls default to disabled and no historical closeouts are backfilled. Deploy the matching application before enabling a control.
+1. Apply `20261130080000_closeout_bank_payouts.sql` and `20261202080000_closeout_default_bank_destination.sql`, and `20261203080000_dedicated_card_batch_closeout.sql` transactionally. Controls default to disabled and no historical closeouts are backfilled. Deploy the matching application before enabling a control.
 2. The authenticated read-only `GET /api/payments/payouts/worker?connection_id=...` preflight uses `x-wayne-job-token` from the `closeout_bank_payouts` scheduler secret. It returns merchant identity, key mode, payout eligibility, schedule and linked bank summaries, never credentials. Production requires a matching live connection, enabled payouts, a manual schedule and an existing USD bank account. Standard accounts can use Stripe’s configured default bank by setting `bank_id` to `default`; the Payouts API then resolves the destination without exposing bank details through Connect’s bank-list API. Stripe test keys cannot list bank accounts; their simulated destination is checked by Stripe on payout creation instead.
 3. Bind `closeout_payout_control` to the verified workspace/location, payment connection, Stripe account, existing bank ID (or `default`) and environment, with an explicit start date. Do not change bank details or activate historical dates to reconcile earlier automatic payouts. The five-minute `wayne-closeout-bank-payouts` cron job must be active. Production worker URL is `https://app.hanafymedia.com/api/payments/payouts/worker`; isolated staging uses its staging URL.
 4. Enable only after these checks. The application never changes Stripe's payout schedule itself. If Stripe currently pays automatically, change the schedule in Stripe and start after any already scheduled automatic payouts are reconciled.
@@ -17,7 +17,7 @@ Each charge/refund can belong to only one batch. Repeated closeouts add only pre
 
 The closeout screen shows waiting, requested, in transit, paid, failed, or review status, the exact net amount once planned, and Stripe's expected arrival date. This is a standard payout to the configured bank account, not an Instant Payout. `paid` is Stripe's reported status, not a separate bank-statement confirmation.
 
-For a review/failed batch, inspect its Stripe history and recorded `stripe_payout_id` before any intervention. Never delete queue items, clear `submitted_at`, or generate a new payout key to resolve an uncertain outcome. Disable the location control to stop future initiation while retaining its records. If changing processors or closing a location, reconcile every pending payout before disabling the worker permanently. Manual payout mode leaves funds in Stripe when no closeout is queued.
+For a review/failed batch, inspect its Stripe history and recorded `stripe_payout_id` before any intervention. Never delete queue items, clear `submitted_at`, or generate a new payout key to resolve an uncertain outcome. Disable the location control to stop future initiation while retaining its records. If changing processors or closing a location, reconcile every pending payout before disabling the worker permanently. Manual payout mode leaves funds in Stripe when no credit card batch is queued.
 
 ## Verification
 

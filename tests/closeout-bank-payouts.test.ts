@@ -77,6 +77,33 @@ describe("Closeout bank payout queue (real PostgreSQL)", () => {
     await expect(c.query("select * from public.closeout_bank_payouts")).rejects.toThrow("permission denied");
     await expect(c.query("select public.wayne_claim_bank_payout($1)", [randomUUID()])).rejects.toThrow("permission denied");
     await expect(c.query("select public.wayne_queue_bank_payout($1,$2,current_date)", [workspaceId, location])).rejects.toThrow("manager");
+    await expect(c.query("select public.wayne_close_card_day_batch($1,$2,current_date)", [workspaceId, location])).rejects.toThrow("manager");
+  });
+  it("confirms the saved card batch with counts and the same reference on a repeated click", async () => {
+    await db.admin.query("begin; set local role authenticated");
+    await db.admin.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+    try {
+      const args = [workspaceId, location];
+      const first = (await db.admin.query("select public.wayne_close_card_day_batch($1,$2,(now() at time zone 'America/New_York')::date) value", args)).rows[0].value;
+      const repeat = (await db.admin.query("select public.wayne_close_card_day_batch($1,$2,(now() at time zone 'America/New_York')::date) value", args)).rows[0].value;
+      expect(first.batch.id).toBe(repeat.batch.id);
+      expect(first.batch.card_count).toBeGreaterThan(0);
+      expect(first.batch.recorded_card_cents).toBeGreaterThan(0);
+      expect(repeat.outcome).toBe("existing");
+      const unavailable = (await db.admin.query("select public.wayne_close_card_day_batch($1,$2,'2020-01-01') value", args)).rows[0].value;
+      expect(unavailable).toMatchObject({ outcome: "unavailable", batch: null });
+      await db.admin.query("commit");
+    } catch (e) { await db.admin.query("rollback"); throw e; }
+  });
+  it("saving the cash closeout does not silently queue a credit card payout", async () => {
+    const f = await sale();
+    await db.admin.query("begin; set local role authenticated");
+    await db.admin.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+    try {
+      await db.admin.query("select public.wayne_save_day_closeout($1)", [{ business_date: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()), counted_cash_cents: 0, close_drawer: false, note: "Isolated cash closeout verification" }]);
+      await db.admin.query("commit");
+    } catch (e) { await db.admin.query("rollback"); throw e; }
+    expect((await db.admin.query("select count(*)::int n from public.closeout_payout_items where source_id=$1", [f.paymentId])).rows[0].n).toBe(0);
   });
   it("carries a refund-only negative closeout into the next payout exactly once", async () => {
     await db.admin.query("update public.closeout_bank_payouts set lease_until=null,next_attempt_at=now()+interval '1 day'");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
+import { cardBatchConfirmation, cardBatchReference, cardDayBatchResultSchema, type CardDayBatchResult } from "@/lib/closeout/card-batch";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [queuing, setQueuing] = useState(false);
+  const [batchConfirmation, setBatchConfirmation] = useState<CardDayBatchResult | null>(null);
+  const [batchError, setBatchError] = useState("");
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async (target: string | null) => {
@@ -84,21 +87,23 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     }
   }
 
-  async function storeCloseout() {
+  async function closeCardBatch() {
     if (!report || queuing) return;
-    setQueuing(true); setNotice("");
+    const targetDay = report.day;
+    setQueuing(true); setBatchError(""); setBatchConfirmation(null);
     try {
-      if (report.bank_payout?.enabled) {
-        const response = await fetch("/api/pos/closeout/payout", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ day: report.day }), cache: "no-store" });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? "The bank payout could not be queued.");
-        setNotice(body.queued ? "Bank payout queued. Card proceeds will be sent after settlement, minus refunds and fees." : body.message ?? "No new Stripe card payments to queue.");
-        await load(report.day);
-      }
-      await print();
+      const response = await fetch("/api/pos/closeout/payout", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ day: targetDay }), cache: "no-store", signal: AbortSignal.timeout(30_000) });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "The credit card batch could not be queued.");
+      const parsed = cardDayBatchResultSchema.safeParse(body);
+      if (!parsed.success) throw new Error("The batch confirmation could not be verified. Press Close credit card batch again to check the saved batch; payments will not be duplicated.");
+      const confirmed = parsed.data;
+      if (confirmed.day !== targetDay) throw new Error("The batch date does not match. Refresh the closeout before trying again.");
+      setBatchConfirmation(confirmed);
+      await load(targetDay);
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Store closeout could not finish.");
+      setBatchError(cause instanceof Error && !["TimeoutError", "TypeError"].includes(cause.name) ? cause.message : "The batch confirmation did not arrive. Press Close credit card batch again to check its status; payments will not be duplicated.");
     } finally { setQueuing(false); }
   }
 
@@ -141,25 +146,36 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     <div className="mx-auto grid max-w-6xl gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-2xl font-black">Close out · {new Date(`${report.day}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" })}</h1>
-        <Button onClick={() => setDay(shiftDay(report.day, -1))} size="sm" variant="secondary">← Day before</Button>
-        {report.day !== today ? <Button onClick={() => setDay(today)} size="sm" variant="secondary">Today</Button> : null}
-        {report.day < today ? <Button onClick={() => setDay(shiftDay(report.day, 1))} size="sm" variant="secondary">Next day →</Button> : null}
-        <Button disabled={queuing} onClick={() => void storeCloseout()} size="sm">{queuing ? "Queuing…" : "🖨 Store close out"}</Button>
-        <Button onClick={() => void print()} size="sm" variant="secondary">Reprint store report</Button>
+        <Button disabled={queuing} onClick={() => setDay(shiftDay(report.day, -1))} size="sm" variant="secondary">← Day before</Button>
+        {report.day !== today ? <Button disabled={queuing} onClick={() => setDay(today)} size="sm" variant="secondary">Today</Button> : null}
+        {report.day < today ? <Button disabled={queuing} onClick={() => setDay(shiftDay(report.day, 1))} size="sm" variant="secondary">Next day →</Button> : null}
+        <Button onClick={() => void print()} size="sm">🖨 Store close out</Button>
         <Button onClick={() => void printDeliveries()} size="sm">🖨 Delivery close out</Button>
       </div>
       {error ? <p className="rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">{error}</p> : null}
       {notice ? <p className="rounded-xl bg-white p-3 text-sm font-bold" role="status">{notice}</p> : null}
       {report.saved ? <p className="rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok">✓ Closed out {new Date(report.saved.closed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{report.saved.closed_by_name ? ` by ${report.saved.closed_by_name}` : ""}: counted {formatCents(report.saved.counted_cash_cents)}, expected {formatCents(report.saved.expected_cash_cents)} ({varianceText(report.saved.variance_cents)}). Closing again replaces it.</p> : null}
-      {report.bank_payout ? <Card title="Bank payout">
-        <p className="text-sm font-bold">{report.bank_payout.enabled ? `Store close out queues Stripe card proceeds after settlement, minus refunds and fees. Standard bank processing applies.${report.bank_payout.start_business_date && report.day < report.bank_payout.start_business_date ? ` Starts ${report.bank_payout.start_business_date}.` : ""}` : "Closeout bank payouts are not enabled. Stripe follows its current payout settings."}</p>
+      {report.bank_payout ? <Card title="Credit card day batch">
+        <p className="text-sm font-bold">{report.bank_payout.enabled ? `Close the selected day’s Stripe card batch to queue its bank payout after settlement, minus refunds and fees. Standard bank processing applies.${report.bank_payout.start_business_date && report.day < report.bank_payout.start_business_date ? ` Starts ${report.bank_payout.start_business_date}.` : ""}` : "Closeout bank payouts are not enabled. Stripe follows its current payout settings."}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button className="min-h-14 px-6 text-lg" disabled={queuing || !report.bank_payout.enabled || Boolean(report.bank_payout.start_business_date && report.day < report.bank_payout.start_business_date)} onClick={() => void closeCardBatch()}>
+            {queuing ? "Queuing credit card batch…" : "Close credit card batch"}
+          </Button>
+          <p className="text-sm font-bold">Batch date: {report.day}</p>
+        </div>
+        {batchError ? <p className="mt-3 rounded-xl bg-wayne-alert-soft p-3 font-bold text-wayne-alert" role="alert">{batchError}</p> : null}
+        {batchConfirmation?.day === report.day ? <div className={`mt-3 rounded-xl p-4 ${batchConfirmation.batch?.state === "waiting" ? "bg-wayne-ok-soft" : "bg-wayne-cream"}`} role="status" aria-live="polite">
+          <p className="font-black">{cardBatchConfirmation(batchConfirmation)}</p>
+          {batchConfirmation.batch ? <p className="mt-2 text-sm font-bold">{batchConfirmation.day} · {batchConfirmation.batch.card_count} card payment{batchConfirmation.batch.card_count === 1 ? "" : "s"} · Recorded card total {formatCents(batchConfirmation.batch.recorded_card_cents)} · Refunds {formatCents(batchConfirmation.batch.recorded_refund_cents)}{batchConfirmation.batch.net_cents !== null ? ` · Net proceeds ${formatCents(batchConfirmation.batch.net_cents)}` : " · Final fees and bank payout amount will appear after settlement is checked."}</p> : null}
+        </div> : null}
         {report.bank_payout.batches.map((batch) => <div className="mt-3 rounded-xl bg-wayne-cream p-3" key={batch.id}>
+          <p className="mb-1 text-sm font-bold" title={batch.id}>{cardBatchReference(report.day, batch.id)}</p>
           <p className="font-black">{({ waiting: "Waiting for settlement", submitting: "Checking payout request", pending: "Payout requested", in_transit: "On the way to the bank", paid: "Paid by Stripe", failed: "Payout failed — review Stripe", canceled: "Payout canceled", review: "Needs review before payout", no_payout: "No bank payout needed" } as Record<string,string>)[batch.state] ?? batch.state}</p>
           {batch.net_cents !== null ? <><Row label="Card sales" value={formatCents(batch.gross_cents ?? 0)} /><Row label="Refunds" value={formatCents(-(batch.refund_cents ?? 0))} /><Row label="Stripe fees" value={formatCents(-(batch.fee_cents ?? 0))} /><Row big label="Net proceeds" value={formatCents(batch.net_cents)} /></> : null}
           <p className="mt-1 text-sm">{batch.message}</p>
           {batch.arrival_date ? <p className="text-sm">Expected arrival: {batch.arrival_date}</p> : null}
         </div>)}
-        {report.bank_payout.enabled && !report.bank_payout.batches.length ? <p className="mt-2 text-sm">No bank payout queued for this date yet. Repeated closeouts include each payment only once.</p> : null}
+        {report.bank_payout.enabled && !report.bank_payout.batches.length ? <p className="mt-2 text-sm">No credit card batch queued for this date yet. Each payment is included only once, even if you press the button again.</p> : null}
       </Card> : null}
       {/* Tips are not store income (owner, 2026-10-13): what to pay out, in one line. */}
       <div className="grid gap-3 rounded-3xl border-2 border-wayne-green bg-white p-4 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center">
