@@ -2,7 +2,7 @@ import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { dayCloseoutSchema, saveCloseoutSchema } from "@/lib/closeout/schemas";
 import { logger } from "@/lib/logging/logger";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**
  * POS → Close Out: the day's sales, payments by card brand, online orders on
@@ -29,7 +29,17 @@ export async function GET(request: Request) {
   // Owner tips already taken out of the drawer by an earlier close out today (owner, 2026-10-20).
   const reportDay = typeof (data as { day?: unknown } | null)?.day === "string" ? (data as { day: string }).day : null;
   const paidOut = reportDay ? await supabase.rpc("wayne_owner_tips_paid_out", { target_day: reportDay }) : null;
-  const parsed = dayCloseoutSchema.safeParse({ ...(data as object), owner_tips_paid_out_cents: typeof paidOut?.data === "number" ? paidOut.data : 0 });
+  let bankPayout;
+  if (access?.workspace_id && access.location_id && reportDay) {
+    const service = createServiceSupabaseClient();
+    const [control, batches] = await Promise.all([
+      service.from("closeout_payout_control").select("enabled,start_business_date").eq("workspace_id", access.workspace_id).eq("location_id", access.location_id).maybeSingle(),
+      service.from("closeout_bank_payouts").select("id,state,gross_cents,refund_cents,fee_cents,net_cents,arrival_date,message,stripe_payout_id").eq("workspace_id", access.workspace_id).eq("location_id", access.location_id).eq("business_date", reportDay).order("created_at"),
+    ]);
+    if (control.error || batches.error) return Response.json({ error: "The bank payout status could not be loaded. Try again." }, { status: 503 });
+    bankPayout = { enabled: control.data?.enabled ?? false, start_business_date: control.data?.start_business_date ?? null, batches: batches.data ?? [] };
+  }
+  const parsed = dayCloseoutSchema.safeParse({ ...(data as object), bank_payout: bankPayout, owner_tips_paid_out_cents: typeof paidOut?.data === "number" ? paidOut.data : 0 });
   if (!parsed.success) return Response.json({ error: "The close out could not be read." }, { status: 500 });
   return Response.json(parsed.data, { headers: { "Cache-Control": "no-store" } });
 }

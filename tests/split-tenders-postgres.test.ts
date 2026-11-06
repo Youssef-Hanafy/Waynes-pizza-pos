@@ -45,16 +45,17 @@ describe("split tenders on real PostgreSQL", () => {
     }
     expect((await db.admin.query("select allow_quantities,max_select from public.modifier_groups where id=$1", [pickGroup])).rows[0]).toMatchObject({ allow_quantities: true, max_select: 20 });
   });
-  it("cash + card: keeps the balance open, opens drawer, retries once, then closes for the exact total", async () => {
+  it("cash + card: keeps the drawer closed until the balance is fully paid, with duplicate protection", async () => {
     const f = await order();
     const cash = { order_id: f.orderId, shift_id: "", amount_cents: 500, tendered_cents: 1000, idempotency_key: randomUUID() };
     const first = await rpc("select public.wayne_take_cash_payment($1) value", [cash]);
     expect(first).toMatchObject({ amount_cents: 500, change_cents: 500 });
     expect(await state(f.orderId)).toMatchObject({ payment_status: "unpaid", paid: 500 });
-    expect((await db.admin.query("select count(*)::int n from public.print_jobs where order_id=$1 and job_type='drawer_kick'", [f.orderId])).rows[0].n).toBe(1);
+    expect((await db.admin.query("select count(*)::int n from public.print_jobs where order_id=$1 and job_type='drawer_kick'", [f.orderId])).rows[0].n).toBe(0);
     expect(await rpc("select public.wayne_take_cash_payment($1) value", [cash])).toMatchObject({ duplicate: true, payment_id: first.payment_id });
     await rpc("select public.wayne_record_card_payment($1) value", [{ order_id: f.orderId, amount_cents: f.amount - 500, idempotency_key: randomUUID() }]);
     expect(await state(f.orderId)).toMatchObject({ payment_status: "paid", paid: f.amount, total_cents: f.amount });
+    expect((await db.admin.query("select count(*)::int n from public.print_jobs where order_id=$1 and job_type='drawer_kick'", [f.orderId])).rows[0].n).toBe(1);
   });
   it("card + card + cash: only the last payment closes the order", async () => {
     const f = await order();

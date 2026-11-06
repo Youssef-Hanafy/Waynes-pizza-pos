@@ -46,6 +46,12 @@ export const dayCloseoutSchema = z.object({
   }).nullable().optional().catch(null),
   /** Owner tips earlier close outs already took out of the drawer for this day (owner, 2026-10-20). */
   owner_tips_paid_out_cents: z.number().int().optional().default(0).catch(0),
+  bank_payout: z.object({
+    enabled: z.boolean(), start_business_date: z.string().nullable(),
+    batches: z.array(z.object({ id: z.string(), state: z.string(), gross_cents: z.coerce.number().nullable(),
+      refund_cents: z.coerce.number().nullable(), fee_cents: z.coerce.number().nullable(), net_cents: z.coerce.number().nullable(),
+      arrival_date: z.string().nullable(), message: z.string(), stripe_payout_id: z.string().nullable() })),
+  }).optional(),
   saved: z.object({
     business_date: z.string(), counted_cash_cents: n, expected_cash_cents: n, variance_cents: n, note: z.string(),
     closed_at: z.string(), closed_by_name: z.string().nullable().optional(), denominations: z.record(z.string(), n).catch({}),

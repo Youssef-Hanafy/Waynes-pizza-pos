@@ -36,6 +36,7 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
   const [typedTotal, setTypedTotal] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [queuing, setQueuing] = useState(false);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async (target: string | null) => {
@@ -83,13 +84,30 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
     }
   }
 
+  async function storeCloseout() {
+    if (!report || queuing) return;
+    setQueuing(true); setNotice("");
+    try {
+      if (report.bank_payout?.enabled) {
+        const response = await fetch("/api/pos/closeout/payout", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ day: report.day }), cache: "no-store" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "The bank payout could not be queued.");
+        setNotice(body.queued ? "Bank payout queued. Card proceeds will be sent after settlement, minus refunds and fees." : body.message ?? "No new Stripe card payments to queue.");
+        await load(report.day);
+      }
+      await print();
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "Store closeout could not finish.");
+    } finally { setQueuing(false); }
+  }
+
   async function print() {
     if (!report) return;
     const runtime = getHardwareRuntime();
-    if (!runtime) { setNotice("Printing is still starting up. Try again in a moment."); return; }
-    setNotice("Printing…");
+    if (!runtime) { setNotice((previous) => `${previous}${previous ? " " : ""}Printer is not ready; the report can be printed again later.`); return; }
     const result = await runtime.receiptPrinter.printLayout(closeoutLayout(report, storeName, counted ?? report.saved?.counted_cash_cents ?? null, report.day === today, tipPayoutName));
-    setNotice(result.ok ? "Store close out sent to the receipt printer." : result.reason);
+    setNotice((previous) => `${previous}${previous ? " " : ""}${result.ok ? "Store close out sent to the receipt printer." : result.reason}`);
   }
 
   /** The day's delivery close out slip: every driver's deliveries, tips and cash (owner, 2026-10-19). */
@@ -126,11 +144,23 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
         <Button onClick={() => setDay(shiftDay(report.day, -1))} size="sm" variant="secondary">← Day before</Button>
         {report.day !== today ? <Button onClick={() => setDay(today)} size="sm" variant="secondary">Today</Button> : null}
         {report.day < today ? <Button onClick={() => setDay(shiftDay(report.day, 1))} size="sm" variant="secondary">Next day →</Button> : null}
-        <Button onClick={() => void print()} size="sm">🖨 Store close out</Button>
+        <Button disabled={queuing} onClick={() => void storeCloseout()} size="sm">{queuing ? "Queuing…" : "🖨 Store close out"}</Button>
+        <Button onClick={() => void print()} size="sm" variant="secondary">Reprint store report</Button>
         <Button onClick={() => void printDeliveries()} size="sm">🖨 Delivery close out</Button>
       </div>
       {error ? <p className="rounded-xl bg-wayne-warn-soft p-2 text-sm font-bold">{error}</p> : null}
+      {notice ? <p className="rounded-xl bg-white p-3 text-sm font-bold" role="status">{notice}</p> : null}
       {report.saved ? <p className="rounded-xl bg-wayne-ok-soft p-3 text-sm font-bold text-wayne-ok">✓ Closed out {new Date(report.saved.closed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}{report.saved.closed_by_name ? ` by ${report.saved.closed_by_name}` : ""}: counted {formatCents(report.saved.counted_cash_cents)}, expected {formatCents(report.saved.expected_cash_cents)} ({varianceText(report.saved.variance_cents)}). Closing again replaces it.</p> : null}
+      {report.bank_payout ? <Card title="Bank payout">
+        <p className="text-sm font-bold">{report.bank_payout.enabled ? `Store close out queues Stripe card proceeds after settlement, minus refunds and fees. Standard bank processing applies.${report.bank_payout.start_business_date && report.day < report.bank_payout.start_business_date ? ` Starts ${report.bank_payout.start_business_date}.` : ""}` : "Closeout bank payouts are not enabled. Stripe follows its current payout settings."}</p>
+        {report.bank_payout.batches.map((batch) => <div className="mt-3 rounded-xl bg-wayne-cream p-3" key={batch.id}>
+          <p className="font-black">{({ waiting: "Waiting for settlement", submitting: "Checking payout request", pending: "Payout requested", in_transit: "On the way to the bank", paid: "Paid by Stripe", failed: "Payout failed — review Stripe", canceled: "Payout canceled", review: "Needs review before payout", no_payout: "No bank payout needed" } as Record<string,string>)[batch.state] ?? batch.state}</p>
+          {batch.net_cents !== null ? <><Row label="Card sales" value={formatCents(batch.gross_cents ?? 0)} /><Row label="Refunds" value={formatCents(-(batch.refund_cents ?? 0))} /><Row label="Stripe fees" value={formatCents(-(batch.fee_cents ?? 0))} /><Row big label="Net proceeds" value={formatCents(batch.net_cents)} /></> : null}
+          <p className="mt-1 text-sm">{batch.message}</p>
+          {batch.arrival_date ? <p className="text-sm">Expected arrival: {batch.arrival_date}</p> : null}
+        </div>)}
+        {report.bank_payout.enabled && !report.bank_payout.batches.length ? <p className="mt-2 text-sm">No bank payout queued for this date yet. Repeated closeouts include each payment only once.</p> : null}
+      </Card> : null}
       {/* Tips are not store income (owner, 2026-10-13): what to pay out, in one line. */}
       <div className="grid gap-3 rounded-3xl border-2 border-wayne-green bg-white p-4 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center">
         <div>
@@ -231,7 +261,6 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
             </label>
             <Button className="min-h-14 text-lg" disabled={counted === null || saving} onClick={() => void closeOut()}>{saving ? "Closing…" : report.saved ? "Close out again" : "Close out the day"}</Button>
             {report.day === today && report.drawer.open_shifts.length ? <p className="text-xs text-wayne-muted">This also closes the open drawer with this count.</p> : null}
-            {notice ? <p className="rounded-lg bg-white p-2 text-sm font-bold" role="status">{notice}</p> : null}
           </div>
         </div>
       </Card>
