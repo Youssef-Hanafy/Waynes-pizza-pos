@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
-import { nextHandOff, openOrderSchema, type OpenOrder } from "@/lib/orders/status";
+import { nextHandOff, type OpenOrder } from "@/lib/orders/status";
 import { z } from "zod";
-import { useVisiblePolling } from "@/components/ops/use-visible-polling";
+import { useOpenOrders } from "@/stores/open-orders";
 import { parseCashCountInput, posDrawerSchema } from "@/lib/cash/schemas";
 import { requestReceipt } from "@/lib/printing/request-receipt";
 import { ticketLabel } from "@/lib/orders/ticket-number";
@@ -22,7 +22,7 @@ const labels: Record<string, string> = { placed: "New", accepted: "Accepted", in
  */
 export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, onEdit }: { timeZone: string; inline?: boolean; fulfillment?: "pickup" | "delivery"; onPay?: (orderId: string) => void; /** Tap the order to edit it on the order screen (owner, 2026-10-24). */ onEdit?: (orderId: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [orders, setOrders] = useState<OpenOrder[]>([]);
+  const { orders, error: listError, refresh: load } = useOpenOrders();
   const [error, setError] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
@@ -40,16 +40,6 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, 
     const result = await requestReceipt(order.id);
     if (mounted.current) setReceiptNote({ id: order.id, text: result.message });
   }
-
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/pos/open-orders", { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      const body: unknown = await response.json();
-      const parsed = openOrderSchema.array().safeParse(body);
-      if (!response.ok || !parsed.success) throw new Error(body && typeof body === "object" && "error" in body ? String(body.error) : "Open orders are unavailable.");
-      if (mounted.current) { setOrders(parsed.data); setError(""); }
-    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Open orders are unavailable."); }
-  }, []);
 
   useEffect(() => {
     // Readers are only listed when the owner has switched reader payment on.
@@ -78,8 +68,6 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, 
     mounted.current = true;
     return () => { mounted.current = false; };
   }, [load]);
-
-  useVisiblePolling(load, 60_000);
 
   async function move(order: OpenOrder, nextStatus: "completed" | "out_for_delivery") {
     if (pending) return;
@@ -174,8 +162,8 @@ export function OpenOrdersPanel({ timeZone, inline = false, fulfillment, onPay, 
 
   const title = fulfillment === "delivery" ? "Deliveries" : "Open orders";
   const body = <>
-        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">{title}</h2><p className="text-sm text-wayne-muted">{fulfillment === "delivery" ? "Today\u2019s delivery tickets that are not yet delivered." : "Today\u2019s tickets that are not yet picked up or delivered."} Updates every 30 seconds while this screen is open.</p></div>{inline ? null : <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>}</div>
-        {error ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error}</p> : null}
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-2xl font-black">{title}</h2><p className="text-sm text-wayne-muted">{fulfillment === "delivery" ? "Today\u2019s delivery tickets that are not yet delivered." : "Today\u2019s tickets that are not yet picked up or delivered."} Updates automatically, with a one-minute backup check.</p></div>{inline ? null : <Button onClick={() => setOpen(false)} variant="secondary">Close</Button>}</div>
+        {error || listError ? <p className="mt-4 rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert" role="alert">{error || listError}</p> : null}
         {terminals.length > 1 ? <label className="mt-4 grid gap-2 text-sm font-bold">Card reader
           <select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>
             {terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}

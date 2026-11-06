@@ -3,13 +3,13 @@
 import { logDevice } from "@/lib/pos/device-log";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { useVisiblePolling } from "@/components/ops/use-visible-polling";
+import { useOpenOrders } from "@/stores/open-orders";
 import { Button } from "@/components/ui/button";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { StripeReaderTender } from "@/components/pos/stripe-reader-panel";
 import { posDrawerSchema } from "@/lib/cash/schemas";
 import { formatCents, parseMoneyToCents } from "@/lib/menu/schemas";
-import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
+import { type OpenOrder } from "@/lib/orders/status";
 import type { CheckoutPaymentConfig } from "@/lib/payments/schemas";
 import { changeDueCents, quickCashAmounts } from "@/lib/pos/tender";
 import { requestReceipt } from "@/lib/printing/request-receipt";
@@ -53,9 +53,7 @@ async function readError(response: Response, fallback: string) {
  * the receipt printer.  Sending an order or a card payment never opens it.
  */
 export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false, onAddItems }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean; /** Add items to an unpaid order, then pay it all at once. */ onAddItems?: (order: OpenOrder) => void }) {
-  const [orders, setOrders] = useState<OpenOrder[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [listError, setListError] = useState("");
+  const { orders, loaded, error: listError, refresh: load } = useOpenOrders();
   const [selectedId, setSelectedId] = useState<string | null>(initialOrderId);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [shiftId, setShiftId] = useState("");
@@ -68,18 +66,6 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
    */
   const [focused, setFocused] = useState(Boolean(initialOrderId));
   const mounted = useRef(true);
-
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/pos/open-orders", { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      const body: unknown = await response.json();
-      const parsed = openOrderSchema.array().safeParse(body);
-      if (!response.ok || !parsed.success) throw new Error("Open orders are unavailable.");
-      if (mounted.current) { setOrders(parsed.data); setListError(""); setLoaded(true); }
-    } catch (cause) {
-      if (mounted.current) { setListError(cause instanceof Error ? cause.message : "Open orders are unavailable."); setLoaded(true); }
-    }
-  }, []);
 
   const loadDrawer = useCallback(async () => {
     try {
@@ -100,7 +86,6 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
     return () => { mounted.current = false; window.clearTimeout(first); };
   }, [load, loadDrawer]);
 
-  useVisiblePolling(load, 60_000);
 
   const unpaid = orders.filter((order) => order.payment_status !== "paid" && order.status !== "payment_pending");
   const paid = orders.filter((order) => order.payment_status === "paid");

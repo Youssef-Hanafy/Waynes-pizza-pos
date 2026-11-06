@@ -13,8 +13,8 @@ export default async function PosPage() {
   const access = await requirePermission("pos.access", "/pos");
   const runtime = await loadPosRuntime(access);
   const { settings } = runtime;
-  // The menu (sold-out items, prices) refreshes in the background every 3 minutes, but only while the register is
-  // idle (PosAutoRefresh inside PosApp, owner 2026-10-28); the server still refuses a sold-out item on submit.
+  // Menu/settings edits notify idle registers immediately, with a 15-minute
+  // fallback. The server still validates availability and prices on submit.
   return <>
     <WorkspaceScope defaultCity={settings.city} defaultState={settings.state} legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} />
     <OneTab><PosApp {...runtime} /></OneTab>

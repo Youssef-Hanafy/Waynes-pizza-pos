@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { formatCents } from "@/lib/menu/schemas";
 import { displayStateSchema, signatureSvg, tipFromPercent, type DisplayState } from "@/lib/pos/customer-display";
 import { listCustomerDisplays, readCustomerDisplay, respondToCustomerDisplay } from "@/lib/pos/customer-display-client";
+import { watchPosRefresh } from "@/lib/pos/refresh-signals";
 import { stopCustomerDisplayLink } from "@/stores/customer-display-link";
 import { useAppUpdate } from "@/stores/use-app-update";
 
@@ -79,8 +80,12 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
     if (!key) return;
     let alive = true;
     let polling = false;
+    let eventsReady = false;
+    let lastRead = 0;
+    let again = false;
     async function poll() {
-      if (polling || document.visibilityState !== "visible") return;
+      if (!alive || document.visibilityState !== "visible") return;
+      if (polling) { again = true; return; }
       polling = true;
       try {
         const result = await readCustomerDisplay(key);
@@ -89,15 +94,23 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
         if (next.success) setState(next.data);
         setRegisterOnline(result.found && result.register_online !== false);
         setProblem("");
+        lastRead = Date.now();
       } catch {
         if (alive) setProblem("Reconnecting…");
       } finally {
         polling = false;
+        if (again && alive) { again = false; void poll(); }
       }
     }
     void poll();
-    const timer = window.setInterval(() => { void poll(); }, 900);
-    return () => { alive = false; window.clearInterval(timer); };
+    const stop = watchPosRefresh("display", key.trim().slice(0, 60), () => { void poll(); }, ready => { eventsReady = ready; });
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastRead >= (eventsReady ? 30_000 : 900)) void poll();
+    }, 900);
+    const visible = () => { if (document.visibilityState === "visible") void poll(); };
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("online", visible);
+    return () => { alive = false; stop(); window.clearInterval(timer); document.removeEventListener("visibilitychange", visible); window.removeEventListener("online", visible); };
   }, [key]);
 
   const respond = useCallback(async (answer: Record<string, unknown>) => {

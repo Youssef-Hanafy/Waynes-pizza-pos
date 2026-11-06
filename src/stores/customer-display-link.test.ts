@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * fake server: dropped heartbeats, another register taking the screen, and the
  * "Thank you" timer running into the next order.
  */
-const { publish } = vi.hoisted(() => ({ publish: vi.fn() }));
+const { publish, events } = vi.hoisted(() => ({ publish: vi.fn(), events: { changed: () => {}, connection: (_ready: boolean) => {} } }));
+vi.mock("@/lib/pos/refresh-signals", () => ({ watchPosRefresh: (_topic: string, _key: string, changed: () => void, connection: (ready: boolean) => void) => { events.changed = changed; events.connection = connection; return () => {}; } }));
 vi.mock("@/lib/pos/customer-display-client", () => ({ publishCustomerDisplay: publish }));
 vi.mock("@/stores/phone-store", () => ({ getTerminalLabel: () => "Register 1" }));
 
@@ -50,6 +51,25 @@ beforeEach(async () => {
 });
 
 describe("customer screen connection", () => {
+  it("uses live events for answers while healthy, then resumes fast checks after disconnect", async () => {
+    events.connection(true);
+    await advance(20_000);
+    expect(publish).toHaveBeenCalledTimes(1);
+    const request = link.askCustomer({ phase: "tip", total_cents: 2000 });
+    await advance(600);
+    const requestId = lastState().request_id as string;
+    const sent = publish.mock.calls.length;
+    await advance(5000);
+    expect(publish).toHaveBeenCalledTimes(sent);
+    publish.mockResolvedValue(online({ response: { request_id: requestId, kind: "tip", tip_cents: 300 } }));
+    events.changed();
+    await advance(600);
+    await expect(request.answer).resolves.toMatchObject({ tip_cents: 300 });
+    events.connection(false);
+    await advance(1500);
+    expect(publish.mock.calls.length).toBeGreaterThan(sent + 1);
+  });
+
   it("one dropped heartbeat does not mark the customer screen offline", async () => {
     expect(link.customerScreenSnapshot().screenOnline).toBe(true);
     publish.mockRejectedValueOnce(new Error("The customer screen could not be updated."));

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { requirePermission } from "@/lib/auth/access";
 import { getWorkspaceStoreSettings } from "@/lib/content/queries";
+import { WorkspaceScope } from "@/components/ops/workspace-scope";
 import { CustomerScreen } from "./customer-screen";
 
 export const metadata: Metadata = {
@@ -18,5 +19,5 @@ export const dynamic = "force-dynamic";
 export default async function CustomerScreenPage() {
   const access = await requirePermission("pos.access", "/pos/display");
   const settings = await getWorkspaceStoreSettings();
-  return <CustomerScreen storeName={settings.store_name || access.workspace_name || "Welcome"} />;
+  return <><WorkspaceScope legacyOperations={access.legacy_operations ?? false} locationId={access.location_id ?? null} workspaceId={access.workspace_id ?? null} /><CustomerScreen storeName={settings.store_name || access.workspace_name || "Welcome"} /></>;
 }

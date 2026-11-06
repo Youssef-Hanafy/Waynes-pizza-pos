@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
-import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
+import type { OpenOrder } from "@/lib/orders/status";
+import { useOpenOrders } from "./open-orders";
 
 /**
  * New online orders on the POS (owner, 2026-09-30): a chime and a banner the
@@ -16,9 +15,7 @@ import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
  */
 
 const CHIME_KEY = "pos.online-order-chime.v1";
-// Realtime (a new kitchen ticket / print job) asks at once; this is only the safety net
-// (owner, 2026-10-24: 8 s polling all day and night was most of the Vercel compute).
-const POLL_MS = 60_000;
+// Order fetching and its minute fallback are shared with the visible lists.
 const REPEAT_MS = 30_000;
 
 export function getOnlineChimeEnabled() {
@@ -81,50 +78,28 @@ export function useOnlineOrderAlerts(enabled: boolean) {
 
   useEffect(() => { pending.current = alerts; }, [alerts]);
 
+  const { orders, loaded, error } = useOpenOrders(enabled);
+  useEffect(() => {
+    if (!enabled || !loaded || error) return;
+    if (!seen.current) {
+      seen.current = new Set(orders.filter(order => order.status !== "payment_pending").map(order => order.id));
+      return;
+    }
+    const fresh = newOnlineOrders(orders, seen.current);
+    if (!fresh.length) return;
+    for (const order of fresh) seen.current.add(order.id);
+    // Queue outside the effect body, retaining the initial historical-order seed.
+    window.setTimeout(() => {
+      setAlerts(current => [...current, ...fresh]);
+      if (getOnlineChimeEnabled()) playOrderChime();
+    }, 0);
+  }, [enabled, loaded, orders, error]);
+
   useEffect(() => {
     if (!enabled) return;
     unlockOnFirstTap();
-    let stopped = false;
-    async function poll() {
-      if (stopped || document.visibilityState !== "visible") return;
-      try {
-        const response = await fetch("/api/pos/open-orders", { cache: "no-store", signal: AbortSignal.timeout(8000) });
-        const parsed = openOrderSchema.array().safeParse(response.ok ? await response.json() : null);
-        if (!parsed.success || stopped) return;
-        if (!seen.current) {
-          // First look: whatever is already open was there before this register started.
-          seen.current = new Set(parsed.data.filter((order) => order.status !== "payment_pending").map((order) => order.id));
-          return;
-        }
-        const fresh = newOnlineOrders(parsed.data, seen.current);
-        if (!fresh.length) return;
-        for (const order of fresh) seen.current.add(order.id);
-        setAlerts((current) => [...current, ...fresh]);
-        if (getOnlineChimeEnabled()) playOrderChime();
-      } catch { /* offline: the header already says so; try again next round */ }
-    }
-    void poll();
-    const pollTimer = window.setInterval(() => { void poll(); }, POLL_MS);
-    // A new order makes a kitchen ticket and (online orders) a print job: look straight away.
-    let soon: number | null = null;
-    const lookSoon = () => { if (soon === null) soon = window.setTimeout(() => { soon = null; void poll(); }, 1500); };
-    const client = createBrowserSupabaseClient();
-    const channel = client?.channel(`hanafy-online-alerts-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "kitchen_tickets", ...workspaceRealtimeFilter() }, lookSoon)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "print_jobs", ...workspaceRealtimeFilter() }, lookSoon)
-      .subscribe();
-    const visible = () => { if (document.visibilityState === "visible") lookSoon(); };
-    document.addEventListener("visibilitychange", visible);
-    window.addEventListener("online", lookSoon);
-    // Keep chiming until someone acknowledges it (like the old system's printer beep).
-    const repeatTimer = window.setInterval(() => { if (pending.current.length && getOnlineChimeEnabled()) playOrderChime(); }, REPEAT_MS);
-    return () => {
-      stopped = true; window.clearInterval(pollTimer); window.clearInterval(repeatTimer);
-      if (soon !== null) window.clearTimeout(soon);
-      document.removeEventListener("visibilitychange", visible);
-      window.removeEventListener("online", lookSoon);
-      if (client && channel) void client.removeChannel(channel);
-    };
+    const timer = window.setInterval(() => { if (pending.current.length && getOnlineChimeEnabled()) playOrderChime(); }, REPEAT_MS);
+    return () => window.clearInterval(timer);
   }, [enabled]);
 
   return { alerts, acknowledge: () => setAlerts([]) };

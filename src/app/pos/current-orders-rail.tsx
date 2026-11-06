@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useVisiblePolling } from "@/components/ops/use-visible-polling";
+import { useEffect, useState } from "react";
+import { useOpenOrders } from "@/stores/open-orders";
 import { formatCents } from "@/lib/menu/schemas";
 import { draftLabel } from "@/lib/orders/drafts";
 import { ticketLabel } from "@/lib/orders/ticket-number";
-import { openOrderSchema, type OpenOrder } from "@/lib/orders/status";
 import { orderActions, useDrafts } from "@/stores/order-store";
 
 /**
@@ -30,11 +29,8 @@ function minutesAgo(iso: string, now: number) {
 export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSeeOrders: boolean; onPay: (orderId: string) => void; onOpenOrders: () => void }) {
   const { drafts } = useDrafts();
   const held = drafts.filter((draft) => draft.held);
-  const [orders, setOrders] = useState<OpenOrder[]>([]);
-  const [error, setError] = useState("");
+  const { orders, error, updatedAt: now } = useOpenOrders(canSeeOrders);
   const [folded, setFolded] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  const mounted = useRef(true);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { try { setFolded(window.localStorage.getItem(FOLD_KEY) === "folded"); } catch { /* default open */ } }, 0);
@@ -45,25 +41,6 @@ export function CurrentOrdersRail({ canSeeOrders, onPay, onOpenOrders }: { canSe
     setFolded(value);
     try { window.localStorage.setItem(FOLD_KEY, value ? "folded" : "open"); } catch { /* this visit only */ }
   }
-
-  const load = useCallback(async () => {
-    if (!canSeeOrders) return;
-    try {
-      const response = await fetch("/api/pos/open-orders", { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      const body: unknown = await response.json();
-      const parsed = openOrderSchema.array().safeParse(body);
-      if (!response.ok || !parsed.success) throw new Error("Orders are unavailable — retrying.");
-      if (mounted.current) { setOrders(parsed.data); setError(""); setNow(Date.now()); }
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : "Orders are unavailable — retrying.");
-    }
-  }, [canSeeOrders]);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
-  useVisiblePolling(load, 60_000);
 
   // Paid orders are closed (owner, 2026-10-13): they leave this panel and stay in Today's Orders.
   // A paid delivery stays until it is on the road, so it can be sent out.

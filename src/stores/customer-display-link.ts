@@ -4,15 +4,16 @@ import { useSyncExternalStore } from "react";
 import { displayStateSchema, type DisplayState } from "@/lib/pos/customer-display";
 import { publishCustomerDisplay } from "@/lib/pos/customer-display-client";
 import { getTerminalLabel } from "@/stores/phone-store";
+import { watchPosRefresh } from "@/lib/pos/refresh-signals";
 import { uuid } from "@/lib/uuid";
 
 /**
  * The register's side of the customer screen (owner, 2026-10-11).
  *
  * The register keeps one "what the customer should see" state and sends it to
- * the server whenever it changes, plus a heartbeat every few seconds.  While it
- * is waiting on the customer (a tip, a signature) it sends every second, and
- * each send brings back the customer's answer.
+ * the server whenever it changes. Revision events wake a read of saved answers;
+ * healthy connections use a 30-second heartbeat. A disconnected link falls back
+ * to the previous fast polling, including once a second during tip/signature requests.
  *
  * The screen is found by this register's name (More → This register).
  */
@@ -29,7 +30,7 @@ type LinkState = {
 /**
  * A screen counts as offline only after this long without a successful send
  * (owner, 2026-10-29: one dropped heartbeat on the Elo flipped the checkout
- * past the tip).  The server still says at once when the screen stops polling.
+ * past the tip). The server separately tolerates missed screen heartbeats.
  */
 const OFFLINE_AFTER_MS = 10_000;
 /** A screen seen this recently is reconnecting, not missing: a card checkout still asks it for the tip. */
@@ -53,12 +54,17 @@ let dirty = false;
 let publisherId = "";
 let lastSent = 0;
 let timer: number | null = null;
+let stopEvents: (() => void) | null = null;
+let eventsKey = "";
+let eventsReady = false;
+let resync = false;
 let sending = false;
 let waiter: Waiter | null = null;
 // The request stays active while its answer is being saved on the register.
 let activeRequestId: string | null = null;
 let snapshot: LinkState = { screenOnline: false, key: "", showing: true };
 let lastSentOk = 0;
+let failureSince = 0;
 let lastScreenOnline = 0;
 let thanksShown = 0;
 let thanksUntil = 0;
@@ -75,13 +81,21 @@ async function send() {
   if (sending || typeof window === "undefined") return;
   const key = getTerminalLabel();
   if (!publisherId) publisherId = uuid();
+  if (timer !== null && eventsKey !== key) {
+    stopEvents?.();
+    eventsKey = key;
+    eventsReady = false;
+    stopEvents = watchPosRefresh("display", key.trim().slice(0, 60), () => { resync = true; }, ready => { eventsReady = ready; });
+  }
   const changed = dirty;
   sending = true;
   dirty = false;
+  resync = false;
   lastSent = Date.now();
   try {
     const result = await publishCustomerDisplay({ kind: "publish", key, state: current, publisher: publisherId, changed });
     lastSentOk = Date.now();
+    failureSince = 0;
     if (result.screen_online) lastScreenOnline = lastSentOk;
     emit({ screenOnline: result.screen_online, key, showing: result.showing !== false });
     const answer = result.response;
@@ -92,7 +106,8 @@ async function send() {
     }
   } catch {
     dirty = dirty || changed;
-    if (Date.now() - lastSentOk > OFFLINE_AFTER_MS) emit({ screenOnline: false });
+    if (!failureSince) failureSince = Date.now();
+    if (Date.now() - failureSince > OFFLINE_AFTER_MS) emit({ screenOnline: false });
   } finally {
     sending = false;
   }
@@ -100,8 +115,8 @@ async function send() {
 
 function tick() {
   if (document.visibilityState !== "visible") return;
-  const interval = activeRequestId ? 1000 : 4000;
-  if (dirty || Date.now() - lastSent >= interval) void send();
+  const interval = eventsReady && !failureSince ? 30_000 : activeRequestId ? 1000 : 4000;
+  if (dirty || resync || getTerminalLabel() !== eventsKey || Date.now() - lastSent >= interval) void send();
 }
 
 /** Start talking to the customer screen (once, from the POS shell). Returns the stop. */
@@ -120,6 +135,7 @@ export function startCustomerDisplayLink() {
 export function stopCustomerDisplayLink() {
   if (timer !== null && typeof window !== "undefined") window.clearInterval(timer);
   timer = null;
+  stopEvents?.(); stopEvents = null; eventsKey = ""; eventsReady = false;
   clearCustomerRequest();
 }
 
