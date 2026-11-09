@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureHeldCards } from "@/lib/payments/tip-capture";
+import { captureHeldCards, type TipRequest } from "@/lib/payments/tip-capture";
 import { PaymentProviderError, type ProviderPayment } from "@/lib/payments/provider";
 import { startTipPostgres, workspaceId } from "./helpers/tip-postgres";
 
@@ -21,19 +21,19 @@ let voidOriginalAfterTip: string | null = null;
 const provider = {
   code: "stripe",
   getPaymentStatus: vi.fn(async (id: string) => ({ ...intents.get(id)! })),
-  createSavedCardIntent: vi.fn(async (input: { idempotencyKey: string; amountCents: number }) => {
+  createSavedCardIntent: vi.fn(async (input: { idempotencyKey: string; amountCents: number; metadata?: Record<string, string> }) => {
     const existing = keys.get(input.idempotencyKey);
     if (existing) return { ...intents.get(existing)! };
     const id = `pi_tip_${randomUUID()}`;
     keys.set(input.idempotencyKey, id);
-    const intent: ProviderPayment = { providerPaymentId: id, status: "pending", providerStatus: "requires_confirmation", amountCents: input.amountCents, cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null };
+    const intent: ProviderPayment = { providerPaymentId: id, status: "pending", providerStatus: "requires_confirmation", amountCents: input.amountCents, cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null, metadata: input.metadata };
     intents.set(id, intent); created.push({ id, amount: input.amountCents });
     return { ...intent };
   }),
-  confirmSavedCardIntent: vi.fn(async (id: string) => {
+  confirmSavedCardIntent: vi.fn(async (id: string, key: string, paymentMethodId?: string) => {
     const intent = intents.get(id)!;
-    if (intent.status !== "pending") return { ...intent };
-    if (declineTip) Object.assign(intent, { status: "failed", providerStatus: "requires_payment_method", failureReason: "The card was declined. Try another card." });
+    if (intent.status !== "pending" && !(intent.status === "failed" && paymentMethodId === "pm_keyed")) return { ...intent };
+    if (declineTip) Object.assign(intent, { status: "failed", providerStatus: "requires_payment_method", failureReason: "The card was declined. Try another card.", retryableDeclineId: `ch_${key.endsWith("-tip-confirm") ? "first" : "second"}` });
     else { Object.assign(intent, { status: "captured", providerStatus: "succeeded" }); charges.push({ id, amount: intent.amountCents! }); }
     if (voidOriginalAfterTip) Object.assign(intents.get(voidOriginalAfterTip)!, { status: "voided", providerStatus: "canceled" });
     return { ...intent };
@@ -61,7 +61,7 @@ describe("keyed delivery card: tip charged separately (durable coordinator)", ()
     const fixture = await db.fixture();
     intents.set(fixture.originalId, { providerPaymentId: fixture.originalId, status: "authorized", providerStatus: "requires_capture", amountCents: fixture.amount, maxCapturableCents: fixture.amount + room,
       paymentMethodId: room ? null : "pm_keyed", customerId: room ? null : "cus_keyed", cardBrand: "visa", cardLast4: "3289", receiptUrl: null, failureReason: null } as ProviderPayment);
-    const run = async (tip: number) => captureHeldCards({ service: (await db.service()).api, workspaceId, locationId: null, requests: [{ order_id: fixture.orderId, tip_cents: tip }], keyPrefix: "driver-cashout" });
+    const run = async (tip: number, retry?: TipRequest) => captureHeldCards({ service: (await db.service()).api, workspaceId, locationId: null, requests: [retry ?? { order_id: fixture.orderId, tip_cents: tip }], keyPrefix: "driver-cashout" });
     return { ...fixture, run };
   }
 
@@ -100,6 +100,41 @@ describe("keyed delivery card: tip charged separately (durable coordinator)", ()
     await order.run(300); await order.run(0);
     expect(charges.map((c) => c.amount)).toEqual([300]);
     expect(provider.voidPayment).not.toHaveBeenCalled();
+  });
+
+  it("retries the same bound tip once and reconciles a lost confirmation without a second charge", async () => {
+    const order = await keyed();
+    declineTip = true;
+    const first = await order.run(522);
+    const retry = first.retryable_tips[0];
+    expect(retry).toMatchObject({ tip_cents: 522, retry_decline_id: "ch_first", payment_id: order.paymentId });
+    declineTip = false;
+    const confirm = provider.confirmSavedCardIntent.getMockImplementation()!;
+    provider.confirmSavedCardIntent.mockImplementationOnce(async (...args) => {
+      await confirm(...args);
+      throw new Error("Connection lost after Stripe accepted the tip");
+    });
+    const results = await Promise.all([order.run(522, retry), order.run(522, retry)]);
+    expect(results.flatMap((result) => result.captures)).toContainEqual(expect.objectContaining({ tip_cents: 522, captured_cents: order.amount + 522 }));
+    await order.run(522, retry);
+    expect(provider.createSavedCardIntent).toHaveBeenCalledTimes(1);
+    expect(provider.confirmSavedCardIntent).toHaveBeenCalledTimes(2);
+    expect(provider.confirmSavedCardIntent).toHaveBeenLastCalledWith(created[0].id, expect.stringContaining("ch_first"), "pm_keyed");
+    expect(charges.map((charge) => charge.amount)).toEqual([522, order.amount]);
+  });
+
+  it("requires a fresh cashier action after a second decline", async () => {
+    const order = await keyed();
+    declineTip = true;
+    const first = (await order.run(522)).retryable_tips[0];
+    const second = (await order.run(522, first)).retryable_tips[0];
+    expect(second.retry_decline_id).toBe("ch_second");
+    await order.run(522, first);
+    expect(provider.confirmSavedCardIntent).toHaveBeenCalledTimes(2);
+    expect(charges).toEqual([]);
+    declineTip = false;
+    expect((await order.run(522, second)).captures[0]).toMatchObject({ tip_cents: 522 });
+    expect(charges.map((charge) => charge.amount)).toEqual([522, order.amount]);
   });
 
   it("approval already expired: no tip charged", async () => {

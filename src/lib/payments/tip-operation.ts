@@ -14,13 +14,12 @@ type Operation = {
 type Payment = { provider_payment_id?: string | null; amount_cents?: number; id: string; provider: string; card_brand: string | null; card_last4: string | null; metadata: Record<string, unknown> };
 const uncertain = () => new PaymentProviderError("This payment is still being reconciled. Retry this operation; do not charge the customer another way.", "TIP_UNCERTAIN", true);
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
-/**
- * Final answers the cashier can act on (owner, 2026-10-29). Not retryable: a retry reads the
- * same bound Stripe identities back and gives the same answer; it never creates a new charge.
- */
-const tipDeclined = (tip: number) => new PaymentProviderError(
-  `Stripe declined the ${dollars(tip)} tip. Nothing was charged; the order is still held on its approval. Set this tip to 0 to charge the order only and pay the driver the tip in cash.`,
-  "TIP_DECLINED", false);
+/** A confirmed decline can offer a separate, explicit retry action. */
+export class TipDeclinedError extends PaymentProviderError {
+  constructor(readonly tipCents: number, readonly declineId?: string) {
+    super(`Stripe declined the ${dollars(tipCents)} tip. Nothing was charged; the order is still held on its approval. ${declineId ? "Retry the tip when the customer is ready, or set it to 0 to charge the order only." : "Set this tip to 0 to charge the order only and pay the driver the tip in cash."}`, "TIP_DECLINED", false);
+  }
+}
 const originalNotChargeable = (status: string, tipCharged: number) => new PaymentProviderError(tipCharged > 0
   ? `The ${dollars(tipCharged)} tip was charged on its own, but the order's card approval can't be charged (${status}). The order is NOT paid. Do not charge the tip again; collect the order total another way and check this order in Stripe.`
   : `The order's card approval can't be charged (${status}). Nothing was charged. Collect payment another way.`,
@@ -28,7 +27,7 @@ const originalNotChargeable = (status: string, tipCharged: number) => new Paymen
 
 /** A durable receipt, not the request's screen or newly entered amount, owns retries. */
 export async function runTipOperation(options: {
-  service: Service; payment: Payment; workspaceId: string; wanted: number; origin: string;
+  service: Service; payment: Payment; workspaceId: string; wanted: number; origin: string; retryDeclineId?: string;
   provider: () => Promise<PaymentProvider>; testTipRoom: number;
 }): Promise<{ capture: TipCapture; problems: string[] }> {
   const { service, payment } = options;
@@ -91,6 +90,10 @@ export async function runTipOperation(options: {
   };
   try {
     if (op.state !== "succeeded") {
+      if (options.retryDeclineId && (!op.plan || !op.fallback_to_capture || !op.tip_intent_id ||
+          options.wanted <= 0 || options.wanted !== op.requested_tip_cents)) {
+        throw new PaymentProviderError("This tip is no longer eligible for retry. Refresh the order.", "TIP_RETRY_STALE");
+      }
       if (!op.plan) {
         if (!claim.execution_enabled) throw uncertain();
         let plan: Plan;
@@ -180,25 +183,37 @@ export async function runTipOperation(options: {
             await update("bind_tip", { provider_id: prepared.providerPaymentId });
           }
           let tip = await stripe.getPaymentStatus(op.tip_intent_id!);
-          if (tip.providerStatus === "requires_confirmation") {
+          const retryableDecline = (intent: ProviderPayment) => intent.providerStatus === "requires_payment_method" &&
+            intent.amountCents === op.requested_tip_cents && intent.metadata?.wayne_tip_operation === op.id &&
+            intent.metadata.wayne_tip_only === "true" && plan.payment_method_id && stripe.confirmSavedCardIntent
+            ? intent.retryableDeclineId : undefined;
+          const retryId = retryableDecline(tip);
+          const retry = retryId !== undefined && options.retryDeclineId === retryId;
+          if (retry || (!options.retryDeclineId && tip.providerStatus === "requires_confirmation")) {
             if (!claim.execution_enabled || !stripe.confirmSavedCardIntent) throw uncertain();
             // Last check before money moves: the order's approval must still be capturable.
             const original = await stripe.getPaymentStatus(op.original_provider_id!);
             if (original.status === "voided" || original.status === "failed") throw originalNotChargeable(original.providerStatus || original.status, 0);
-            try { tip = await stripe.confirmSavedCardIntent(op.tip_intent_id!, `tip-${op.id}-tip-confirm`); }
+            if (original.status !== "authorized" && original.status !== "captured") throw uncertain();
+            // The failed charge identifies the attempt. Replays use the same key;
+            // a new decline requires a fresh cashier action using its new charge ID.
+            const key = `tip-${op.id}-tip-confirm${retry ? `-${retryId}` : ""}`;
+            try { tip = await stripe.confirmSavedCardIntent(op.tip_intent_id!, key, retry ? plan.payment_method_id : undefined); }
             catch { tip = await stripe.getPaymentStatus(op.tip_intent_id!); }
           }
-          // A definite decline with a tip still wanted: same bound intent, same answer on every retry.
-          if ((tip.status === "failed" || tip.status === "voided") && options.wanted !== 0) throw tipDeclined(op.requested_tip_cents);
+          // Ordinary submissions report the current decline without attempting the tip again.
+          if ((tip.status === "failed" || tip.status === "voided") && options.wanted !== 0) {
+            throw new TipDeclinedError(op.requested_tip_cents, retryableDecline(tip));
+          }
           if ((tip.status === "failed" || tip.status === "voided") && options.wanted === 0) {
             if (!claim.execution_enabled) throw uncertain();
             const canceled = tip.status === "voided" ? tip : await stripe.voidPayment(op.tip_intent_id!);
             if (canceled.status !== "voided") throw uncertain();
             await update("omit_tip", { canceled_id: op.tip_intent_id });
           } else {
-          if (tip.status !== "captured" || tip.amountCents !== op.requested_tip_cents) throw uncertain();
-          const { error } = await service.rpc("wayne_record_tip_leg", { target_operation_id: op.id, provider_id: tip.providerPaymentId, captured_cents: tip.amountCents, card_brand: tip.cardBrand, card_last4: tip.cardLast4 });
-          if (error) throw uncertain();
+            if (tip.status !== "captured" || tip.amountCents !== op.requested_tip_cents) throw uncertain();
+            const { error } = await service.rpc("wayne_record_tip_leg", { target_operation_id: op.id, provider_id: tip.providerPaymentId, captured_cents: tip.amountCents, card_brand: tip.cardBrand, card_last4: tip.cardLast4 });
+            if (error) throw uncertain();
           }
         }
         if (!op.result && (plan.mode === "capture" || op.fallback_to_capture)) {

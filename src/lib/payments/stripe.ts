@@ -16,7 +16,7 @@ export type StripeConfig = { secretKey: string; webhookSecret: string };
 type StripeCard = { brand?: string; last4?: string };
 type StripePaymentIntent = {
   id?: string; status?: string; amount?: number; amount_received?: number; client_secret?: string;
-  last_payment_error?: { code?: string; message?: string };
+  last_payment_error?: { code?: string; message?: string; advice_code?: string; charge?: string };
   payment_method?: { id?: string; card?: StripeCard } | string | null;
   customer?: string | { id?: string } | null;
   metadata?: Record<string, string>;
@@ -66,6 +66,9 @@ function mapIntent(intent: StripePaymentIntent): ProviderPayment {
     maxCapturableCents,
     paymentMethodId: typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id ?? null,
     customerId: typeof intent.customer === "string" ? intent.customer : intent.customer?.id ?? null,
+    ...(intent.status === "requires_payment_method" && intent.last_payment_error?.code === "card_declined" &&
+      intent.last_payment_error.advice_code === "try_again_later" && intent.last_payment_error.charge
+      ? { retryableDeclineId: intent.last_payment_error.charge } : {}),
   };
 }
 
@@ -220,9 +223,9 @@ export function createStripeProvider(config: StripeConfig): PaymentProvider {
       }, "The card could not be charged for the tip.");
       return mapIntent(intent);
     },
-    async confirmSavedCardIntent(providerPaymentId, idempotencyKey) {
+    async confirmSavedCardIntent(providerPaymentId, idempotencyKey, paymentMethodId) {
       const intent = await call<StripePaymentIntent>(`/v1/payment_intents/${encodeURIComponent(providerPaymentId)}/confirm`, {
-        method: "POST", idempotencyKey, body: form({ off_session: true, "expand[]": "latest_charge" }),
+        method: "POST", idempotencyKey, body: form({ off_session: true, payment_method: paymentMethodId, "expand[]": "latest_charge" }),
       }, "The saved card could not be confirmed. Its outcome must be checked before another payment.");
       return mapIntent(intent);
     },

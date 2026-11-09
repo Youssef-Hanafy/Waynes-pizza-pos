@@ -6,7 +6,7 @@ import { ticketNumber } from "@/lib/orders/ticket-number";
 import { useVisiblePolling } from "@/components/ops/use-visible-polling";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/menu/schemas";
-import { heldCardSchema, parseTipInput, tipRoom, type HeldCard } from "@/lib/tips/schemas";
+import { heldCardSchema, parseTipInput, tipRetrySchema, tipRoom, type HeldCard, type TipRetry } from "@/lib/tips/schemas";
 import { tipSaveState } from "@/lib/tips/drafts";
 import { workspaceStorageKey } from "@/lib/tenancy/active-workspace";
 import { getClientWorkspaceScope } from "@/lib/tenancy/client-scope";
@@ -62,6 +62,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
   }, [drafts]);
   const [cachedAt, setCachedAt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [retryableTips, setRetryableTips] = useState<TipRetry[]>([]);
   useEffect(() => {
     loadTipDrafts();
     // Before the server answers (or with no connection), show the last list this register saw.
@@ -101,7 +102,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
   const tooBig = entered.filter((line) => line.cents !== null && line.cents > tipRoom(line.card));
   const tipTotal = entered.reduce((sum, line) => sum + (line.cents ?? 0), 0);
 
-  async function charge(lines: { card: HeldCard; cents: number | null }[]) {
+  async function charge(lines: { card: HeldCard; cents: number | null }[], retry?: TipRetry) {
     if (busy || !lines.length) return;
     if (lines.some((line) => line.cents === null)) { setNotice({ tone: "warn", text: "One of the tips isn't a number. Fix the boxes in red." }); return; }
     setBusy(true); setNotice(null);
@@ -110,10 +111,14 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     try {
       const response = await fetch("/api/pos/tips", {
         method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-        body: JSON.stringify({ tips: lines.map((line) => ({ order_id: line.card.order_id, tip_cents: line.cents ?? 0 })) }),
+        body: JSON.stringify({ tips: retry ? [retry] : lines.map((line) => ({ order_id: line.card.order_id, tip_cents: line.cents ?? 0 })) }),
         signal: AbortSignal.timeout(90_000),
       });
-      const body = await response.json().catch(() => ({})) as { charged?: number; tips_cents?: number; problems?: string[]; error?: string; charged_order_ids?: string[] };
+      const body = await response.json().catch(() => ({})) as { charged?: number; tips_cents?: number; problems?: string[]; error?: string; charged_order_ids?: string[]; retryable_tips?: unknown };
+      const retryOptions = tipRetrySchema.array().safeParse(body.retryable_tips);
+      if (retryOptions.success) {
+        setRetryableTips((current) => [...current.filter((option) => !lines.some((line) => line.card.payment_id === option.payment_id)), ...retryOptions.data]);
+      }
       if (!response.ok) throw new Error(body.error || "The cards could not be charged.");
       const problems = body.problems ?? [];
       setNotice({ tone: problems.length ? "warn" : "ok", text: `✓ Charged ${body.charged ?? lines.length} card${(body.charged ?? lines.length) === 1 ? "" : "s"} with ${formatCents(body.tips_cents ?? 0)} in tips.${problems.length ? ` ${problems.join(" ")}` : ""}` });
@@ -149,6 +154,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
           const cents = parseTipInput(raw);
           const room = tipRoom(card);
           const over = cents !== null && cents > room;
+          const retry = retryableTips.find((option) => option.payment_id === card.payment_id);
           return <li className="grid gap-2 rounded-2xl border border-wayne-border bg-white p-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-center" key={card.payment_id}>
             <div className="min-w-0">
               <p className="flex flex-wrap items-baseline gap-x-2 text-lg font-black">
@@ -169,6 +175,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
               <p className="text-xs font-bold text-wayne-muted">Card charged</p>
               <p className="text-xl font-black">{formatCents(card.authorized_cents + Math.min(cents ?? 0, room))}</p>
               <button className="mt-1 min-h-10 rounded-lg border border-wayne-border px-3 text-sm font-black disabled:opacity-40" disabled={busy || cents === null} onClick={() => { void charge([{ card, cents }]); }} type="button">Charge this one</button>
+              {retry ? <Button className="ml-1 mt-1" disabled={busy || cents !== retry.tip_cents} onClick={() => { void charge([{ card, cents }], retry); }} size="sm" variant="secondary">Retry {formatCents(retry.tip_cents)} tip</Button> : null}
             </div>
           </li>;
         })}

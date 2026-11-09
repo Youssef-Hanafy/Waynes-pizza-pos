@@ -4,14 +4,15 @@ import { logger } from "@/lib/logging/logger";
 import type { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { resolvePaymentProvider } from "./config";
 import { PaymentProviderError } from "./provider";
+import type { TipRetry } from "@/lib/tips/schemas";
 
-import { runTipOperation } from "./tip-operation";
+import { runTipOperation, TipDeclinedError } from "./tip-operation";
 
 /** Shared durable capture/reconciliation for Tips, driver cash-out and recovery. */
 
 type Service = ReturnType<typeof createServiceSupabaseClient>;
 
-export type TipRequest = { order_id: string; tip_cents: number; /** Recovery targets the saved payment, even if the order has other tenders. */ payment_id?: string };
+export type TipRequest = { order_id: string; tip_cents: number; /** Recovery targets the saved payment, even if the order has other tenders. */ payment_id?: string; retry_decline_id?: string };
 
 export type TipCapture = {
   order_id: string;
@@ -32,6 +33,7 @@ export type TipCaptureResult = {
   skipped: string[];
   /** What went wrong or was cut down, in words for the cashier. */
   problems: string[];
+  retryable_tips: TipRetry[];
 };
 
 /** Room for a tip on a held card: Stripe's limit when known, else 50% or $50 — whichever is greater. */
@@ -49,7 +51,7 @@ export async function captureHeldCards(options: {
   keyPrefix: string;
 }): Promise<TipCaptureResult> {
   const { service, workspaceId, requests } = options;
-  const result: TipCaptureResult = { captures: [], skipped: [], problems: [] };
+  const result: TipCaptureResult = { captures: [], skipped: [], problems: [], retryable_tips: [] };
   if (!requests.length) return result;
 
   const { data: rows, error } = await service.from("payments")
@@ -73,7 +75,7 @@ export async function captureHeldCards(options: {
     const wanted = Math.max(0, Math.round(request.tip_cents || 0));
     try {
       const completed = await runTipOperation({
-        service, workspaceId, wanted, origin: options.keyPrefix,
+        service, workspaceId, wanted, origin: options.keyPrefix, retryDeclineId: request.retry_decline_id,
         payment: { ...payment, metadata: (payment.metadata ?? {}) as Record<string, unknown> },
         testTipRoom: tipRoomCents(payment.amount_cents, (payment.metadata as Record<string, unknown> | null)?.max_capture_cents as number | undefined),
         provider: async () => {
@@ -85,6 +87,9 @@ export async function captureHeldCards(options: {
       result.captures.push(completed.capture);
       result.problems.push(...completed.problems.map((problem) => `${label}: ${problem}`));
     } catch (cause) {
+      if (cause instanceof TipDeclinedError && cause.declineId) {
+        result.retryable_tips.push({ order_id: payment.order_id, payment_id: payment.id, tip_cents: cause.tipCents, retry_decline_id: cause.declineId });
+      }
       logger.error("payments.tip_capture_failed", cause, { order_id: payment.order_id, origin: options.keyPrefix });
       result.skipped.push(payment.order_id);
       result.problems.push(`${label}: ${cause instanceof Error ? cause.message : "The payment outcome is unknown. Retry to reconcile; do not charge again."}`);

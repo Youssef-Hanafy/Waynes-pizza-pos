@@ -42,10 +42,10 @@ export async function POST(request: Request) {
     service: createServiceSupabaseClient(), workspaceId: access.workspace_id, locationId: access.location_id ?? null,
     requests: parsed.data.tips, keyPrefix: "tips",
   });
-  if (!result.captures.length) return Response.json({ error: result.problems.join(" ") || "No card could be charged.", problems: result.problems }, { status: 502 });
+  if (!result.captures.length) return Response.json({ error: result.problems.join(" ") || "No card could be charged.", problems: result.problems, retryable_tips: result.retryable_tips }, { status: 502 });
 
   const supabase = await createServerSupabaseClient();
   // The tips typed for these orders are done (best effort: the list only shows orders still waiting anyway).
   await supabase.rpc("wayne_pos_clear_tip_drafts", { order_ids: result.captures.map((capture) => capture.order_id) }).then(() => undefined, () => undefined);
-  return Response.json({ charged_order_ids: result.captures.map((capture) => capture.order_id), charged: result.captures.length, tips_cents: result.captures.filter((capture) => !capture.is_test).reduce((sum, capture) => sum + capture.tip_cents, 0), problems: result.problems }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ charged_order_ids: result.captures.map((capture) => capture.order_id), charged: result.captures.length, tips_cents: result.captures.filter((capture) => !capture.is_test).reduce((sum, capture) => sum + capture.tip_cents, 0), problems: result.problems, retryable_tips: result.retryable_tips }, { headers: { "Cache-Control": "no-store" } });
 }

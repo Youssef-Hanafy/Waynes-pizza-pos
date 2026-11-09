@@ -27,6 +27,21 @@ describe("Stripe durable tip operation transport", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ id: "pi_partial", status: "succeeded", amount: 3000, amount_received: 2500 })));
     expect((await stripe().getPaymentStatus("pi_partial")).amountCents).toBe(2500);
   });
+  it("offers a retry only when Stripe advises trying again and resupplies the saved card", async () => {
+    const failed = { id: "pi_bound", status: "requires_payment_method", client_secret: "fixture", amount: 522 };
+    const error = { code: "card_declined", charge: "ch_declined" };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ...failed, last_payment_error: { ...error, advice_code: "do_not_try_again" } }))
+      .mockResolvedValueOnce(Response.json({ ...failed, last_payment_error: { ...error, advice_code: "try_again_later" } }))
+      .mockResolvedValueOnce(Response.json({ id: "pi_bound", status: "succeeded", amount: 522, amount_received: 522 }));
+    vi.stubGlobal("fetch", fetch);
+    const provider = stripe();
+    expect((await provider.getPaymentStatus("pi_bound")).retryableDeclineId).toBeUndefined();
+    expect((await provider.getPaymentStatus("pi_bound")).retryableDeclineId).toBe("ch_declined");
+    await provider.confirmSavedCardIntent!("pi_bound", "tip-confirm-ch_declined", "pm_saved");
+    expect(fetch.mock.calls[2][1].body.get("payment_method")).toBe("pm_saved");
+    expect(fetch.mock.calls[2][1].headers["Idempotency-Key"]).toBe("tip-confirm-ch_declined");
+  });
   it("treats network loss as an unknown retryable outcome", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network timeout")));
     await expect(stripe().confirmSavedCardIntent!("pi_bound", "tip-operation-confirm")).rejects.toMatchObject({ code: "NETWORK", retryable: true });

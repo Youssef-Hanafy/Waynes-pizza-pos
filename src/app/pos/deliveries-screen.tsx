@@ -15,6 +15,7 @@ import { getHardwareRuntime } from "@/stores/hardware-store";
 import { PinPad } from "@/components/ui/pin-pad";
 import { ClockButton } from "./clock-button";
 import { tipSaveState } from "@/lib/tips/drafts";
+import { tipRetrySchema, type TipRetry } from "@/lib/tips/schemas";
 import { clearTipDrafts, loadTipDrafts, refreshTipDrafts, setTipDraft, syncTipDrafts, useTipDrafts } from "@/stores/tip-drafts";
 import { TipSavedNote, TipsSavedBanner } from "./tip-saved-note";
 
@@ -74,6 +75,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
     return out;
   }, [drafts]);
   const [cashingOut, setCashingOut] = useState<string | null>(null);
+  const [retryableTips, setRetryableTips] = useState<TipRetry[]>([]);
   const [result, setResult] = useState<(PosCashoutResult & { problems: string[]; driver_id: string }) | null>(null);
   const mounted = useRef(true);
   // Orders ticked to go out together; the driver then types his PIN.
@@ -188,6 +190,12 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
         signal: AbortSignal.timeout(60_000),
       });
       const body: unknown = await response.json().catch(() => null);
+      if (body && typeof body === "object" && "retryable_tips" in body) {
+        const retryOptions = tipRetrySchema.array().safeParse(body.retryable_tips);
+        if (retryOptions.success) {
+          setRetryableTips((current) => [...current.filter((option) => !orders.some((order) => order.order_id === option.order_id)), ...retryOptions.data]);
+        }
+      }
       if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "The cash-out could not be saved.");
       const parsed = posCashoutResultSchema.safeParse(body);
       const problems = body && typeof body === "object" && "problems" in body && Array.isArray((body as { problems: unknown }).problems) ? (body as { problems: string[] }).problems : [];
@@ -203,6 +211,31 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The cash-out could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function retryTip(retry: TipRetry) {
+    if (busy !== null) return;
+    setBusy(`retry-tip-${retry.order_id}`); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/pos/tips", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tips: [retry] }), signal: AbortSignal.timeout(90_000),
+      });
+      const body = await response.json().catch(() => null) as { retryable_tips?: unknown; error?: string; tips_cents?: number; problems?: string[] } | null;
+      const retryOptions = tipRetrySchema.array().safeParse(body?.retryable_tips);
+      if (retryOptions.success) {
+        setRetryableTips((current) => [...current.filter((option) => option.payment_id !== retry.payment_id), ...retryOptions.data]);
+      }
+      if (!response.ok) throw new Error(body?.error || "The tip payment could not be checked. Refresh before trying again.");
+      clearTipDrafts([retry.order_id]);
+      if (body?.problems?.length) setError(body.problems.join(" "));
+      else setNotice(`Order charged with ${formatCents(body?.tips_cents ?? 0)} in added tips. Confirm cash out to pay the driver.`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The tip payment could not be checked. Refresh before trying again.");
     } finally {
       setBusy(null);
     }
@@ -314,6 +347,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                   const noCardTip = order.paid_by === "card_held" && cap === 0;
                   // A tip taken on the phone before the card was approved (owner, 2026-10-31): already on the card, never charged again.
                   const onCard = tipOnCardCents(order);
+                  const retry = order.paid_by === "card_held" ? retryableTips.find((option) => option.order_id === order.order_id) : undefined;
                   return <tr className="border-b border-wayne-border align-top last:border-0" key={order.order_id}>
                     {/* The slip number, big, so the tip on each paper slip is easy to match (owner, 2026-10-28). */}
                     <td className="py-2 pr-2 whitespace-nowrap"><span className="inline-block rounded-lg bg-wayne-green px-2 py-0.5 text-2xl font-black text-white">#{ticketNumber(order)}</span></td>
@@ -325,7 +359,10 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                       <TipSavedNote error={drafts[order.order_id]?.error} state={tipSaveState(drafts[order.order_id])} terminal={drafts[order.order_id]?.terminal} />
                       {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
                     </> : <span className="text-sm font-bold">{formatCents(order.tip_cents)}<span className="block text-xs font-normal text-wayne-muted">{order.paid_by === "paid" ? "tip paid online" : "charged at the counter"} · drawer pays it</span></span>}</td>
-                    <td className="py-2 text-right">{order.status === "out_for_delivery" ? <button className="min-h-9 text-xs font-bold underline" disabled={busy !== null} onClick={() => { void act(`back-${order.order_id}`, { action: "unassign", order_id: order.order_id }); }} type="button">Take back</button> : null}</td>
+                    <td className="py-2 text-right">
+                      {retry ? <Button disabled={busy !== null || cents !== retry.tip_cents} onClick={() => { void retryTip(retry); }} size="sm" variant="secondary">Retry {formatCents(retry.tip_cents)} tip</Button> : null}
+                      {order.status === "out_for_delivery" ? <button className="min-h-9 text-xs font-bold underline" disabled={busy !== null} onClick={() => { void act(`back-${order.order_id}`, { action: "unassign", order_id: order.order_id }); }} type="button">Take back</button> : null}
+                    </td>
                   </tr>;
                 })}</tbody>
               </table>

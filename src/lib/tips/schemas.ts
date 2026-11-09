@@ -24,9 +24,17 @@ export const heldCardSchema = z.object({
 });
 export type HeldCard = z.infer<typeof heldCardSchema>;
 
-export const tipCaptureRequestSchema = z.object({
-  tips: z.array(z.object({ order_id: z.uuid(), tip_cents: z.number().int().min(0).max(100_000) })).min(1).max(100),
+const tipLineSchema = z.object({ order_id: z.uuid(), tip_cents: z.number().int().min(0).max(100_000) });
+export const tipRetrySchema = tipLineSchema.extend({
+  payment_id: z.uuid(),
+  retry_decline_id: z.string().regex(/^ch_[a-zA-Z0-9_]{1,100}$/),
 });
+export type TipRetry = z.infer<typeof tipRetrySchema>;
+
+export const tipCaptureRequestSchema = z.union([
+  z.object({ tips: z.tuple([tipRetrySchema]) }),
+  z.object({ tips: z.array(tipLineSchema.strict()).min(1).max(100) }),
+]);
 
 /** The most tip that fits on the card (Stripe overcapture). */
 export function tipRoom(card: Pick<HeldCard, "authorized_cents" | "max_capture_cents">) {

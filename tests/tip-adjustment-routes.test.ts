@@ -65,7 +65,7 @@ const service = {
 
 beforeEach(() => {
   vi.clearAllMocks(); filters.length = 0; envelope = tipEnvelope(); duplicate = false; recoveryUnavailable = false;
-  vi.mocked(captureHeldCards).mockResolvedValue({ captures: [], skipped: [], problems: [] });
+  vi.mocked(captureHeldCards).mockResolvedValue({ captures: [], skipped: [], problems: [], retryable_tips: [] });
 });
 const routes = [
   { name: "host Stripe webhook", invoke: () => stripeWebhook(new Request("https://local.invalid/api/webhooks/stripe", { method: "POST", body: "fixture" })) },
@@ -123,11 +123,25 @@ describe("tip entry point responses and recovery selection", () => {
     expect(filters.some((filter) => filter.table === "payments")).toBe(false);
     expect(captureHeldCards).not.toHaveBeenCalled();
   });
+  it("passes an explicit retry for one payment and returns the next eligible decline", async () => {
+    const retry = { order_id: orderId, payment_id: orderId, tip_cents: 522, retry_decline_id: "ch_first" };
+    const nextRetry = { ...retry, retry_decline_id: "ch_second" };
+    const request = (lines: unknown[]) => new Request("https://local.invalid/api/pos/tips", {
+      method: "POST", headers: { origin: "https://local.invalid" }, body: JSON.stringify({ tips: lines }),
+    });
+    expect((await tips(request([retry, { order_id: releasedOrderId, tip_cents: 500 }]))).status).toBe(400);
+    expect(captureHeldCards).not.toHaveBeenCalled();
+    vi.mocked(captureHeldCards).mockResolvedValueOnce({ captures: [], skipped: [orderId], problems: ["Tip declined."], retryable_tips: [nextRetry] });
+    const response = await tips(request([retry]));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ retryable_tips: [nextRetry] });
+    expect(captureHeldCards).toHaveBeenCalledWith(expect.objectContaining({ requests: [retry] }));
+  });
   it("reports already-committed receipts without re-applying the ledger, excluding test tips", async () => {
     vi.mocked(captureHeldCards).mockResolvedValue({ captures: [
       { order_id: orderId, payment_id: orderId, captured_cents: 2500, tip_cents: 500, card_brand: "visa", card_last4: "4242", is_test: false },
       { order_id: releasedOrderId, payment_id: releasedOrderId, captured_cents: 2800, tip_cents: 800, card_brand: "test", card_last4: "4242", is_test: true },
-    ], problems: [], skipped: [] });
+    ], problems: [], skipped: [], retryable_tips: [] });
     const response = await tips(new Request("https://local.invalid/api/pos/tips", { method: "POST", headers: { origin: "https://local.invalid", "content-type": "application/json" }, body: JSON.stringify({ tips: [{ order_id: orderId, tip_cents: 500 }, { order_id: releasedOrderId, tip_cents: 800 }] }) }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ charged: 2, tips_cents: 500 });

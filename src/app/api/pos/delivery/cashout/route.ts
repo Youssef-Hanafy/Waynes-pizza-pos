@@ -3,7 +3,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { posCashoutRequestSchema, posCashoutResultSchema, posDeliveryBoardSchema } from "@/lib/delivery/pos-board";
 import { spokenDatabaseMessage } from "@/lib/errors/database";
 import { logger } from "@/lib/logging/logger";
-import { captureHeldCards, type TipCapture } from "@/lib/payments/tip-capture";
+import { captureHeldCards, type TipCaptureResult } from "@/lib/payments/tip-capture";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 /**
@@ -41,22 +41,17 @@ export async function POST(request: Request) {
 
   const tipFor = new Map(parsed.data.tips.map((tip) => [tip.order_id, tip.tip_cents]));
   const held = driver.orders.filter((order) => order.paid_by === "card_held");
-  let captures: TipCapture[] = [];
-  let skipped: string[] = [];
-  let problems: string[] = [];
-
-  if (held.length) {
-    // One capture per held card, order + the tip on the slip (shared with POS → Tips).
-    const result = await captureHeldCards({
+  // One capture per held card, order + the tip on the slip (shared with POS → Tips).
+  const { captures, skipped, problems, retryable_tips }: TipCaptureResult = held.length
+    ? await captureHeldCards({
       service: createServiceSupabaseClient(), workspaceId: access.workspace_id, locationId: access.location_id ?? null,
       requests: held.map((order) => ({ order_id: order.order_id, tip_cents: Math.max(0, tipFor.get(order.order_id) ?? 0) })),
       keyPrefix: "driver-cashout",
-    });
-    ({ captures, skipped, problems } = result);
-  }
+    })
+    : { captures: [], skipped: [], problems: [], retryable_tips: [] };
 
   if (skipped.length === driver.orders.length) {
-    return Response.json({ error: problems.join(" ") || "Nothing could be cashed out.", problems }, { status: 502 });
+    return Response.json({ error: problems.join(" ") || "Nothing could be cashed out.", problems, retryable_tips }, { status: 502 });
   }
 
   const { data, error } = await supabase.rpc("wayne_pos_driver_cashout", {
@@ -73,6 +68,7 @@ export async function POST(request: Request) {
         ? `${spokenDatabaseMessage(error, "The cash-out could not be saved.")} The held cards were already charged — press Cash out again to finish (they won't be charged twice).`
         : spokenDatabaseMessage(error, "The cash-out could not be saved."),
       problems,
+      retryable_tips,
     }, { status: 400 });
   }
   // The tips typed for the orders just cashed out are done (best effort: only orders still waiting are ever shown).
@@ -80,5 +76,5 @@ export async function POST(request: Request) {
   await supabase.rpc("wayne_pos_clear_tip_drafts", { order_ids: cashedOut }).then(() => undefined, () => undefined);
   const result = posCashoutResultSchema.safeParse(data);
   if (!result.success) return Response.json({ error: "The cash-out was saved but could not be read back. Refresh Deliveries." }, { status: 500 });
-  return Response.json({ ...result.data, problems, cashed_out_order_ids: cashedOut }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ...result.data, problems, retryable_tips, cashed_out_order_ids: cashedOut }, { headers: { "Cache-Control": "no-store" } });
 }

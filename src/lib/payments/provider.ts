@@ -25,6 +25,8 @@ export type ProviderPayment = {
   /** The saved card (Stripe) behind a tip-adjust approval, used to charge order + tip once. */
   paymentMethodId?: string | null;
   customerId?: string | null;
+  /** The failed charge that Stripe says can be attempted again later. */
+  retryableDeclineId?: string;
 };
 
 export type ProviderTerminalCheckout = ProviderPayment & { checkoutId: string };
@@ -76,7 +78,7 @@ export interface PaymentProvider {
   voidPayment(providerPaymentId: string): Promise<ProviderPayment>;
   /** Prepare without charging. Persist its ID before confirming it. Stripe only. */
   createSavedCardIntent?(input: { customerId: string; paymentMethodId: string; amountCents: number; idempotencyKey: string; note: string; metadata?: Record<string, string> }): Promise<ProviderPayment>;
-  confirmSavedCardIntent?(providerPaymentId: string, idempotencyKey: string): Promise<ProviderPayment>;
+  confirmSavedCardIntent?(providerPaymentId: string, idempotencyKey: string, paymentMethodId?: string): Promise<ProviderPayment>;
   /** Cancel an approval that a fresh charge replaced, marked so its webhook is ignored. */
   releaseHold?(providerPaymentId: string, replacedBy: string): Promise<ProviderPayment>;
   refundPayment(input: { providerPaymentId: string; amountCents: number; idempotencyKey: string; reason: string }): Promise<ProviderRefund>;
