@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * fake server: dropped heartbeats, another register taking the screen, and the
  * "Thank you" timer running into the next order.
  */
-const { publish, events } = vi.hoisted(() => ({ publish: vi.fn(), events: { changed: () => {}, connection: (_ready: boolean) => {} } }));
+const { publish, events } = vi.hoisted(() => ({ publish: vi.fn(), events: { changed: () => {}, connection: (() => {}) as (ready: boolean) => void } }));
 vi.mock("@/lib/pos/refresh-signals", () => ({ watchPosRefresh: (_topic: string, _key: string, changed: () => void, connection: (ready: boolean) => void) => { events.changed = changed; events.connection = connection; return () => {}; } }));
 vi.mock("@/lib/pos/customer-display-client", () => ({ publishCustomerDisplay: publish }));
 vi.mock("@/stores/phone-store", () => ({ getTerminalLabel: () => "Register 1" }));
