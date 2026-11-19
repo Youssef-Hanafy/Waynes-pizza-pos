@@ -3,7 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
-import { paymentConnectionSchema, squarePublicConfig, type PaymentConnection } from "./capabilities";
+import { payarcSecrets, paymentConnectionSchema, squarePublicConfig, type PaymentConnection } from "./capabilities";
 import { buildPaymentAdapter, buildWebhookProvider } from "./registry";
 import type { PaymentProvider } from "./provider";
 import { paymentProviderSettingsSchema, type PaymentProviderSettings } from "./schemas";
@@ -19,7 +19,8 @@ const stripeSecretsSchema = z.object({
 });
 
 /** True only when the server actually holds the processor secrets. */
-export function paymentSecretsPresent(provider?: "none" | "square" | "stripe"): boolean {
+export function paymentSecretsPresent(provider?: "none" | "square" | "stripe" | "payarc"): boolean {
+  if (provider === "payarc") return Boolean(payarcSecrets("env:PAYARC", process.env.PAYARC_ENVIRONMENT ?? ""));
   if (provider === "stripe") return stripeSecretsSchema.safeParse({ STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET }).success;
   if (provider === "square") return secretsSchema.safeParse({ SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN, SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY }).success;
   return paymentSecretsPresent("stripe") || paymentSecretsPresent("square");
@@ -105,7 +106,7 @@ export async function readPaymentConnection(purpose: "online" | "counter", scope
 function settingsFromConnection(connection: PaymentConnection): PaymentProviderSettings {
   const config = squarePublicConfig(connection);
   return {
-    provider: connection.provider === "square" || connection.provider === "stripe" ? connection.provider : "none",
+    provider: connection.provider === "square" || connection.provider === "stripe" || connection.provider === "payarc" ? connection.provider : "none",
     environment: connection.environment,
     application_id: config.applicationId,
     location_id: config.locationId,

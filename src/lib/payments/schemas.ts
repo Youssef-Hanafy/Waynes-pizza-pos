@@ -13,11 +13,12 @@ export function squareWebSdkUrl(environment: string) {
 export const checkoutPaymentConfigSchema = z.discriminatedUnion("provider", [
   z.object({ provider: z.literal("square"), environment: z.enum(["sandbox", "production"]), application_id: z.string(), location_id: z.string(), online_card_enabled: z.literal(true) }),
   z.object({ provider: z.literal("stripe"), publishable_key: z.string().startsWith("pk_"), online_card_enabled: z.literal(true) }),
+  z.object({ provider: z.literal("payarc"), client_id: z.string().min(1), environment: z.enum(["sandbox", "production"]), online_card_enabled: z.literal(true) }),
 ]);
 export type CheckoutPaymentConfig = z.infer<typeof checkoutPaymentConfigSchema>;
 
 export const paymentProviderSettingsSchema = z.object({
-  provider: z.enum(["none", "square", "stripe"]),
+  provider: z.enum(["none", "square", "stripe", "payarc"]),
   environment: z.enum(["sandbox", "production"]),
   application_id: z.string(),
   location_id: z.string(),
@@ -193,3 +194,5 @@ export function paymentErrorMessage(error: { code?: string; message: string }) {
   if (error.code === "42501") return "Your account is not allowed to make this change. Ask an owner.";
   return spokenDatabaseMessage(error, "The payment could not be updated. Check it before retrying.");
 }
+
+export type KeyedCardConfig = Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }>;

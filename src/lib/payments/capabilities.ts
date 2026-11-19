@@ -106,3 +106,9 @@ export const paymentConnectionSummarySchema = z.object({
   terminals: z.array(z.object({ label: z.string(), type: z.string(), status: z.string() })),
 });
 export type PaymentConnectionSummary = z.infer<typeof paymentConnectionSummarySchema>;
+
+/** Explicit, server-only Payarc credentials. Environment must match the connection. */
+export function payarcSecrets(secretReference: string | null, environment: string, env: NodeJS.ProcessEnv = process.env) {
+  if (secretReference !== "env:PAYARC" || env.PAYARC_ENVIRONMENT !== environment || !env.PAYARC_API_TOKEN?.trim()) return null;
+  return { apiToken: env.PAYARC_API_TOKEN.trim() };
+}

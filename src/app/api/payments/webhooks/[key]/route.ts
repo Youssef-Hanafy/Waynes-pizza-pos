@@ -1,3 +1,6 @@
+import { receivePayarcWebhook } from "@/lib/payments/payarc-webhook";
+import { createPayarcProvider } from "@/lib/payments/payarc";
+import { payarcSecrets } from "@/lib/payments/capabilities";
 import { isStripeReconciliationWebhook } from "@/lib/payments/stripe-webhook";
 import { logger } from "@/lib/logging/logger";
 import { paymentConnectionSchema } from "@/lib/payments/capabilities";
@@ -16,13 +19,20 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, context: { params: Promise<{ key: string }> }) {
   const { key } = await context.params;
   if (!/^[0-9a-f]{24,64}$/.test(key)) return new Response(null, { status: 404 });
+  if (Number(request.headers.get("content-length") ?? 0) > 131072) return new Response(null, { status: 413 });
   const rawBody = await request.text();
+  if (rawBody.length > 131072) return new Response(null, { status: 413 });
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase.rpc("hanafy_payment_connection_by_webhook_key", { target_key: key });
   const parsed = paymentConnectionSchema.safeParse(data);
   if (error || !parsed.success) return new Response(null, { status: 404 });
   const connection = parsed.data;
+  if (connection.provider === "payarc") {
+    const secrets = payarcSecrets(connection.secret_reference, connection.environment);
+    if (!secrets) return new Response(null, { status: 503 });
+    return receivePayarcWebhook(rawBody, connection, createPayarcProvider({ ...secrets, environment: connection.environment }), supabase);
+  }
   const provider = buildWebhookProvider(connection);
   if (!provider) {
     logger.warn("payment_webhook.unavailable", { connection_id: connection.id, provider: connection.provider });

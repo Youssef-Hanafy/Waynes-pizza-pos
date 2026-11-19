@@ -7,6 +7,9 @@ import { requirePermission } from "@/lib/auth/access";
 import { logger } from "@/lib/logging/logger";
 import { orderTransitionSchema, transitionErrorMessage } from "@/lib/orders/status";
 import { resolvePaymentProvider } from "@/lib/payments/config";
+import { reconcilePayarcRefunds } from "@/lib/payments/payarc-refund";
+import { paymentConnectionSchema } from "@/lib/payments/capabilities";
+import { buildWebhookProvider } from "@/lib/payments/registry";
 import { reconcileRefundLegs, type RefundLeg } from "@/lib/payments/refund-operation";
 import { PaymentProviderError } from "@/lib/payments/provider";
 import { parseAmountInput, paymentErrorMessage, refundRequestSchema } from "@/lib/payments/schemas";
@@ -67,8 +70,26 @@ export async function refundOrderPayment(form: FormData) {
   if (!parsed.success) redirect(`${path}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the refund details.")}`);
 
   const supabase = await createServerSupabaseClient();
-  const { data: payment, error: paymentError } = await supabase.from("payments").select("provider,order_id").eq("id",parsed.data.payment_id).single();
+  const { data: payment, error: paymentError } = await supabase.from("payments").select("provider,order_id,provider_payment_id,metadata,workspace_id").eq("id",parsed.data.payment_id).single();
   if (paymentError || payment?.order_id !== orderId.data) redirect(`${path}?error=Payment%20does%20not%20belong%20to%20this%20order`);
+  if (payment.provider === "payarc") {
+    const service = createServiceSupabaseClient();
+    const { data: rawConnection } = await service.from("payment_connections").select("*").eq("id", payment.metadata?.payarc_connection_id ?? "").eq("workspace_id", payment.workspace_id).eq("provider", "payarc").maybeSingle();
+    const parsedConnection = paymentConnectionSchema.safeParse(rawConnection);
+    const provider = parsedConnection.success ? buildWebhookProvider(parsedConnection.data) : null;
+    if (!provider || !payment.provider_payment_id) redirect(`${path}?error=Payarc%20connection%20is%20not%20available`);
+    try {
+      const current = await provider.getPaymentStatus(payment.provider_payment_id);
+      if (!["settled", "partially_refunded", "refunded"].includes(current.providerStatus)) throw new Error("This charge has not batched yet. Use Void unbatched Payarc payment instead.");
+    } catch (error) { redirect(`${path}?error=${encodeURIComponent(error instanceof Error ? error.message : "Payarc could not be checked.")}`); }
+    const begun = await supabase.rpc("wayne_begin_allocated_refund", { payload: { ...parsed.data, order_id: orderId.data } });
+    if (begun.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(begun.error))}`);
+    let pending: boolean;
+    try { pending = (await reconcilePayarcRefunds(service, provider, (begun.data as { legs: RefundLeg[] }).legs)).pending; }
+    catch (error) { redirect(`${path}?error=${encodeURIComponent(error instanceof Error ? error.message : "Resume the existing refund.")}`); }
+    revalidatePath(path); revalidatePath("/admin/payments");
+    redirect(`${path}?saved=${pending ? "refund_pending" : "refunded"}`);
+  }
   if (payment.provider === "stripe") {
     const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
     if (!resolved.ok || resolved.value.provider.code !== "stripe") redirect(`${path}?error=Stripe%20is%20not%20available`);
@@ -137,6 +158,18 @@ export async function voidOrderPayment(form: FormData) {
   const resolved = await resolvePaymentProvider("online", access.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) redirect(`${path}?error=${encodeURIComponent("The payment processor is not available.")}`);
   const staff = await createServerSupabaseClient();
+  if (resolved.value.provider.code === "payarc") {
+    const { data: payment } = await staff.from("payments").select("provider,provider_payment_id,metadata").eq("id", paymentId.data).eq("order_id", orderId.data).maybeSingle();
+    if (payment?.provider !== "payarc" || !payment.provider_payment_id || payment.metadata?.payarc_connection_id !== resolved.value.connection.id) redirect(`${path}?error=Payarc%20payment%20connection%20does%20not%20match`);
+    try {
+      const current = await resolved.value.provider.getPaymentStatus(payment.provider_payment_id);
+      if (["settled", "partially_refunded", "refunded"].includes(current.providerStatus)) {
+        const released = await createServiceSupabaseClient().rpc("wayne_release_payarc_void", { target_payment_id: paymentId.data });
+        if (released.error) throw new Error("The earlier void reservation needs review before refunding.");
+        throw new Error("This Payarc charge has already batched. Issue a refund instead of a void.");
+      }
+    } catch (error) { redirect(`${path}?error=${encodeURIComponent(error instanceof Error ? error.message : "Payarc could not be checked.")}`); }
+  }
   const prepared = await staff.rpc("wayne_prepare_payment_void", { target_payment_id: paymentId.data, target_order_id: orderId.data });
   if (prepared.error) redirect(`${path}?error=${encodeURIComponent(paymentErrorMessage(prepared.error))}`);
   const bound = prepared.data as { duplicate: boolean; provider: string; provider_payment_id: string };

@@ -24,7 +24,7 @@ describe("allocated refunds on real PostgreSQL", () => {
   if(result.error)throw Error(result.error.message);return result.data;
  }
  it('refunds a held original authorization only after capture; authorization uses void instead',async()=>{
-  const f=await db.fixture();await expect(begin(f,100)).rejects.toThrow('Only a captured Stripe');
+  const f=await db.fixture();await expect(begin(f,100)).rejects.toThrow('Only a captured processor');
  });
  it('keeps order-first partial refunds on the original intent and preserves the tip',async()=>{
   const f=await fixture();const r=await begin(f,700);expect(r.legs).toHaveLength(1);expect(r.legs[0]).toMatchObject({provider_payment_id:f.originalId,amount_cents:700,tip_cents:0});

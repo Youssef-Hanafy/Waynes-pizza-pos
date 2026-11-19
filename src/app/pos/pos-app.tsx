@@ -78,7 +78,7 @@ type Props = {
   callerIdEnabled: boolean;
   deliveryEnabled: boolean;
   workspaceName: string;
-  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null;
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }> | null;
 };
 
 /**

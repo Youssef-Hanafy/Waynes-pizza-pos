@@ -28,7 +28,7 @@ const savedMessages: Record<string, string> = {
   out_for_delivery: "Order marked out for delivery.",
   cancelled: "Order cancelled. The reason is saved in the timeline and audit log.",
   refunded: "Refund sent. It is recorded on the order and in the audit log.",
-  refund_pending: "Refund pending at Stripe. Resume this request to check its outcome.",
+  refund_pending: "Refund pending at the payment processor. Resume this request to check its outcome.",
   refund_duplicate: "That refund was already submitted.",
   voided: "Payment voided.",
 };
@@ -144,18 +144,18 @@ function PaymentsCard({ canManage, orderId, payments, timeZone, refundAmount, re
                     <input name="idempotency_key" type="hidden" value={`refund-${randomUUID()}`} />
                     <p className="text-sm font-bold">Refund up to {formatCents(refundable)}</p>
                     <Input defaultValue={refundAmount && /^\d+(\.\d{1,2})?$/.test(refundAmount) && Number(refundAmount) * 100 <= refundable ? refundAmount : (refundable / 100).toFixed(2)} id={`refund-amount-${payment.id}`} inputMode="decimal" label="Total refund" name="amount" required />
-                    {payment.provider === "stripe" ? <><Input defaultValue="0.00" id={`refund-tip-${payment.id}`} inputMode="decimal" label="Tip included in refund (explicit amount)" name="tip_amount" required /><p className="text-sm">The rest refunds the order amount. Tips already paid to a driver are recorded as recovery due.</p></> : null}
+                    {payment.provider === "stripe" || payment.provider === "payarc" ? <><Input defaultValue="0.00" id={`refund-tip-${payment.id}`} inputMode="decimal" label="Tip included in refund (explicit amount)" name="tip_amount" required /><p className="text-sm">The rest refunds the order amount. Tips already paid to a driver are recorded as recovery due.</p></> : null}
                     <Input defaultValue={refundReason?.slice(0, 1000)} id={`refund-reason-${payment.id}`} label="Reason" maxLength={1000} name="reason" placeholder="Order was wrong" required />
                     <Button type="submit" variant="danger">Refund</Button>
                   </form>
                 ) : null}
 
-                {canManage && payment.status === "authorized" && payment.provider_payment_id ? (
+                {canManage && (payment.status === "authorized" || (payment.provider === "payarc" && payment.status === "captured")) && payment.provider_payment_id ? (
                   <form action={voidOrderPayment} className="mt-3">
                     <input name="order_id" type="hidden" value={orderId} />
                     <input name="payment_id" type="hidden" value={payment.id} />
                     <input name="provider_payment_id" type="hidden" value={payment.provider_payment_id} />
-                    <Button type="submit" variant="secondary">Void this authorization</Button>
+                    <Button type="submit" variant="secondary">{payment.provider === "payarc" ? "Void unbatched Payarc payment" : "Void this authorization"}</Button>
                   </form>
                 ) : null}
               </div>

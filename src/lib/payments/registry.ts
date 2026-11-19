@@ -1,6 +1,7 @@
 import "server-only";
 
-import { capabilityGate, providerSecrets, squarePublicConfig, stripeSecrets, type PaymentCapabilities, type PaymentChannel, type PaymentConnection } from "./capabilities";
+import { capabilityGate, payarcSecrets, providerSecrets, squarePublicConfig, stripeSecrets, type PaymentCapabilities, type PaymentChannel, type PaymentConnection } from "./capabilities";
+import { createPayarcProvider, payarcApiBase } from "./payarc";
 import type { PaymentProvider } from "./provider";
 import { createSquareProvider, squareApiBase, SQUARE_API_VERSION } from "./square";
 import { applySquareWebhookEvent, type ServiceClient } from "./square-webhook";
@@ -23,6 +24,10 @@ export type PaymentProviderAdapter = {
 type Factory = (connection: PaymentConnection) => PaymentProvider | null;
 
 const factories: Record<string, Factory> = {
+  payarc(connection) {
+    const secrets = payarcSecrets(connection.secret_reference, connection.environment);
+    return secrets ? createPayarcProvider({ ...secrets, environment: connection.environment }) : null;
+  },
   square(connection) {
     const secrets = providerSecrets(connection.secret_reference);
     const config = squarePublicConfig(connection);
@@ -68,6 +73,17 @@ export function buildWebhookProvider(connection: PaymentConnection): PaymentProv
  * credentials.  Only a success here may mark a connection "connected".
  */
 export async function testPaymentConnection(connection: PaymentConnection): Promise<{ ok: boolean; note: string }> {
+  if (connection.provider === "payarc") {
+    const secrets = payarcSecrets(connection.secret_reference, connection.environment);
+    if (!secrets) return { ok: false, note: "Payarc token or environment is missing or does not match this connection." };
+    try {
+      const response = await fetch(`${payarcApiBase(connection.environment)}/charges?limit=1`, {
+        headers: { Authorization: `Bearer ${secrets.apiToken}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000),
+      });
+      const body = await response.json().catch(() => null) as { data?: unknown } | null;
+      return { ok: response.ok && Array.isArray(body?.data), note: response.ok && Array.isArray(body?.data) ? `Payarc merchant API authenticated (${connection.environment}).` : `Payarc verification failed (HTTP ${response.status}).` };
+    } catch { return { ok: false, note: "Payarc could not be reached." }; }
+  }
   if (connection.provider === "square") {
     const secrets = providerSecrets(connection.secret_reference);
     const { locationId } = squarePublicConfig(connection);

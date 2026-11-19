@@ -21,7 +21,9 @@ export async function getCheckoutPaymentConfig() {
       locationId: storefront.workspace.location_id,
     });
     if (!resolved.ok) return null;
-    const candidate = resolved.value.provider.code === "stripe"
+    const candidate = resolved.value.provider.code === "payarc"
+      ? { provider: "payarc", client_id: process.env.NEXT_PUBLIC_PAYARC_CLIENT_ID, environment: resolved.value.connection.environment, online_card_enabled: true }
+      : resolved.value.provider.code === "stripe"
       ? { provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true }
       : resolved.value.settings;
     const parsed = checkoutPaymentConfigSchema.safeParse(candidate);
@@ -31,13 +33,18 @@ export async function getCheckoutPaymentConfig() {
   }
 }
 
-/** Non-secret Stripe configuration for the signed-in POS workspace. */
+/** Non-secret keyed-card configuration for the signed-in POS workspace. */
 export async function getPosKeyedCardConfig() {
   try {
     const access = await getCurrentAccess();
     if (!access?.workspace_id) return null;
     const resolved = await resolvePaymentProvider("online", { workspaceId: access.workspace_id, locationId: access.location_id ?? null });
-    if (!resolved.ok || resolved.value.provider.code !== "stripe") return null;
+    if (!resolved.ok) return null;
+    if (resolved.value.provider.code === "payarc") {
+      const config = checkoutPaymentConfigSchema.safeParse({ provider: "payarc", client_id: process.env.NEXT_PUBLIC_PAYARC_CLIENT_ID, environment: resolved.value.connection.environment, online_card_enabled: true });
+      return config.success && config.data.provider === "payarc" ? config.data : null;
+    }
+    if (resolved.value.provider.code !== "stripe") return null;
     const parsed = checkoutPaymentConfigSchema.safeParse({
       provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true,
     });

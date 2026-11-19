@@ -34,6 +34,7 @@ import {
   SquareCardField,
   type Tokenizer,
 } from "@/components/payments/square-card-field";
+import { PayarcCardField } from "@/components/payments/payarc-card-field";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { GoogleAddressInput } from "@/components/checkout/google-address-input";
 import {
@@ -256,7 +257,7 @@ export function CheckoutClient({
         return;
       }
 
-      if (paymentConfig?.provider === "square") {
+      if (paymentConfig?.provider === "square" || paymentConfig?.provider === "payarc") {
         if (!tokenizer.current) {
           setError("Card entry is still loading. Wait a moment and try again.");
           return;
@@ -478,6 +479,8 @@ export function CheckoutClient({
             <div className="mt-4">
               {paymentConfig.provider === "stripe" ? (
                 <StripeCardField config={paymentConfig} onReady={handleStripeConfirm} onStatus={setError} />
+              ) : paymentConfig.provider === "payarc" ? (
+                <PayarcCardField config={paymentConfig} onReady={handleTokenizer} onStatus={setError} />
               ) : (
                 <SquareCardField config={paymentConfig} onReady={handleTokenizer} onStatus={setError} />
               )}

@@ -93,7 +93,9 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         <Metric label="Webhooks not verified" value={String(paymentConsole?.counts.unverified_webhooks ?? 0)} />
       </dl>
       {!secrets ? <p className="mt-5 rounded-xl border border-wayne-warn/50 bg-wayne-warn-soft p-4 text-sm font-bold">
-        {paymentConsole?.settings.provider === "stripe"
+        {paymentConsole?.settings.provider === "payarc"
+          ? <>Add <code>PAYARC_API_TOKEN</code>, <code>PAYARC_ENVIRONMENT</code>, and <code>NEXT_PUBLIC_PAYARC_CLIENT_ID</code> in Vercel, then redeploy. Payarc uses a secret callback URL and API readbacks; no webhook signing key is required by this integration.</>
+          : paymentConsole?.settings.provider === "stripe"
           ? <>Stripe is not ready yet. Add <code>STRIPE_SECRET_KEY</code>, <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>, and <code>STRIPE_WEBHOOK_SECRET</code> to the server environment, then redeploy.</>
           : <>The processor access token and webhook signature key are not installed on this server. Add <code>SQUARE_ACCESS_TOKEN</code> and <code>SQUARE_WEBHOOK_SIGNATURE_KEY</code> to the environment, then redeploy.</>}
       </p> : null}
@@ -101,7 +103,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
     <Card className="mt-6 p-6">
       <h2 className="text-2xl font-black">Processor</h2>
-      <p className="mt-2 text-sm text-wayne-muted">Only non-secret identifiers are stored here. Stripe keys live in the server environment; for Stripe, leave the Square-only application and location fields blank.</p>
+      <p className="mt-2 text-sm text-wayne-muted">Only non-secret identifiers are stored here. Credentials live in the server environment. For Payarc or Stripe, leave the Square-only application and location fields blank. Payarc charges tips entered before payment; later adjustments and readers are not enabled.</p>
       <form action={savePaymentSettings} className="mt-5 grid gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="grid gap-2 text-sm font-semibold" htmlFor="provider">Provider
@@ -109,9 +111,10 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
               <option value="none">Not configured</option>
               <option value="square">Square</option>
               <option value="stripe">Stripe — online checkout</option>
+              <option value="payarc">Payarc — website and keyed cards</option>
             </select>
           </label>
-          <label className="grid gap-2 text-sm font-semibold" htmlFor="environment">Environment (Square only)
+          <label className="grid gap-2 text-sm font-semibold" htmlFor="environment">Environment (Square / Payarc)
             <select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" defaultValue={paymentConsole?.settings.environment ?? "sandbox"} id="environment" name="environment">
               <option value="sandbox">Sandbox (test money)</option>
               <option value="production">Production (real money)</option>
@@ -125,7 +128,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           <Switch defaultChecked={paymentConsole?.settings.online_card_enabled ?? false} label="Take card payments on the website" name="online_card_enabled" />
           <Switch defaultChecked={paymentConsole?.settings.terminal_card_enabled ?? false} label="Take card payments on a counter card reader (not available with Stripe yet)" name="terminal_card_enabled" />
         </div>
-        <p className="text-sm text-wayne-muted">Square uses the environment selection. Stripe uses test keys (<code>sk_test_</code> / <code>pk_test_</code>) or live keys (<code>sk_live_</code> / <code>pk_live_</code>); test with Stripe before using live keys.</p>
+        <p className="text-sm text-wayne-muted">Square and Payarc use the environment selection. Stripe uses test keys (<code>sk_test_</code> / <code>pk_test_</code>) or live keys (<code>sk_live_</code> / <code>pk_live_</code>); test with Stripe before using live keys.</p>
         <div><Button type="submit">Save processor settings</Button></div>
       </form>
     </Card>

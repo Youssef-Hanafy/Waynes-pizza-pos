@@ -1,3 +1,4 @@
+import { executePayarcPayment, type PayarcAttempt } from "@/lib/payments/payarc-operation";
 import { logger } from "@/lib/logging/logger";
 import { checkoutRateLimitKey } from "@/lib/orders/rate-limit";
 import { resolvePaymentProvider } from "@/lib/payments/config";
@@ -53,14 +54,26 @@ export async function POST(request: Request) {
   const order = orderData as { id: string; public_access_token: string; order_number: string; total_cents: number; duplicate: boolean };
 
   // 2. One payment per idempotency key, whatever the network does to this request.
-  const { data: beginData, error: beginError } = await supabase.rpc("wayne_begin_payment", {
-    payload: { order_id: order.id, idempotency_key: parsed.data.payment.idempotency_key, entry: "online", method: "card" },
-  });
+  const isPayarc = resolved.value.provider.code === "payarc";
+  const { data: beginData, error: beginError } = isPayarc
+    ? await supabase.rpc("wayne_begin_payarc_payment", { target_connection_id: resolved.value.connection.id, target_order_id: order.id, request_key: parsed.data.payment.idempotency_key, expected_cents: order.total_cents })
+    : await supabase.rpc("wayne_begin_payment", {
+      payload: { order_id: order.id, idempotency_key: parsed.data.payment.idempotency_key, entry: "online", method: "card" },
+    });
   if (beginError || !beginData) {
     logger.warn("card_checkout.begin_failed", { order_id: order.id, code: beginError?.code });
     return Response.json({ error: "That payment is already being processed. Check your order before trying again." }, { status: 409 });
   }
   const begun = beginData as { payment_id: string; status: string; duplicate: boolean };
+  if (isPayarc) {
+    try {
+      const outcome = await executePayarcPayment(supabase, resolved.value.provider, resolved.value.connection.id, beginData as PayarcAttempt, parsed.data.payment.source_id, parsed.data.payment.idempotency_key);
+      if (outcome.status === "failed" || outcome.status === "voided") return Response.json({ error: "This payment did not complete. Contact the store before starting another order." }, { status: 402 });
+      return Response.json({ ...publicOrder(order), payment_status: outcome.status === "captured" ? "captured" : "pending" }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return Response.json({ error: error instanceof PaymentProviderError ? error.message : "The card outcome is uncertain. Contact the store before paying again.", order_number: order.order_number }, { status: error instanceof PaymentProviderError && !error.retryable ? 402 : 502, headers: { "Cache-Control": "no-store" } });
+    }
+  }
   if (begun.duplicate)
     return Response.json({ ...publicOrder(order), payment_status: begun.status === "captured" ? "captured" : "pending" }, { headers: { "Cache-Control": "no-store" } });
 

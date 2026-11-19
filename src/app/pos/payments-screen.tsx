@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useOpenOrders } from "@/stores/open-orders";
 import { Button } from "@/components/ui/button";
+import { PayarcKeyedTender } from "@/components/payments/payarc-keyed-tender";
 import { StripeCardField, type StripeCardConfirm } from "@/components/payments/stripe-card-field";
 import { StripeReaderTender } from "@/components/pos/stripe-reader-panel";
 import { posDrawerSchema } from "@/lib/cash/schemas";
@@ -29,7 +30,7 @@ export type Done = { order: OpenOrder; method: "cash" | "card"; changeCents: num
   /** The tip included in this card's amount (taken on the phone before the card was approved). */
   tipCents?: number };
 type Mode = "choose" | "cash" | "terminal" | "keyed";
-type KeyedConfig = Extract<CheckoutPaymentConfig, { provider: "stripe" }>;
+type KeyedConfig = Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }>;
 
 const statusLabels: Record<string, string> = { placed: "New", accepted: "Accepted", in_kitchen: "Cooking", ready: "Ready", out_for_delivery: "Out for delivery", payment_pending: "Paying online" };
 
@@ -52,7 +53,7 @@ async function readError(response: Response, fallback: string) {
  * handed over queues a drawer kick and the print station pulses the drawer on
  * the receipt printer.  Sending an order or a card payment never opens it.
  */
-export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false, onAddItems }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean; /** Add items to an unpaid order, then pay it all at once. */ onAddItems?: (order: OpenOrder) => void }) {
+export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, stripeReader = false, onAddItems }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }> | null; /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */ stripeReader?: boolean; /** Add items to an unpaid order, then pay it all at once. */ onAddItems?: (order: OpenOrder) => void }) {
   const { orders, loaded, error: listError, refresh: load } = useOpenOrders();
   const [selectedId, setSelectedId] = useState<string | null>(initialOrderId);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
@@ -261,7 +262,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
         {onAddItems && compact ? <button className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-wayne-green bg-white p-2 text-center font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || paymentLocked || tipAsked || mode === "terminal"} onClick={onAddItems} type="button"><span aria-hidden className="text-xl leading-none">＋</span><strong className="text-lg font-black leading-tight">Add items</strong></button> : null}
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
         {option("terminal", "💳", "Card reader", isDelivery ? "Customer here · tip on slip" : stripeReader ? "Tap, insert, swipe" : "Run on the terminal")}
-        {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? `Phone order · add tip now or at cash-out${order.is_test ? " (test)" : ""}` : "Needs Stripe") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Needs Stripe", !keyedCardConfig && !order.is_test)}
+        {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? keyedCardConfig?.provider === "payarc" ? "Phone order · add tip before payment" : `Phone order · add tip now or at cash-out${order.is_test ? " (test)" : ""}` : "Payment setup needed") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Payment setup needed", !keyedCardConfig && !order.is_test)}
         {onPayLater ? <button className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"}`} disabled={busy || paymentLocked} onClick={onPayLater} type="button"><span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{isDelivery ? "🚗" : "⏱"}</span><strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{isDelivery ? "Cash at the door" : "Pay later"}</strong>{compact ? null : <span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span>}</button> : null}
       </div>
       {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
@@ -276,7 +277,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
         : order.is_test ? <TestCardTender key={paymentIndex} {...cardProps} autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} />
         : <CardTender key={paymentIndex} {...cardProps} autoStart busy={busy} onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} stripeReader={stripeReader} terminals={terminals} />) : null}
       {mode === "keyed" && cardPayment && order.is_test ? <div className="mt-5"><TestCardTender key={paymentIndex} {...cardProps} busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} /></div>
-        : mode === "keyed" && cardPayment && keyedCardConfig ? <div className="mt-5"><KeyedStripeTender key={paymentIndex} {...cardProps} busy={busy} config={keyedCardConfig} onError={setError} onOrderChange={setOrder} onPaid={onPaid} onPreview={setKeyedPreview} order={paymentOrder} setBusy={setBusy} /></div> : null}
+        : mode === "keyed" && cardPayment && keyedCardConfig ? <div className="mt-5">{keyedCardConfig.provider === "payarc" ? <PayarcKeyedTender key={paymentIndex} allowTip={paidBefore === 0 && !partialCard} busy={busy} config={keyedCardConfig} customerName={paymentOrder.customer_name || "Customer"} onError={setError} onLock={setPaymentLocked} onPaid={(totalCents) => onPaid({ order: { ...paymentOrder, total_cents: totalCents }, method: "card", changeCents: 0, tenderedCents: null })} onTotalChanged={(totalCents) => setOrder((current) => ({ ...current, total_cents: totalCents }))} orderId={paymentOrder.id} setBusy={setBusy} splitCents={partialCard ? cardPayment!.amountCents : undefined} totalCents={paymentOrder.total_cents} /> : <KeyedStripeTender key={paymentIndex} {...cardProps} busy={busy} config={keyedCardConfig} onError={setError} onOrderChange={setOrder} onPaid={onPaid} onPreview={setKeyedPreview} order={paymentOrder} setBusy={setBusy} />}</div> : null}
     </>}
   </div>;
 }

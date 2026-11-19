@@ -5,6 +5,7 @@ import type { PosRuntime } from "@/lib/pos/runtime";
 import { currentRelease } from "@/lib/pos/release";
 import { updateSafety } from "@/lib/pos/update-activity";
 import { requestAppUpdate } from "@/stores/app-update";
+import { posRuntimeSchema } from "@/lib/pos/runtime-schema";
 
 /** Refresh data only. RSC refresh can hard-navigate on skew, so it is never used in a running register. */
 export function PosAutoRefresh({ isSafe, onData, intervalMs = 900_000 }: { isSafe: () => boolean; onData: (data: PosRuntime) => void; intervalMs?: number }) {
@@ -24,11 +25,14 @@ export function PosAutoRefresh({ isSafe, onData, intervalMs = 900_000 }: { isSaf
       try {
         const response = await fetch("/api/pos/runtime", { cache: "no-store", signal: AbortSignal.timeout(15000) });
         if (!response.ok) return;
-        const body = await response.json() as { build: string; data: PosRuntime };
+        const body = await response.json() as { build?: unknown; data?: unknown } | null;
+        if (!body || typeof body.build !== "string") return;
         if (body.build !== currentRelease().build) { requestAppUpdate(); return; }
+        const parsed = posRuntimeSchema.safeParse(body.data);
+        if (!parsed.success) return;
         const after = updateSafety();
         if (!stopped && safe.current() && !after.blockers.length && before.revision === after.revision) {
-          apply.current(body.data); last = Date.now(); applied = revision;
+          apply.current(parsed.data); last = Date.now(); applied = revision;
         }
       } catch { /* offline: preserve the loaded menu and retry, never navigate */ }
       finally { running = false; }

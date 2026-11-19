@@ -41,7 +41,7 @@ type Props = {
   settings: StoreSettings;
   onOpenPhone: () => void;
   /** Stripe (online) connection for keyed-in cards; null when Stripe isn't connected. */
-  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" }> | null;
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }> | null;
   /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */
   stripeReader: boolean;
 };

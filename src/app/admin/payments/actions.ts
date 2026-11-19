@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/access";
+import { readPaymentConnection } from "@/lib/payments/config";
+import { testPaymentConnection } from "@/lib/payments/registry";
 import { paymentErrorMessage } from "@/lib/payments/schemas";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 const back = (message: string, key: "error" | "saved" = "error") => redirect(`/admin/payments?${key}=${encodeURIComponent(message)}`);
 
@@ -23,8 +25,15 @@ export async function savePaymentSettings(form: FormData) {
   const { error } = await supabase.rpc("hanafy_save_location_payment_configuration", { payload, target_workspace_slug: access.workspace_slug ?? null });
   if (error) {
     back(error.message.includes("payment_provider_settings_ready") || error.message.includes("location_payment_configurations_check")
-      ? "Finish the selected processor setup before switching card payment on. Stripe supports online payment only for now."
+      ? "Finish the selected processor setup before switching card payment on. Payarc readers are configured separately."
       : paymentErrorMessage(error));
+  }
+  if (payload.provider === "payarc" && access.workspace_id) {
+    const connection = await readPaymentConnection("online", { workspaceId: access.workspace_id, locationId: access.location_id ?? null });
+    if (!connection || connection.provider !== "payarc") return back("Payarc connection could not be loaded.");
+    const result = await testPaymentConnection(connection);
+    const recorded = await createServiceSupabaseClient().rpc("hanafy_payment_connection_record_check", { target_connection_id: connection.id, succeeded: result.ok, note: result.note });
+    if (recorded.error || !result.ok) back(result.note);
   }
   revalidatePath("/admin/payments");
   revalidatePath("/checkout");
