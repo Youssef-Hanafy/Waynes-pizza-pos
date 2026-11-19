@@ -121,7 +121,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
       }
       if (!response.ok) throw new Error(body.error || "The cards could not be charged.");
       const problems = body.problems ?? [];
-      setNotice({ tone: problems.length ? "warn" : "ok", text: `✓ Charged ${body.charged ?? lines.length} card${(body.charged ?? lines.length) === 1 ? "" : "s"} with ${formatCents(body.tips_cents ?? 0)} in tips.${problems.length ? ` ${problems.join(" ")}` : ""}` });
+      setNotice({ tone: problems.length ? "warn" : "ok", text: `✓ Processed ${body.charged ?? lines.length} card${(body.charged ?? lines.length) === 1 ? "" : "s"} with ${formatCents(body.tips_cents ?? 0)} in tips.${problems.length ? ` ${problems.join(" ")}` : ""}` });
       // Only the cards actually charged are done; a card that couldn't be charged keeps its tip in the box.
       clearTipDrafts(body.charged_order_ids ?? []);
     } catch (cause) {
@@ -139,7 +139,8 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
           <h1 className="text-2xl font-black">Tips from the slips</h1>
           <p className="text-sm font-bold text-wayne-muted">Type the tip written on each signed slip, then charge the cards. Blank = no tip (charged for the order). Each card is charged once.</p>
         </div>
-        <Button disabled={busy || !here.length} onClick={() => { void charge(entered); }} size="lg">{busy ? "Charging…" : `Charge ${here.length} card${here.length === 1 ? "" : "s"}${tipTotal ? ` · ${formatCents(tipTotal)} tips` : ""}`}</Button>
+        <p className="text-sm text-wayne-muted">Payarc: add extra tips to the existing charge before batching. Stripe: capture held cards.</p>
+        <Button disabled={busy || !here.length || tooBig.some((line) => line.card.provider === "payarc")} onClick={() => { void charge(entered); }} size="lg">{busy ? "Processing…" : `Process ${here.length} card${here.length === 1 ? "" : "s"}${tipTotal ? ` · ${formatCents(tipTotal)} tips` : ""}`}</Button>
       </div>
       {notice ? <p className={`rounded-xl p-3 text-sm font-bold ${notice.tone === "ok" ? "bg-wayne-ok-soft text-wayne-ok" : "bg-wayne-warn-soft"}`} role="status">{notice.text}</p> : null}
       {error ? <p className="rounded-xl bg-wayne-alert-soft p-3 text-sm font-bold text-wayne-alert">{error}{cachedAt ? ` Showing the list from ${when(cachedAt)} — the tips typed are kept and charging works once the connection is back.` : ""}</p> : null}
@@ -165,16 +166,16 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
               <p className="text-sm font-bold text-wayne-muted">
                 {sourceNames[card.source] ?? card.source} · {card.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} · {when(card.authorized_at)} · {brandNames[(card.card_brand ?? "").toLowerCase()] ?? card.card_brand ?? "Card"}{card.card_last4 ? ` •${card.card_last4}` : ""}
               </p>
-              <p className="text-sm font-bold">Approved {formatCents(card.authorized_cents)}{card.tip_already_cents ? ` (incl. ${formatCents(card.tip_already_cents)} tip already)` : ""} · room for up to {formatCents(room)} more</p>
+              <p className="text-sm font-bold">{card.tip_mode === "adjustment" ? "Charged" : "Approved"} {formatCents(card.authorized_cents)}{card.tip_already_cents ? ` (incl. ${formatCents(card.tip_already_cents)} tip already)` : ""}{card.tip_mode === "adjustment" ? " · extra tip only, before Payarc batches" : ` · room for up to ${formatCents(room)} more`}</p>
             </div>
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-wayne-muted">Tip on slip ($)
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wider text-wayne-muted">{card.tip_mode === "adjustment" ? "Extra tip from slip ($)" : "Tip on slip ($)"}
               <input className={`min-h-12 rounded-xl border-2 px-3 text-xl font-black text-wayne-ink ${cents === null ? "border-wayne-alert" : over ? "border-wayne-gold" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTipDraft(card.order_id, event.target.value, parseTipInput(event.target.value) ?? 0, "tips")} placeholder="0.00" value={raw} />
               <TipSavedNote state={tipSaveState(drafts[card.order_id])} terminal={drafts[card.order_id]?.terminal} error={drafts[card.order_id]?.error} />
             </label>
             <div className="text-right">
               <p className="text-xs font-bold text-wayne-muted">Card charged</p>
               <p className="text-xl font-black">{formatCents(card.authorized_cents + Math.min(cents ?? 0, room))}</p>
-              <button className="mt-1 min-h-10 rounded-lg border border-wayne-border px-3 text-sm font-black disabled:opacity-40" disabled={busy || cents === null} onClick={() => { void charge([{ card, cents }]); }} type="button">Charge this one</button>
+              <button className="mt-1 min-h-10 rounded-lg border border-wayne-border px-3 text-sm font-black disabled:opacity-40" disabled={busy || cents === null || (card.provider === "payarc" && over)} onClick={() => { void charge([{ card, cents }]); }} type="button">Process this tip</button>
               {retry ? <Button className="ml-1 mt-1" disabled={busy || cents !== retry.tip_cents} onClick={() => { void charge([{ card, cents }], retry); }} size="sm" variant="secondary">Retry {formatCents(retry.tip_cents)} tip</Button> : null}
             </div>
           </li>;
@@ -187,7 +188,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
         {onOpenDeliveries ? <Button className="mt-2" onClick={onOpenDeliveries} size="sm" variant="secondary">Go to Deliveries → cash-out</Button> : null}
       </section> : null}
 
-      <p className="text-xs text-wayne-muted">Anything still waiting at 4:30 am is charged automatically for the order with no added tip, so no card approval runs out. Stripe lets a card take up to 50% or $50 more than approved (whichever is greater) on Visa, Mastercard, Discover and Amex.</p>
+      <p className="text-xs text-wayne-muted">Payarc cards are already charged: enter only an extra tip from the signed slip, before batching. Payarc determines eligibility; a declined or uncertain adjustment is kept for review. Stripe: anything still waiting at 4:30 am is charged automatically for the order with no added tip, so no card approval runs out. Stripe lets a card take up to 50% or $50 more than approved (whichever is greater) on Visa, Mastercard, Discover and Amex.</p>
       {invalid.length ? <p className="sr-only">Some tips are not numbers.</p> : null}
     </div>
   </div>;

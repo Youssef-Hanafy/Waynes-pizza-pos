@@ -13,6 +13,7 @@ export const heldCardSchema = z.object({
   placed_at: z.string(),
   payment_id: z.uuid(),
   provider: z.string(),
+  tip_mode: z.enum(["capture", "adjustment"]).optional(),
   authorized_cents: z.number().int(),
   card_brand: z.string().nullable(),
   card_last4: z.string().nullable(),

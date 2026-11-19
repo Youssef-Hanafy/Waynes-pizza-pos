@@ -65,7 +65,7 @@ export function PayarcKeyedTender({ config, orderId, customerName, totalCents, s
   }
   return <div className="rounded-2xl border-2 border-wayne-green p-4">
     <h2 className="text-xl font-black">Key in the card · Payarc</h2>
-    <p className="mt-1 text-sm text-wayne-muted">{customerName} · charged now with the tip entered below. Later tip adjustments are not enabled yet.</p>
+    <p className="mt-1 text-sm text-wayne-muted">{customerName} · charged now with the tip entered below. An extra tip from the signed slip can be added in Tips or driver cash-out before Payarc batches the charge.</p>
     {allowTip ? <Input disabled={busy || unknown} label="Tip before payment ($)" name="payarc_tip" inputMode="decimal" value={tip} onChange={(event) => setTip(event.target.value)} /> : null}
     <div className={unknown ? "pointer-events-none mt-3 opacity-50" : "mt-3"}><PayarcCardField config={config} onReady={onReady} onStatus={onStatus} /></div>
     <Button className="mt-3 w-full text-xl" disabled={busy || (!ready && !unknown)} onClick={() => { void submit(); }} size="lg">{busy ? "Checking Payarc…" : unknown ? "Check this payment again" : `Charge ${formatCents(baseCents + (allowTip && /^\d+(\.\d{1,2})?$/.test(tip) ? Math.round(Number(tip) * 100) : 0))}`}</Button>

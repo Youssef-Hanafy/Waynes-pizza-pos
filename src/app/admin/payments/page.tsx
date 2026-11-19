@@ -103,7 +103,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
     <Card className="mt-6 p-6">
       <h2 className="text-2xl font-black">Processor</h2>
-      <p className="mt-2 text-sm text-wayne-muted">Only non-secret identifiers are stored here. Credentials live in the server environment. For Payarc or Stripe, leave the Square-only application and location fields blank. Payarc charges tips entered before payment; later adjustments and readers are not enabled.</p>
+      <p className="mt-2 text-sm text-wayne-muted">Only non-secret identifiers are stored here. Credentials live in the server environment. For Payarc or Stripe, leave the Square-only application and location fields blank. Payarc accepts tips before payment and extra slip tips before batching. Card readers are configured separately.</p>
       <form action={savePaymentSettings} className="mt-5 grid gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="grid gap-2 text-sm font-semibold" htmlFor="provider">Provider

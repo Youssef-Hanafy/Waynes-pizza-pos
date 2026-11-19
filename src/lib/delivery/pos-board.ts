@@ -5,7 +5,7 @@ import { z } from "zod";
  * each driver's run until they are cashed out.  Mirrors
  * wayne_pos_delivery_board / wayne_pos_delivery_order_json.
  */
-export const paidBySchema = z.enum(["card_held", "card", "paid", "cash_paid", "cash"]);
+export const paidBySchema = z.enum(["card_held", "card_adjustable", "card", "paid", "cash_paid", "cash"]);
 export type PaidBy = z.infer<typeof paidBySchema>;
 
 export const posDeliveryOrderSchema = z.object({
@@ -82,7 +82,7 @@ export type PosCashoutResult = z.infer<typeof posCashoutResultSchema>;
  *   card/paid  – charged already (pickup card, online): the tip came with it
  */
 export function tipAllowed(order: Pick<PosDeliveryOrder, "paid_by">) {
-  return order.paid_by === "card_held" || order.paid_by === "cash" || order.paid_by === "cash_paid";
+  return order.paid_by === "card_held" || order.paid_by === "card_adjustable" || order.paid_by === "cash" || order.paid_by === "cash_paid";
 }
 
 /**
@@ -91,6 +91,7 @@ export function tipAllowed(order: Pick<PosDeliveryOrder, "paid_by">) {
  * that maximum); 0 means Stripe won't let this card be increased.
  */
 export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cents" | "total_cents">) {
+  if (order.paid_by === "card_adjustable") return 50_000;
   if (order.paid_by !== "card_held") return 50_000;
   return Math.max(0, (order.hold_cents ?? order.total_cents) - order.total_cents);
 }
@@ -102,7 +103,7 @@ export function maxTipCents(order: Pick<PosDeliveryOrder, "paid_by" | "hold_cent
  * never charged again; the tip box takes only an EXTRA tip from the slip.
  */
 export function tipOnCardCents(order: Pick<PosDeliveryOrder, "paid_by" | "tip_cents">) {
-  return order.paid_by === "card_held" ? Math.max(0, order.tip_cents) : 0;
+  return order.paid_by === "card_held" || order.paid_by === "card_adjustable" ? Math.max(0, order.tip_cents) : 0;
 }
 
 /**
@@ -168,6 +169,7 @@ export function cashoutSummary(orders: PosDeliveryOrder[], tips: Record<string, 
 
 export function paidByLabel(order: Pick<PosDeliveryOrder, "paid_by" | "card_label"> & { tip_cents?: number }) {
   switch (order.paid_by) {
+    case "card_adjustable": return `${order.card_label || "Payarc card"} · extra tip at cash-out`;
     case "card_held": {
       const onCard = Math.max(0, order.tip_cents ?? 0);
       return onCard ? `${order.card_label || "Card"} · $${(onCard / 100).toFixed(2)} tip on card` : `${order.card_label || "Card"} · add tip`;

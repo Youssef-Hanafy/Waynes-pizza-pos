@@ -14,6 +14,8 @@ export type ProviderPayment = {
   cardLast4: string | null;
   receiptUrl: string | null;
   failureReason: string | null;
+  /** Authoritative processor tip field, in cents (Payarc tip adjustment reconciliation). */
+  tipAmountCents?: number | null;
   /** Current provider metadata, read with the payment rather than from an old event. */
   metadata?: Record<string, string>;
   /**
@@ -75,6 +77,8 @@ export interface PaymentProvider {
   cancelCardPresentPayment(checkoutId: string): Promise<ProviderTerminalCheckout>;
   /** Charge a held card. amountCents (≤ the hold) charges less than the hold and releases the rest. */
   capturePayment(providerPaymentId: string, options?: { amountCents?: number; idempotencyKey?: string }): Promise<ProviderPayment>;
+  /** Set the existing charge's processor tip; never create another charge. */
+  adjustTip?(providerPaymentId: string, input: { tipCents: number; idempotencyKey: string }): Promise<ProviderPayment>;
   voidPayment(providerPaymentId: string): Promise<ProviderPayment>;
   /** Prepare without charging. Persist its ID before confirming it. Stripe only. */
   createSavedCardIntent?(input: { customerId: string; paymentMethodId: string; amountCents: number; idempotencyKey: string; note: string; metadata?: Record<string, string> }): Promise<ProviderPayment>;

@@ -42,7 +42,7 @@ function rundownNote(paidBy: string, collected: number, storePays: number, keeps
   return parts.join(" · ");
 }
 
-const paidByShort: Record<string, string> = { card_held: "Card", card: "Card (counter)", paid: "Online", cash_paid: "Cash (counter)", cash: "Cash at door" };
+const paidByShort: Record<string, string> = { card_adjustable: "Payarc card", card_held: "Card", card: "Card (counter)", paid: "Online", cash_paid: "Cash (counter)", cash: "Cash at door" };
 
 function minutesAgo(iso: string | null | undefined) {
   if (!iso) return "";
@@ -357,7 +357,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                     <td className="py-2 pr-2">{onCard ? <span className="mb-1 block text-xs font-bold text-wayne-ok">{formatCents(onCard)} tip already on the card{noCardTip ? "" : " · extra only:"}</span> : null}{noCardTip ? <span className="text-xs font-bold text-wayne-alert">This card can&apos;t take a tip after the order (Stripe). The order is charged as is.</span> : allowed ? <>
                       <input aria-label={onCard ? `Extra tip for order #${ticketNumber(order)}` : `Tip for order #${ticketNumber(order)}`} className={`min-h-11 w-24 rounded-lg border px-2 text-right text-base font-bold ${cents === null || over ? "border-wayne-alert" : "border-wayne-border"}`} inputMode="decimal" onChange={(event) => setTipDraft(order.order_id, event.target.value, dollarsToCents(event.target.value) ?? 0, "delivery")} placeholder="0.00" value={raw} />
                       <TipSavedNote error={drafts[order.order_id]?.error} state={tipSaveState(drafts[order.order_id])} terminal={drafts[order.order_id]?.terminal} />
-                      {over ? <span className="block text-xs font-bold text-wayne-alert">Max {formatCents(cap)} on this card</span> : null}
+                      {over ? <span className="block text-xs font-bold text-wayne-alert">{order.paid_by === "card_adjustable" ? "App limit" : "Max"} {formatCents(cap)}{order.paid_by === "card_adjustable" ? " · Payarc approval required" : " on this card"}</span> : null}
                     </> : <span className="text-sm font-bold">{formatCents(order.tip_cents)}<span className="block text-xs font-normal text-wayne-muted">{order.paid_by === "paid" ? "tip paid online" : "charged at the counter"} · drawer pays it</span></span>}</td>
                     <td className="py-2 text-right">
                       {retry ? <Button disabled={busy !== null || cents !== retry.tip_cents} onClick={() => { void retryTip(retry); }} size="sm" variant="secondary">Retry {formatCents(retry.tip_cents)} tip</Button> : null}
@@ -378,7 +378,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
                   <td className="pr-2 text-right">{formatCents(line.order.total_cents - (line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.tip_cents : tipOnCardCents(line.order)))}</td>
                   <td className="pr-2 text-right">{formatCents(line.tip)}</td>
                   {/* Order + tip: what the card is charged / the order comes to with its tip (owner, 2026-10-20). */}
-                  <td className="pr-4 text-right font-black">{formatCents(line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.total_cents : line.order.paid_by === "card_held" ? line.order.total_cents + line.extra : line.order.total_cents + line.tip)}</td>
+                  <td className="pr-4 text-right font-black">{formatCents(line.order.paid_by === "card" || line.order.paid_by === "paid" ? line.order.total_cents : (line.order.paid_by === "card_held" || line.order.paid_by === "card_adjustable") ? line.order.total_cents + line.extra : line.order.total_cents + line.tip)}</td>
                   <td className="text-xs">{rundownNote(line.order.paid_by, line.collected, line.storePays, line.keeps)}</td>
                 </tr>)}</tbody>
               </table>

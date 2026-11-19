@@ -5,6 +5,7 @@ export type PayarcCharge = {
   id?: string; status?: string; amount?: number | string; amount_captured?: number | string;
   captured?: number | boolean; failure_code?: string | null; failure_message?: string | null;
   statement_description?: string;
+  tip_amount?: number | string;
   card?: { data?: { brand?: string; last4digit?: string } };
   refund?: { data?: PayarcRefund[] };
 };
@@ -21,6 +22,7 @@ export function mapPayarcCharge(charge: PayarcCharge): ProviderPayment {
     : ["authorized", "authorised"].includes(state) && !captured ? "authorized" : "pending";
   return {
     providerPaymentId: charge.id ?? null, status, providerStatus: state,
+    tipAmountCents: cents(charge.tip_amount),
     amountCents: status === "captured" ? cents(charge.amount_captured) ?? cents(charge.amount) : cents(charge.amount),
     cardBrand: charge.card?.data?.brand ?? null, cardLast4: charge.card?.data?.last4digit ?? null,
     metadata: { wayne_payarc_reference: charge.statement_description ?? "" },
@@ -34,7 +36,7 @@ function mapRefund(refund: PayarcRefund): ProviderRefund {
 }
 
 export function createPayarcProvider(config: { apiToken: string; environment: "sandbox" | "production" }): PaymentProvider {
-  async function call<T>(path: string, method: "GET" | "POST" = "GET", body?: Record<string, unknown>, key?: string): Promise<T> {
+  async function call<T>(path: string, method: "GET" | "POST" = "GET", body?: Record<string, unknown>, key?: string, responseOptional = false): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${payarcApiBase(config.environment)}${path}`, {
@@ -47,6 +49,7 @@ export function createPayarcProvider(config: { apiToken: string; environment: "s
       // Do not expose processor payloads: they may echo sensitive payment input.
       throw new PaymentProviderError(response.status === 422 ? "Payarc rejected the request. Review the transaction in Payarc before trying another payment." : "Payarc could not complete the request. Check the payment before trying again.", `PAYARC_HTTP_${response.status}`, true);
     }
+    if (responseOptional) return data as T;
     if (!data || typeof data !== "object" || !("data" in data)) throw new PaymentProviderError("Payarc returned an incomplete response. Check the transaction before retrying.", "INVALID_RESPONSE", true);
     return (data as { data: T }).data;
   }
@@ -63,6 +66,13 @@ export function createPayarcProvider(config: { apiToken: string; environment: "s
     createCardPresentPayment: unsupported, getCardPresentPayment: unsupported, cancelCardPresentPayment: unsupported,
     // Delayed capture and post-payment tips stay disabled until merchant eligibility is confirmed.
     capturePayment: unsupported,
+    async adjustTip(id, { tipCents, idempotencyKey }) {
+      if (!Number.isSafeInteger(tipCents) || tipCents <= 0) throw new PaymentProviderError("The Payarc tip must be a positive amount in cents.", "INVALID_TIP");
+      await call<unknown>(`/charges/${encodeURIComponent(id)}/tip_adjustment`, "POST", { tip: tipCents }, idempotencyKey, true);
+      const charge = await readCharge(id);
+      if (charge.id !== id) throw new PaymentProviderError("Payarc returned a different charge identity.", "PAYMENT_IDENTITY", true);
+      return mapPayarcCharge(charge);
+    },
     async voidPayment(id) {
       await call<PayarcCharge>(`/charges/${encodeURIComponent(id)}/void`, "POST", { reason: "requested_by_customer" });
       return mapPayarcCharge(await readCharge(id));

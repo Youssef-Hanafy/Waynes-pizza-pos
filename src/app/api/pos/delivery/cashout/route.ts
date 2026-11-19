@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   if (!driver || !driver.orders.length) return Response.json({ error: "This driver has no deliveries to cash out." }, { status: 400 });
 
   const tipFor = new Map(parsed.data.tips.map((tip) => [tip.order_id, tip.tip_cents]));
-  const held = driver.orders.filter((order) => order.paid_by === "card_held");
+  const held = driver.orders.filter((order) => order.paid_by === "card_held" || order.paid_by === "card_adjustable");
   // One capture per held card, order + the tip on the slip (shared with POS → Tips).
   const { captures, skipped, problems, retryable_tips }: TipCaptureResult = held.length
     ? await captureHeldCards({

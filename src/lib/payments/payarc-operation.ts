@@ -10,6 +10,7 @@ export async function settlePayarcPayment(service: Service, connectionId: string
   const saved = await service.rpc("wayne_settle_payarc_payment", { target_connection_id: connectionId, payload: {
     provider_payment_id: payment.providerPaymentId, reference: payment.metadata?.wayne_payarc_reference,
     status: payment.status, provider_status: payment.providerStatus, amount_cents: payment.amountCents,
+    tip_amount: payment.tipAmountCents,
     card_brand: payment.cardBrand, card_last4: payment.cardLast4, failure_reason: payment.failureReason,
   } });
   if (saved.error) throw new PaymentProviderError("The payment needs reconciliation. Check Payarc before paying again.", "DATABASE", true);

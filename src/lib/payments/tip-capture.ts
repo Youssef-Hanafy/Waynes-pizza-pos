@@ -7,6 +7,9 @@ import { PaymentProviderError } from "./provider";
 import type { TipRetry } from "@/lib/tips/schemas";
 
 import { runTipOperation, TipDeclinedError } from "./tip-operation";
+import { runPayarcTipOperation } from "./payarc-tip-operation";
+import { paymentConnectionSchema } from "./capabilities";
+import { buildWebhookProvider } from "./registry";
 
 /** Shared durable capture/reconciliation for Tips, driver cash-out and recovery. */
 
@@ -57,7 +60,7 @@ export async function captureHeldCards(options: {
   const { data: rows, error } = await service.from("payments")
     .select("id, order_id, provider, provider_payment_id, amount_cents, card_brand, card_last4, metadata, status, order:orders!inner(order_number, daily_number, workspace_id)")
     .in("order_id", requests.map((request) => request.order_id))
-    .in("status", ["authorized", "captured", "failed"]).eq("method", "card").in("provider", ["stripe", "test"])
+    .in("status", ["authorized", "captured", "failed"]).eq("method", "card").in("provider", ["stripe", "test", "payarc"])
     .eq("orders.workspace_id", workspaceId).order("created_at", { ascending: false });
   if (error) throw new PaymentProviderError("The held cards could not be loaded.", "DATABASE", true);
 
@@ -74,6 +77,16 @@ export async function captureHeldCards(options: {
     const label = `#${daily ?? (orderNumber.replace(/^W0*/, "") || payment.order_id.slice(0, 8))}`;
     const wanted = Math.max(0, Math.round(request.tip_cents || 0));
     try {
+      if (payment.provider === "payarc") {
+        const metadata = payment.metadata as Record<string, unknown> | null;
+        const { data: rawConnection, error: connectionError } = await service.from("payment_connections").select("*")
+          .eq("id", metadata?.payarc_connection_id ?? "").eq("workspace_id", workspaceId).eq("provider", "payarc").maybeSingle();
+        const connection = paymentConnectionSchema.safeParse(rawConnection);
+        const provider = !connectionError && connection.success ? buildWebhookProvider(connection.data) : null;
+        if (!provider || !payment.provider_payment_id) throw new PaymentProviderError("The original Payarc connection is unavailable.", "NOT_CONFIGURED");
+        result.captures.push(await runPayarcTipOperation({ service, workspaceId, paymentId: payment.id, providerPaymentId: payment.provider_payment_id, extraCents: wanted, provider }));
+        continue;
+      }
       const completed = await runTipOperation({
         service, workspaceId, wanted, origin: options.keyPrefix, retryDeclineId: request.retry_decline_id,
         payment: { ...payment, metadata: (payment.metadata ?? {}) as Record<string, unknown> },

@@ -49,10 +49,10 @@ charge, void, or refund was performed in this session.
   attempt even if the initial charge response was lost. Confirm the descriptor is
   accepted and returned unchanged during sandbox testing.
 
-Physical readers, delayed capture, post-payment tip adjustment/overcapture, wallet
-payments, automatic bank payouts, and importing historical Payarc charges are outside
-this first integration. In particular, delivery cards are charged now, not held for
-a tip at driver cash-out. Enter the agreed tip before charging.
+Physical readers, delayed capture/overcapture, wallet payments, automatic bank
+payouts, and importing historical Payarc charges are outside this integration.
+Payarc charges the order immediately; signed-slip extra tips use the existing
+charge’s tip-adjustment API before batching, through Tips or driver cash-out.
 
 ## 1. Obtain matching Payarc sandbox credentials
 
@@ -192,3 +192,36 @@ while preparing this integration.
 - [Tip adjustment](https://docs.payarc.net/reference/tip-adjustment)
 - [Refund](https://docs.payarc.net/reference/refund-a-charge)
 - [Void/refund batching rules](https://docs.payarc.net/docs/voiding-and-refunding-payments)
+
+## Signed-slip tips with Payarc
+
+Apply `20261206080000_payarc_tip_adjustment.sql` along with the matching code release.
+No additional API keys or webhook subscriptions are needed.
+
+- The order is charged immediately, including any tip collected online or by phone.
+- In **Deliveries → Cash out**, enter only the **extra** tip from the slip. Pickup
+  slips can be processed in **POS → Tips**. A $30 order with a $5 phone tip and a
+  $3 extra slip tip ends at $38 charged and $8 recorded as the driver's tip.
+- The server reads the current charge, saves an immutable adjustment request, and
+  calls `POST /v1/charges/{id}/tip_adjustment` with the target processor tip in cents.
+  It verifies both the returned/read-back charge total and the processor tip before
+  recording the extra tip or letting driver cash-out proceed.
+- Payarc's processor tip baseline is read from the original charge. Existing phone
+  tips already folded into the original charge amount are retained locally; they
+  are never added to the charge a second time.
+- Only one saved adjustment is accepted per payment. Duplicate submissions,
+  concurrent registers, callbacks and lost receipts reconcile the saved request.
+  After a submission, retries only read; they never issue a replacement charge.
+- Zero extra tip finalizes the existing payment without invoking the positive-tip API.
+- Positive adjustments are refused after settlement. Payarc determines merchant
+  eligibility and limits; the software does not assume Stripe overcapture limits.
+  An unconfirmed or rejected adjustment stays pending for review; do not change
+  its amount or pay the driver that unconfirmed tip. Check the same saved request.
+- Refunds and voids are blocked while an adjustment is pending. Split/changed
+  payments require allocation review instead of an automatic adjustment.
+- Automatic nightly capture remains a Stripe flow; Payarc extra tips are not
+  submitted automatically at the nightly cutoff.
+
+Actual merchant response semantics, eligibility and batch deadlines still need an
+owner-authorized real card test. Local tests use mocked Payarc responses and an
+isolated PostgreSQL database; they do not move money.
