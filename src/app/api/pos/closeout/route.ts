@@ -2,6 +2,7 @@ import { getCurrentAccess } from "@/lib/auth/access";
 import { hasPermission } from "@/lib/auth/permissions";
 import { dayCloseoutSchema, saveCloseoutSchema } from "@/lib/closeout/schemas";
 import { logger } from "@/lib/logging/logger";
+import { readPaymentConnection } from "@/lib/payments/config";
 import { createServiceSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**
@@ -30,7 +31,11 @@ export async function GET(request: Request) {
   const reportDay = typeof (data as { day?: unknown } | null)?.day === "string" ? (data as { day: string }).day : null;
   const paidOut = reportDay ? await supabase.rpc("wayne_owner_tips_paid_out", { target_day: reportDay }) : null;
   let bankPayout;
-  if (access?.workspace_id && access.location_id && reportDay) {
+  const connection = access?.workspace_id && access.location_id
+    ? await readPaymentConnection("online", { workspaceId: access.workspace_id, locationId: access.location_id })
+    : null;
+  // This panel queues Stripe bank payouts; it cannot settle a Payarc batch.
+  if (connection?.provider === "stripe" && access?.workspace_id && access.location_id && reportDay) {
     const service = createServiceSupabaseClient();
     const [control, batches] = await Promise.all([
       service.from("closeout_payout_control").select("enabled,start_business_date").eq("workspace_id", access.workspace_id).eq("location_id", access.location_id).maybeSingle(),

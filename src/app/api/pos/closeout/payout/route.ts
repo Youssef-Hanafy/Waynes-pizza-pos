@@ -3,6 +3,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cardDayBatchResultSchema } from "@/lib/closeout/card-batch";
 import { z } from "zod";
+import { readPaymentConnection } from "@/lib/payments/config";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export async function POST(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
   const parsed = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Choose a valid closeout date." }, { status: 400 });
+  const connection = await readPaymentConnection("online", { workspaceId: access.workspace_id, locationId: access.location_id });
+  if (connection?.provider !== "stripe") return Response.json({ error: "This button only queues Stripe payouts. Payarc settlement is managed through Payarc and your merchant account." }, { status: 409, headers: { "Cache-Control": "no-store" } });
   const service = await createServerSupabaseClient();
   const { data, error } = await service.rpc("wayne_close_card_day_batch", { target_workspace_id: access.workspace_id, target_location_id: access.location_id, target_day: parsed.data.day });
   if (error) return Response.json({ error: "The bank payout could not be queued. Try again; duplicate payments will not be added." }, { status: 503 });
