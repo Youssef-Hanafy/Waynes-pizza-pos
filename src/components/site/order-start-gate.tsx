@@ -66,7 +66,7 @@ export function OrderStartGate({
       city: value("city"),
       state: value("state"),
       postal_code: value("postal_code"),
-      delivery_instructions: value("delivery_instructions"),
+      delivery_instructions: "",
     });
   }
 
@@ -202,16 +202,7 @@ export function OrderStartGate({
                 />
               </label>
             </div>
-            <label>
-              Anything the driver should know? (optional)
-              <textarea
-                defaultValue={initial?.delivery_instructions ?? ""}
-                maxLength={1000}
-                name="delivery_instructions"
-                placeholder="Buzzer code, side door, dog in the yard…"
-                rows={2}
-              />
-            </label>
+
           </>
         ) : (
           <>

@@ -124,7 +124,7 @@ export function OrderMenuClient({
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
-      setCart(saved);
+      setCart(saved.map((line) => ({ ...line, special_instructions: "" })));
       setHydrated(true);
     });
   }, []);
@@ -663,9 +663,6 @@ function ItemDialog({
       : includedSelection(item),
   );
   const [quantity, setQuantity] = useState(initialLine?.quantity ?? 1);
-  const [instructions, setInstructions] = useState(
-    initialLine?.special_instructions ?? "",
-  );
   const [error, setError] = useState("");
   const draftLine = useMemo<CartLine>(
     () => ({
@@ -673,12 +670,12 @@ function ItemDialog({
       menu_item_id: item.id,
       variant_id: variantId,
       quantity,
-      special_instructions: instructions,
+      special_instructions: "",
       modifiers: Object.entries(selectedChoices)
         .filter(([, count]) => count > 0)
         .map(([choice_id, count]) => ({ choice_id, quantity: count })),
     }),
-    [instructions, item.id, quantity, selectedChoices, variantId],
+    [item.id, quantity, selectedChoices, variantId],
   );
   const draftMenu = [
     {
@@ -906,11 +903,11 @@ function ItemDialog({
                               {count ? "Included" : "Removed"}
                             </small>
                           ) : null}
-                          {delta && (!included || count > 0) && !groupSizeRule(group, sizeName) ? (
+                          {delta && (!included || count > 0) && groupSizeRule(group, sizeName)?.extra_each_cents == null ? (
                             <small className="ml-2 text-wayne-muted">
                               {delta > 0 ? "+" : ""}
                               {formatCents(delta)}
-                              {included ? " extra" : ""}
+                              {included || groupSizeRule(group, sizeName) ? " per extra portion" : ""}
                             </small>
                           ) : null}
                         </span>
@@ -950,16 +947,9 @@ function ItemDialog({
               </div>
             </fieldset>
           ))}
-          <label className="mt-6 grid gap-2 font-bold">
-            Item instructions
-            <textarea
-              className="rounded-xl border p-3 font-normal"
-              maxLength={500}
-              onChange={(event) => setInstructions(event.target.value)}
-              rows={3}
-              value={instructions}
-            />
-          </label>
+          <p className="mt-6 text-sm text-wayne-muted">
+            Choose all toppings and extras above. Add-ons are charged at the displayed prices.
+          </p>
           <div className="item-dialog-actions">
             <div className="flex items-center gap-2">
               <button
@@ -1015,11 +1005,6 @@ function CartLineOptions({
     <>
       {options.length ? (
         <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
-      ) : null}
-      {line.special_instructions ? (
-        <p className="mt-1 text-sm text-wayne-muted">
-          Note: {line.special_instructions}
-        </p>
       ) : null}
     </>
   );

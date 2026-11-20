@@ -101,7 +101,7 @@ export function CheckoutClient({
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
-      setCart(saved);
+      setCart(saved.map((line) => ({ ...line, special_instructions: "" })));
       setReady(true);
     });
   }, []);
@@ -132,19 +132,6 @@ export function CheckoutClient({
     setCardReady(Boolean(next));
   }, []);
 
-  /**
-   * Whether it is a house or a third-floor apartment is the single most useful
-   * thing a driver can be told, and it is asked for before the order starts. It
-   * would be lost if it stayed in the browser, so it rides along on the line the
-   * driver actually reads.
-   */
-  function deliveryInstructions(typed: string) {
-    if (fulfillment !== "delivery" || !details) return typed;
-    const residence = residenceLabels[details.residence_type];
-    if (!residence || typed.toLowerCase().includes(residence.toLowerCase())) return typed;
-    return [residence, typed.trim()].filter(Boolean).join(" · ");
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -165,22 +152,20 @@ export function CheckoutClient({
       email_opt_in: form.get("email_opt_in") === "on",
       tip_cents: tipCents,
       promo_code: String(form.get("promo_code") ?? ""),
-      special_instructions: String(form.get("special_instructions") ?? ""),
+      special_instructions: "",
       address: {
         address1: String(form.get("address1") ?? ""),
         address2: String(form.get("address2") ?? ""),
         city: String(form.get("city") ?? ""),
         state: String(form.get("state") ?? ""),
         postal_code: String(form.get("postal_code") ?? ""),
-        delivery_instructions: deliveryInstructions(
-          String(form.get("delivery_instructions") ?? ""),
-        ),
+        delivery_instructions: fulfillment === "delivery" && details ? residenceLabels[details.residence_type] : "",
       },
       items: cart.map((line) => ({
         menu_item_id: line.menu_item_id,
         variant_id: line.variant_id,
         quantity: line.quantity,
-        special_instructions: line.special_instructions,
+        special_instructions: "",
         modifiers: line.modifiers,
         lists_included: true,
       })),
@@ -434,16 +419,10 @@ export function CheckoutClient({
                 required
               />
             </div>
-            <TextArea
-              defaultValue={details?.delivery_instructions ?? ""}
-              key={`instructions-${details?.delivery_instructions ?? ""}`}
-              label="Delivery instructions (optional)"
-              name="delivery_instructions"
-            />
           </section>
         ) : null}
         <section className="rounded-2xl border border-wayne-border bg-white p-6">
-          <h2 className="text-2xl font-black">Deals & order notes</h2>
+          <h2 className="text-2xl font-black">Deals</h2>
           <p className="mt-2 text-sm text-wayne-muted">
             Keep up with {brand.shortName} deals if you’d like. These choices are optional
             and do not affect your order updates.
@@ -460,12 +439,6 @@ export function CheckoutClient({
             <Check
               label={`Send me ${brand.brandName} email deals`}
               name="email_opt_in"
-            />
-          </div>
-          <div className="mt-5">
-            <TextArea
-              label="Order instructions (optional)"
-              name="special_instructions"
             />
           </div>
         </section>
@@ -627,11 +600,6 @@ function CartLineOptions({
       {options.length ? (
         <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
       ) : null}
-      {line.special_instructions ? (
-        <p className="mt-1 text-sm text-wayne-muted">
-          Note: {line.special_instructions}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -644,20 +612,7 @@ function Check({ label, name }: { label: string; name: string }) {
     </label>
   );
 }
-function TextArea({ defaultValue = "", label, name }: { defaultValue?: string; label: string; name: string }) {
-  return (
-    <label className="grid gap-2 text-sm font-semibold">
-      {label}
-      <textarea
-        className="rounded-xl border p-3 font-normal"
-        defaultValue={defaultValue}
-        maxLength={1000}
-        name={name}
-        rows={3}
-      />
-    </label>
-  );
-}
+
 function TotalRow({
   emphasis = false,
   label,

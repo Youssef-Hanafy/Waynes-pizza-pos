@@ -1,0 +1,20 @@
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { startTipPostgres } from "./helpers/tip-postgres";
+let db: Awaited<ReturnType<typeof startTipPostgres>>;
+beforeAll(async () => { db = await startTipPostgres({ skipMigration: "20261206080000_online_modifier_pricing_gaps.sql" }); }, 60000);
+afterAll(async () => { await db?.stop(); });
+it("repairs free imported ingredients and caps the included pasta selection", async () => {
+  const group = async (name: string) => (await db.admin.query("insert into modifier_groups(name,customer_label,max_select,allow_quantities) values($1,$1,20,true) returning id", [name])).rows[0].id;
+  const choice = async (id: string, name: string, price: number) => (await db.admin.query("insert into modifier_choices(modifier_group_id,name,price_delta_cents) values($1,$2,$3) returning id", [id,name,price])).rows[0].id;
+  const paid = await group("Test – Meats"); await choice(paid,"Steak",450);
+  const imported = await group("Imported – Meats"); const steak = await choice(imported,"Steak",0);
+  const pasta = await group("Pasta Special – Toppings"); const extra = await choice(pasta,"Extra Meat",0);
+  const vegetables = await group("Test Pizza – Vegetables"); await choice(vegetables,"Hot Pepper",200);
+  const pizza = await group("Two Topping Pizza – Toppings"); const cucumber = await choice(pizza,"Cucumbers",0);
+  await db.admin.query(await readFile("supabase/migrations/20261206080000_online_modifier_pricing_gaps.sql","utf8"));
+  expect((await db.admin.query("select price_delta_cents from modifier_choices where id=$1",[steak])).rows[0].price_delta_cents).toBe(450);
+  expect((await db.admin.query("select price_delta_cents from modifier_choices where id=$1",[cucumber])).rows[0].price_delta_cents).toBe(200);
+  expect((await db.admin.query("select active from modifier_choices where id=$1",[extra])).rows[0].active).toBe(false);
+  expect((await db.admin.query("select max_select,allow_quantities from modifier_groups where id=$1",[pasta])).rows[0]).toEqual({max_select:2,allow_quantities:false});
+});

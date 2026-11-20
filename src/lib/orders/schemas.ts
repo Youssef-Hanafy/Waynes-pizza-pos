@@ -57,17 +57,22 @@ export const checkoutInputSchema = z
     email_opt_in: z.boolean(),
     tip_cents: z.number().int().min(0).max(1_000_000),
     promo_code: z.string().trim().max(40),
-    special_instructions: z.string().trim().max(1500),
+    // Discard notes from older clients as well as forged checkout requests.
+    special_instructions: z.string().trim().max(1500).transform(() => ""),
     address: z.object({
       address1: z.string().trim().max(200),
       address2: z.string().trim().max(200),
       city: z.string().trim().max(120),
       state: z.string().trim().max(80),
       postal_code: z.string().trim().max(20),
-      delivery_instructions: z.string().trim().max(1000),
+      delivery_instructions: z.string().trim().max(1000).transform((value) =>
+        ["House", "Apartment / condo", "Business", "Dorm", "Somewhere else"].includes(value) ? value : "",
+      ),
     }),
     // Open items are POS only: the website can never send its own price.
-    items: z.array(orderLineSchema.omit({ open_item: true })).min(1).max(50),
+    items: z.array(orderLineSchema.omit({ open_item: true }).extend({
+      special_instructions: z.string().trim().max(500).transform(() => ""),
+    })).min(1).max(50),
   })
   .superRefine((value, context) => {
     if (value.fulfillment_type === "delivery") {
