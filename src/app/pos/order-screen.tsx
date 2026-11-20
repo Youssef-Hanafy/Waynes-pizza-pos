@@ -40,10 +40,8 @@ type Props = {
   menu: PublicMenu;
   settings: StoreSettings;
   onOpenPhone: () => void;
-  /** Stripe (online) connection for keyed-in cards; null when Stripe isn't connected. */
-  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }> | null;
-  /** Admin → Hardware → Payment terminal is the Stripe Reader M2. */
-  stripeReader: boolean;
+  /** Secure keyed-card connection; null until configured. */
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "payarc" }> | null;
 };
 
 /**
@@ -51,7 +49,7 @@ type Props = {
  * the active draft, so holding it, taking a second call and coming back leaves
  * it exactly as it was (§36), and a refresh does too (test 15).
  */
-export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, keyedCardConfig, stripeReader }: Props) {
+export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, keyedCardConfig }: Props) {
   const draft = useActiveDraft();
   const { drafts, activeId } = useDrafts();
   // Tickets are never held (owner, 2026-10-19); only ones already sent and waiting for the connection stay.
@@ -352,7 +350,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
   }
 
   // Saved offline: take payment here, with no connection (owner, 2026-10-24).
-  if (offlinePaying) return <OfflinePayment draft={draft} key={draft.id} onDone={(message) => { if (message) setPaidFlash(message); }} stripeReader={stripeReader} />;
+  if (offlinePaying) return <OfflinePayment draft={draft} key={draft.id} onDone={(message) => { if (message) setPaidFlash(message); }} />;
 
   // Sent: ask for payment right away (owner, 2026-09-30).
   if (created) {
@@ -371,7 +369,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         </div>
         {printNote ? <p aria-live="polite" className="-mt-1 mb-2 text-sm font-bold">{printNote}</p> : null}
         <h1 className="sr-only">How are they paying?</h1>
-        <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} stripeReader={stripeReader} />
+        <PaymentPrompt key={`${created.order.id}-${created.order.total_cents}`} keyedCardConfig={keyedCardConfig} onAddItems={addMoreItems} onFinished={closePayment} onPayLater={() => closePayment()} order={created.order} />
         {created.fresh ? <p className="mt-2 border-t border-wayne-border pt-1.5 text-sm font-bold text-wayne-muted">Back (‹) changes this same order #{ticketNumber(created.order)}. Leaving this screen keeps it unpaid, like {created.delivery ? "Cash at the door" : "Pay later"}.</p> : null}
       </section>
     </FitToSpace>;

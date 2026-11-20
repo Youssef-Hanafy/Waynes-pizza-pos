@@ -44,11 +44,7 @@ export async function getPosKeyedCardConfig() {
       const config = checkoutPaymentConfigSchema.safeParse({ provider: "payarc", client_id: process.env.NEXT_PUBLIC_PAYARC_CLIENT_ID, environment: resolved.value.connection.environment, online_card_enabled: true });
       return config.success && config.data.provider === "payarc" ? config.data : null;
     }
-    if (resolved.value.provider.code !== "stripe") return null;
-    const parsed = checkoutPaymentConfigSchema.safeParse({
-      provider: "stripe", publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, online_card_enabled: true,
-    });
-    return parsed.success && parsed.data.provider === "stripe" ? parsed.data : null;
+    return null;
   } catch {
     return null;
   }

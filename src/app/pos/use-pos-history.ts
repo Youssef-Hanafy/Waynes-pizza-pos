@@ -6,7 +6,6 @@ import { logDevice } from "@/lib/pos/device-log";
 import { notify, syncStore } from "@/stores/draft-sync";
 import { orderActions, orderStore, paymentPromptStore } from "@/stores/order-store";
 import { forgetClosedUnsent, historyStore, takenBack, makeStep, pushStep, remapDraft, stepBack, stepForward, wasClosedUnsent, type HistoryStep, type TicketSnapshot } from "@/stores/pos-history";
-import { stripeReaderStore } from "@/stores/stripe-reader";
 import { lastClosedStore, unsettledOrder } from "@/stores/ticket-closeout";
 
 /** Typing settles into one step (a name is one step, not one per letter). */
@@ -108,7 +107,6 @@ export function usePosHistory<S extends string>(section: S, setSection: (next: S
 
   async function go(direction: "back" | "forward") {
     if (busy.current) return;
-    if (stripeReaderStore.get().status.state === "collecting") { notify("A card is being taken — finish or cancel it first.", "warn"); return; }
     if (syncStore.get().sending.length) { notify("The order is sending — one moment.", "warn"); return; }
     commit();
     const moved = direction === "back" ? stepBack(historyStore.get()) : stepForward(historyStore.get());

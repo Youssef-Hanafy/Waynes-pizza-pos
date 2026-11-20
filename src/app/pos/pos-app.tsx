@@ -17,8 +17,7 @@ import { orderActions, orderStore, paymentPromptStore, useActiveDraft, useDrafts
 import { getTerminalLabel, phoneActions, phoneStore, setTerminalLabel, usePhoneBadge } from "@/stores/phone-store";
 import { useHardware } from "@/stores/use-hardware";
 import { PrintStationBadge, PrintStationPanel, printStationWarning } from "@/components/pos/print-station-panel";
-import { StripeReaderStatus } from "@/components/pos/stripe-reader-panel";
-import { connectStripeReader, describeNativeApp, keepStripeReaderConnected, startStripeReader } from "@/stores/stripe-reader";
+import { describeNativeApp } from "@/stores/stripe-reader";
 import { getOnlineChimeEnabled, playOrderChime, setOnlineChimeEnabled, useOnlineOrderAlerts } from "@/stores/online-order-alerts";
 import { formatCents } from "@/lib/menu/schemas";
 import { usePrintStationRunner } from "@/stores/use-print-station";
@@ -78,7 +77,7 @@ type Props = {
   callerIdEnabled: boolean;
   deliveryEnabled: boolean;
   workspaceName: string;
-  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "stripe" | "payarc" }> | null;
+  keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "payarc" }> | null;
 };
 
 /**
@@ -156,7 +155,6 @@ export function PosApp(props: Props) {
   const sendingCount = drafts.filter((draft) => draft.submitPending).length;
 
   const runtimeReady = useHardware(hardware);
-  const stripeReaderOn = hardware.payment_terminal_mode === "integrated";
   const onlineAlerts = useOnlineOrderAlerts(canManageOrders);
   // Diagnostics for the counter tablet: script errors and what this register was given.
   useEffect(() => {
@@ -165,10 +163,7 @@ export function PosApp(props: Props) {
     logDevice("pos.open", "", { payment_terminal_mode: hardware.payment_terminal_mode, runtime_ready: runtimeReady, viewport: `${window.innerWidth}x${window.innerHeight}`, screen: `${window.screen.width}x${window.screen.height}`, dpr: window.devicePixelRatio, build: process.env.WAYNE_BUILD_ID ?? "", ...describeNativeApp() });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per page load
   }, []);
-  // Stripe Reader M2: inside the POS app, connect as soon as the register opens and keep it connected.
-  useEffect(() => {
-    if (stripeReaderOn && runtimeReady && startStripeReader()) { void connectStripeReader(); keepStripeReaderConnected(); }
-  }, [stripeReaderOn, runtimeReady]);
+
   const printStation = usePrintStationRunner(hardware, runtimeReady);
   useDraftSync();
   // Offline orders (owner, 2026-10-24): what printing and totals need, kept current with the menu.
@@ -322,14 +317,14 @@ export function PosApp(props: Props) {
     {section === "order" ? <div className="flex min-h-0 flex-1">
       <CurrentOrdersRail canSeeOrders={canManageOrders} onOpenOrders={() => { setPayFocus(null); setSection(canManageOrders ? "orders" : "today"); }} onPay={takePayment} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} stripeReader={stripeReaderOn} />
+        <OrderScreen canManageDiscount={canManageDiscount} keyedCardConfig={keyedCardConfig} menu={menu} onOpenPhone={() => { if (callerIdEnabled) setSection("phone"); }} settings={settings} />
       </div>
     </div> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} onAddItems={(order) => {
       // Same as Today's Orders → Add items; adding to an unpaid order brings its payment straight back with the new total.
       orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 });
       setPayFocus(null); setSection("order");
-    }} key={payFocus ? `pay-${payFocus.n}` : "pay"} stripeReader={stripeReaderOn} timeZone={settings.timezone} /> : null}
+    }} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
       // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items,
@@ -404,7 +399,6 @@ function MoreScreen({ canManageHardware, hardware, runtimeReady, onApplyUpdate }
         <p className="mt-3 text-sm text-wayne-muted">Caller ID provider: <strong>{hardware.caller_id_provider === "simulated" ? "Simulated" : hardware.caller_id_provider === "cloud" ? "Store bridge (cloud)" : "Android app"}</strong> · {hardware.caller_line_count} lines</p>
         {canManageHardware ? <Button asChild className="mt-3" variant="secondary"><Link href="/admin/hardware">Admin → Hardware</Link></Button> : null}
       </section>
-      {hardware.payment_terminal_mode === "integrated" ? <section className="rounded-3xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Card reader</h2><p className="mb-3 mt-1 text-sm text-wayne-muted">Stripe Reader M2 over Bluetooth. Press its button once to wake it; it stays connected to this tablet.</p><StripeReaderStatus /></section> : null}
       <AppInfoPanel onApplyUpdate={onApplyUpdate} />
       <PrintStationPanel />
       <TestOrdersPanel />

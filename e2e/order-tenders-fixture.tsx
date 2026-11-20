@@ -11,6 +11,7 @@ const order = openOrderSchema.parse({ id: id(1), order_number: "W000001", daily_
 function Fixture() {
   const [done, setDone] = useState<unknown>(null);
   if (location.pathname === "/modifiers") return <><PosItemDialog initialLine={null} item={item} onAdd={setDone} onClose={() => {}} /><output>{done ? JSON.stringify(done) : ""}</output></>;
-  return <><PaymentPrompt keyedCardConfig={null} onFinished={setDone} onPayLater={() => {}} order={order} stripeReader={false} /><output>{done ? "Finished" : "Order open"}</output></>;
+  const payarc = location.pathname === "/payarc";
+  return <><PaymentPrompt keyedCardConfig={payarc ? { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } : null} onFinished={setDone} onPayLater={() => {}} order={payarc ? { ...order, is_test: false } : order} /><output>{done ? "Finished" : "Order open"}</output></>;
 }
 createRoot(document.getElementById("root")!).render(<Fixture />);

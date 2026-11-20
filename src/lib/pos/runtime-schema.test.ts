@@ -12,10 +12,10 @@ const runtime = {
 };
 
 describe("runtime refresh validation", () => {
-  it("accepts the server's complete runtime including Stripe configuration", () => {
+  it("accepts the server's complete runtime including Payarc configuration", () => {
     expect(posRuntimeSchema.parse(runtime)).toMatchObject(runtime);
-    const stripe = { ...runtime, keyedCardConfig: { provider: "stripe", publishable_key: "pk_test_fixture", online_card_enabled: true } };
-    expect(posRuntimeSchema.parse(stripe)).toMatchObject(stripe);
+    const payarc = { ...runtime, keyedCardConfig: { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } };
+    expect(posRuntimeSchema.parse(payarc)).toMatchObject(payarc);
   });
   it.each([undefined, null, {}, { ...runtime, settings: null }, { ...runtime, menu: [{}] }, { ...runtime, hardware: null }, { ...runtime, canManageOrders: undefined }])("rejects incomplete or malformed runtime: %j", data => {
     expect(posRuntimeSchema.safeParse(data).success).toBe(false);

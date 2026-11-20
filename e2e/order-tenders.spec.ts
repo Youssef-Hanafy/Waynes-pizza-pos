@@ -69,3 +69,31 @@ test("card reader waits for the typed amount and refuses an amount above the bal
   await expect(page.getByText(/\$20.00 remaining/)).toBeVisible();
   expect(payments).toBe(1);
 });
+
+for (const viewport of [{ width: 1024, height: 600 }, { width: 1280, height: 800 }]) test(`Payarc fields and charge button fit without scrolling at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  await page.setViewportSize(viewport);
+  const stripeRequests: string[] = [];
+  page.on("request", request => { if (/stripe/i.test(request.url())) stripeRequests.push(request.url()); });
+  await page.route("https://testportal.payarc.net/js/iframeprocess.js", route => route.fulfill({ contentType: "application/javascript", body: `
+    function initPayarcTokenizer(clientId, settings) {
+      for (const id of ['number', 'expiry', 'cvv', 'zip']) {
+        const frame = document.createElement('iframe');
+        frame.srcdoc = '<label style="font:14px Arial">' + id + '<input style="box-sizing:border-box;width:100%;height:44px;font-size:16px" aria-label="' + id + '"></label>';
+        document.getElementById(id).appendChild(frame);
+      }
+    }
+  ` }));
+  await page.goto("/payarc");
+  await page.getByRole("button", { name: /Key in card/ }).click();
+  await page.getByLabel("Card amount", { exact: true }).fill("30.00");
+  await page.getByRole("button", { name: "Pay $30.00", exact: true }).click();
+  const charge = page.getByRole("button", { name: "Charge $30.00", exact: true });
+  await expect(charge).toBeEnabled();
+  const frame = page.frameLocator('iframe[title="Secure Payarc card details"]');
+  await expect(frame.locator('#fields iframe')).toHaveCount(4);
+  const bounds = await charge.boundingBox();
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(viewport.height);
+  expect(stripeRequests).toEqual([]);
+  await page.screenshot({ path: `test-results/payarc-pos-${viewport.width}.png` });
+});

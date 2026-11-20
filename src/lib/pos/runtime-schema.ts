@@ -8,8 +8,8 @@ import { checkoutPaymentConfigSchema } from "@/lib/payments/schemas";
 export const posRuntimeSchema = z.object({
   menu: publicMenuSchema,
   settings: storeSettingsSchema,
-  hardware: hardwareSettingsSchema,
-  keyedCardConfig: z.union([checkoutPaymentConfigSchema.options[1], checkoutPaymentConfigSchema.options[2]]).nullable(),
+  hardware: hardwareSettingsSchema.transform((hardware) => ({ ...hardware, payment_terminal_mode: "manual_external" as const })),
+  keyedCardConfig: checkoutPaymentConfigSchema.options[2].nullable(),
   callerIdEnabled: z.boolean(),
   deliveryEnabled: z.boolean(),
   workspaceName: z.string(),

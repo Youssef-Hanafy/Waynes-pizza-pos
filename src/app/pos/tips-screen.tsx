@@ -40,7 +40,7 @@ function when(iso: string) {
  * Every card — the M2 at the counter, a card keyed in over the phone, an
  * online order — is approved for the order and held.  At the end of the night
  * the slips come out, the tip written on each is typed here, and "Charge
- * cards" captures every card ONCE for order + tip (Stripe overcapture).  A
+ * cards" captures every card ONCE for order + tip (processor overcapture).  A
  * slip with no tip: leave it blank, the card is charged for the order.
  *
  * Delivery cards on a driver's run go through Deliveries → cash-out instead,
@@ -188,7 +188,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
         {onOpenDeliveries ? <Button className="mt-2" onClick={onOpenDeliveries} size="sm" variant="secondary">Go to Deliveries → cash-out</Button> : null}
       </section> : null}
 
-      <p className="text-xs text-wayne-muted">Payarc cards are already charged: enter only an extra tip from the signed slip, before batching. Payarc determines eligibility; a declined or uncertain adjustment is kept for review. Stripe: anything still waiting at 4:30 am is charged automatically for the order with no added tip, so no card approval runs out. Stripe lets a card take up to 50% or $50 more than approved (whichever is greater) on Visa, Mastercard, Discover and Amex.</p>
+      <p className="text-xs text-wayne-muted">Payarc cards are already charged: enter only an extra tip from the signed slip, before batching. Payarc determines eligibility; a declined or uncertain adjustment is kept for review. Stripe: anything still waiting at 4:30 am is charged automatically for the order with no added tip, so no card approval runs out. Tip adjustments depend on the payment processor and the original card approval.</p>
       {invalid.length ? <p className="sr-only">Some tips are not numbers.</p> : null}
     </div>
   </div>;
