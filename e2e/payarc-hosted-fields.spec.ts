@@ -79,3 +79,43 @@ for (const width of [320, 700]) {
     await page.screenshot({ path: '/tmp/waynes-payarc-layout-' + width + '.png' });
   });
 }
+
+test("Payarc field callbacks reach the isolated form using its inherited HTTPS origin", async ({ page }) => {
+  await page.route("https://waynes.test/**", route => route.fulfill({ contentType: "text/html", body: "<html><body></body></html>" }));
+  await page.route("https://testportal.payarc.net/js/iframeprocess.js", route => route.fulfill({ contentType: "application/javascript", body: `
+    let settings;
+    // Match the SDK's default handshake, which cannot use about:srcdoc as a return URL.
+    function getStyles(field) { field.contentWindow.postMessage({styles: document.getElementById('payarc-styles').innerText, url: location.href}, 'https://testportal.payarc.net'); }
+    function initPayarcTokenizer(clientId, config) {
+      settings = config;
+      const frame = document.createElement('iframe');
+      frame.onload = () => getStyles(frame);
+      frame.src = 'https://testportal.payarc.net/field';
+      document.getElementById('number').appendChild(frame);
+    }
+    addEventListener('message', event => {
+      if (event.origin === 'https://testportal.payarc.net' && event.data.isPayarc) document.getElementById('tokenize').dataset.uuid = event.data.uuid;
+    });
+    function getPayarcToken(button) {
+      if (!button.dataset.uuid) throw new Error('Provider session missing');
+      settings.TOKEN_CALLBACK.success({ response: JSON.stringify({ token: 'callback-flow-token' }) });
+    }
+  ` }));
+  await page.route("https://testportal.payarc.net/field", route => route.fulfill({ contentType: "text/html", body: `<input aria-label="Provider test field"><script>
+    let target;
+    addEventListener('message', event => { if (event.data.url) target = event.data.url; });
+    document.querySelector('input').addEventListener('input', () => parent.postMessage({ isPayarc: true, uuid: 'provider-session', id: 'number', status: 'success' }, target));
+  </script>` }));
+  await page.goto("https://waynes.test/");
+  await page.evaluate(html => {
+    const frame = document.createElement('iframe'); frame.title = 'Payarc form'; frame.srcdoc = html;
+    document.body.appendChild(frame);
+    (window as unknown as { messages: unknown[] }).messages = [];
+    addEventListener('message', event => { if (event.source === frame.contentWindow) (window as unknown as { messages: unknown[] }).messages.push(event.data); });
+  }, payarcFieldsDocument('public-client', 'sandbox', 'callback-channel', 'https://waynes.test'));
+  const form = page.frameLocator('iframe[title="Payarc form"]');
+  await form.frameLocator('#number iframe').getByRole('textbox').fill('callback-test');
+  await expect(form.locator('#tokenize')).toHaveAttribute('data-uuid', 'provider-session');
+  await page.evaluate(() => document.querySelector('iframe')!.contentWindow!.postMessage({ type: 'tokenize', channel: 'callback-channel' }, location.origin));
+  await expect.poll(() => page.evaluate(() => (window as unknown as { messages: unknown[] }).messages)).toContainEqual({ channel: 'callback-channel', type: 'token', token: 'callback-flow-token' });
+});
