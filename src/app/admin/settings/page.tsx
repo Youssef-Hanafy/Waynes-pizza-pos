@@ -219,9 +219,9 @@ export default async function SettingsPage({
         </SettingsSection>
         <SettingsSection title="Online ordering operations">
           <p className="rounded-xl border border-wayne-warn/30 bg-wayne-warn-soft p-4 text-sm font-semibold text-wayne-warn">
-            Phase 2 accepts TEST / MANUAL orders only. No card payment is
-            collected. Confirm the tax rate with your accountant before
-            production use.
+            Online card payments use the provider enabled in Payments. Accept
+            TEST / MANUAL orders only when you intend to allow unpaid orders
+            without online card payment.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
             <Input

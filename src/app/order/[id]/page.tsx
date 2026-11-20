@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { storefrontSettings } from "@/lib/content/queries";
 import { formatCents } from "@/lib/menu/schemas";
 import { getPublicOrderStatus } from "@/lib/orders/queries";
+import { orderPaymentNotice } from "@/lib/orders/payment-notice";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default async function OrderStatusPage({
   const order = await getPublicOrderStatus(id, query.token!);
   if (!order) notFound();
   const address = order.delivery_address as Record<string, string> | null;
+  const payment = orderPaymentNotice(order);
   return (
     <div className="min-h-screen">
       <SiteHeader settings={settings} />
@@ -50,12 +52,9 @@ export default async function OrderStatusPage({
             Order <strong>{order.order_number}</strong> is placed for{" "}
             <strong className="capitalize">{order.fulfillment_type}</strong>.
           </p>
-          <div className="mt-5 rounded-2xl border border-wayne-warn/40 bg-wayne-warn-soft p-5">
-            <strong>TEST / MANUAL payment</strong>
-            <p className="mt-1 text-sm">
-              No card payment was collected. Payment status:{" "}
-              {order.payment_status}.
-            </p>
+          <div className={`mt-5 rounded-2xl border p-5 ${payment.confirmed ? "border-wayne-ok/30 bg-wayne-ok/10" : "border-wayne-warn/40 bg-wayne-warn-soft"}`}>
+            <strong>{payment.title}</strong>
+            <p className="mt-1 text-sm">{payment.description}</p>
           </div>
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
             <Info label="Status" value={order.status.replaceAll("_", " ")} />
