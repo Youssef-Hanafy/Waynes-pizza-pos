@@ -18,3 +18,16 @@ it("repairs free imported ingredients and caps the included pasta selection", as
   expect((await db.admin.query("select active from modifier_choices where id=$1",[extra])).rows[0].active).toBe(false);
   expect((await db.admin.query("select max_select,allow_quantities from modifier_groups where id=$1",[pasta])).rows[0]).toEqual({max_select:2,allow_quantities:false});
 });
+it("makes pizza toppings available and copies their configured size prices", async () => {
+  const category=(await db.admin.query("insert into menu_categories(name) values('Build Your Own Pizza') returning id")).rows[0].id;
+  const items=(await db.admin.query("insert into menu_items(category_id,name,customer_visible) values($1,'Cheese Pizza',true),($1,'One Topping Pizza',true) returning id,name",[category])).rows;
+  const target=items.find(i=>i.name==='Cheese Pizza').id, source=items.find(i=>i.name==='One Topping Pizza').id;
+  const group=(await db.admin.query("insert into modifier_groups(name,customer_label,max_select) values('Build Your Own Pizza – Meats','Meats',20) returning id")).rows[0].id;
+  const choice=(await db.admin.query("insert into modifier_choices(modifier_group_id,name,price_delta_cents) values($1,'Pepperoni',200) returning id",[group])).rows[0].id;
+  await db.admin.query('insert into menu_item_modifier_groups(menu_item_id,modifier_group_id) values($1,$2)',[source,group]);
+  const variants=(await db.admin.query("insert into menu_item_variants(menu_item_id,name,price_cents) values($1,'Large',1500),($2,'Large',1700) returning id,menu_item_id",[target,source])).rows;
+  await db.admin.query('insert into modifier_choice_variant_prices(modifier_choice_id,menu_item_variant_id,price_delta_cents) values($1,$2,350)',[choice,variants.find(v=>v.menu_item_id===source).id]);
+  await db.admin.query(await readFile('supabase/migrations/20261206090000_complete_online_modifier_assignments.sql','utf8'));
+  expect((await db.admin.query('select active from menu_item_modifier_groups where menu_item_id=$1 and modifier_group_id=$2',[target,group])).rows[0].active).toBe(true);
+  expect((await db.admin.query('select price_delta_cents from modifier_choice_variant_prices where modifier_choice_id=$1 and menu_item_variant_id=$2',[choice,variants.find(v=>v.menu_item_id===target).id])).rows[0].price_delta_cents).toBe(350);
+});
