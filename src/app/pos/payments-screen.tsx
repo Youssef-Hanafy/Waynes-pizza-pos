@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useOpenOrders } from "@/stores/open-orders";
 import { Button } from "@/components/ui/button";
+import { OriginalCardTender } from "@/components/payments/original-card-tender";
 import { PayarcKeyedTender } from "@/components/payments/payarc-keyed-tender";
 import { posDrawerSchema } from "@/lib/cash/schemas";
 import { formatCents, parseMoneyToCents } from "@/lib/menu/schemas";
@@ -253,6 +254,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       : cardHeld && !paidBefore ? <p className="mt-6 rounded-xl bg-wayne-ok-soft p-4 text-lg font-bold text-wayne-ok">Paid by card — approved and held for the tip on the signed slip. {isDelivery ? "Add the tip in Deliveries at the driver's cash-out (a tip taken on the phone is already on the card — add only an extra)" : "Add the tip in Tips at the end of the night"}; the card is charged once, order + tip.</p> : <>
       {order.is_test ? <p className={`rounded-xl bg-wayne-warn-soft font-bold ${compact ? "mt-2 px-3 py-1.5 text-sm" : "mt-5 p-3"}`}>🧪 Test order — Card reader and Key in card are simulated here. Everything works the same, but no card is charged.</p> : null}
       {paymentNote ? <p aria-live="polite" className="mt-2 rounded-xl bg-wayne-ok-soft p-3 font-bold text-wayne-ok">{paymentNote}</p> : null}
+      {order.source === "online" && paidBefore > 0 && !order.is_test && keyedCardConfig?.provider === "payarc" ? <OriginalCardTender orderId={order.id} due={due} busy={busy} setBusy={setBusy} onLock={setPaymentLocked} onPaid={(cents) => { const done: Done = { order: { ...order, total_cents: cents }, method: "card", changeCents: 0, tenderedCents: null }; if (cents < due) onPaid(done); else finishPayment(done); }} /> : null}
       {onAddItems && !compact ? <button className={`flex w-full flex-wrap items-center justify-center gap-x-2 rounded-2xl border-2 border-wayne-green bg-white px-4 font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40 mt-4 min-h-14 text-lg`} disabled={busy || paymentLocked || tipAsked} onClick={onAddItems} type="button">＋ Add more items to this order<span className="text-sm font-bold text-wayne-muted">same ticket · one payment</span></button> : null}
       <div className={`grid grid-cols-2 ${compact ? "mt-2 gap-2" : "mt-5 gap-3"} ${buttonColumns}`}>
         {onAddItems && compact ? <button className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-wayne-green bg-white p-2 text-center font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || paymentLocked || tipAsked || mode === "terminal"} onClick={onAddItems} type="button"><span aria-hidden className="text-xl leading-none">＋</span><strong className="text-lg font-black leading-tight">Add items</strong></button> : null}

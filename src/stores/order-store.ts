@@ -117,14 +117,14 @@ export const orderActions = {
    * 2026-10-13): a ticket that holds only the new items; the one on screen is
    * kept on hold.  An Add-items ticket already open for this order is resumed.
    */
-  addToOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; paid: boolean }) {
+  addToOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; source?: string; paid: boolean }) {
     const existing = orderStore.get().drafts.find((draft) => draft.addTo?.orderId === order.id);
     if (existing) { orderStore.set((state) => resumeDraft(state, existing.id)); return; }
     orderStore.set((state) => startDraft(state, {
       started: true, source: "pos", customerMode: "walk_in", fulfillment: order.fulfillment_type === "delivery" ? "delivery" : "pickup",
       firstName: order.customer_name,
       addTo: {
-        orderId: order.id, orderNumber: order.order_number, dailyNumber: order.daily_number, customerName: order.customer_name,
+        orderId: order.id, originalSource: order.source, orderNumber: order.order_number, dailyNumber: order.daily_number, customerName: order.customer_name,
         fulfillment: order.fulfillment_type === "delivery" ? "delivery" : "pickup", paid: order.paid,
         editing: false, existing: [], removed: [], quantities: {}, discountCents: 0,
       },
@@ -135,7 +135,7 @@ export const orderActions = {
    * original lines on the ticket, to change, take off or add to.  Opened fresh
    * every time, so it always shows the order as it is now.
    */
-  editOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; paid: boolean; discount_cents: number; delivery_fee_cents?: number; tip_cents?: number },
+  editOrder(order: { id: string; order_number: string; daily_number: number | null; customer_name: string; fulfillment_type: string; source?: string; paid: boolean; discount_cents: number; delivery_fee_cents?: number; tip_cents?: number },
     existing: NonNullable<PosDraft["addTo"]>["existing"]) {
     orderStore.set((state) => {
       const stale = state.drafts.find((draft) => draft.addTo?.orderId === order.id);
@@ -144,7 +144,7 @@ export const orderActions = {
         started: true, source: "pos", customerMode: "walk_in", fulfillment: order.fulfillment_type === "delivery" ? "delivery" : "pickup",
         firstName: order.customer_name,
         addTo: {
-          orderId: order.id, orderNumber: order.order_number, dailyNumber: order.daily_number, customerName: order.customer_name,
+          orderId: order.id, originalSource: order.source, orderNumber: order.order_number, dailyNumber: order.daily_number, customerName: order.customer_name,
           fulfillment: order.fulfillment_type === "delivery" ? "delivery" : "pickup", paid: order.paid,
           editing: true, existing, removed: [], quantities: {}, discountCents: order.discount_cents, deliveryFeeCents: order.delivery_fee_cents, tipCents: order.tip_cents ?? 0,
         },

@@ -265,7 +265,7 @@ function OrderDetail({ order, addOns, time, onPay, onAddItems, onSelect, onChang
 
     <div className="mt-4 grid gap-2 sm:grid-cols-2">
       {!["completed", "cancelled", "draft", "payment_pending"].includes(order.status) ? <FulfillmentEditor orderId={order.id} onChanged={() => { setDoc(null); onChanged(); void fetchPrintDocument(order.id).then(setDoc).catch(() => setItemsError("The changed order could not be loaded.")); }} /> : null}
-      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">✏️ Edit items / add items · same order</Button> : null}
+      {canAdd ? <Button className="min-h-16 text-xl sm:col-span-2" onClick={() => onAddItems?.(order)} size="lg">✏️ {order.source === "online" ? "Add extras / charge original card" : "Edit items / add items · same order"}</Button> : null}
       {unpaidOpen && onPay ? <Button className="sm:col-span-2" onClick={() => onPay(order.id)} size="lg" variant="brand">Take payment · {formatCents(Math.max(0, order.total_cents - order.paid_cents))}</Button> : null}
       <Button disabled={busy} onClick={() => { void printReceipt(); }} size="lg" variant="secondary">Print receipt</Button>
       <Button disabled={busy} onClick={() => { void printKitchen(); }} size="lg" variant="secondary">Print kitchen ticket</Button>

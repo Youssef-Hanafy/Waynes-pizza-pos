@@ -124,7 +124,7 @@ export function OrderMenuClient({
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
-      setCart(saved.map((line) => ({ ...line, special_instructions: "" })));
+      setCart(saved);
       setHydrated(true);
     });
   }, []);
@@ -663,6 +663,7 @@ function ItemDialog({
       : includedSelection(item),
   );
   const [quantity, setQuantity] = useState(initialLine?.quantity ?? 1);
+  const [instructions, setInstructions] = useState(initialLine?.special_instructions ?? "");
   const [error, setError] = useState("");
   const draftLine = useMemo<CartLine>(
     () => ({
@@ -670,12 +671,12 @@ function ItemDialog({
       menu_item_id: item.id,
       variant_id: variantId,
       quantity,
-      special_instructions: "",
+      special_instructions: instructions,
       modifiers: Object.entries(selectedChoices)
         .filter(([, count]) => count > 0)
         .map(([choice_id, count]) => ({ choice_id, quantity: count })),
     }),
-    [item.id, quantity, selectedChoices, variantId],
+    [item.id, quantity, selectedChoices, variantId, instructions],
   );
   const draftMenu = [
     {
@@ -947,9 +948,10 @@ function ItemDialog({
               </div>
             </fieldset>
           ))}
-          <p className="mt-6 text-sm text-wayne-muted">
-            Choose all toppings and extras above. Add-ons are charged at the displayed prices.
-          </p>
+          <label className="mt-6 grid gap-2 text-sm font-bold">Item notes (optional)
+            <textarea className="rounded-xl border border-wayne-border p-3 font-normal" maxLength={500} rows={2} value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Special requests for this item" />
+          </label>
+          <p className="mt-2 text-sm text-wayne-muted">Choose priced extras above when available. Requests in notes may cost extra; we will confirm the added charge with you.</p>
           <div className="item-dialog-actions">
             <div className="flex items-center gap-2">
               <button
@@ -1006,6 +1008,7 @@ function CartLineOptions({
       {options.length ? (
         <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
       ) : null}
+      {line.special_instructions ? <p className="mt-1 text-sm text-wayne-muted">Note: {line.special_instructions}</p> : null}
     </>
   );
 }

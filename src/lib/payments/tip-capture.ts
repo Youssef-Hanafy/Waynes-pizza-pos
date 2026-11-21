@@ -70,7 +70,7 @@ export async function captureHeldCards(options: {
   for (const request of requests) {
     const candidates = rows?.filter((row) => row.order_id === request.order_id) ?? [];
     const payment = request.payment_id ? candidates.find((row) => row.id === request.payment_id)
-      : candidates.find((row) => row.status === "authorized") ?? candidates[0];
+      : candidates.find((row) => row.status === "authorized") ?? candidates.find((row) => (row.metadata as Record<string, unknown> | null)?.entry !== "online_extra_charge") ?? candidates[0];
     const orderNumber = (payment?.order as unknown as { order_number?: string } | null)?.order_number ?? "";
     if (!payment) { result.skipped.push(request.order_id); result.problems.push("A card is no longer waiting for a tip (already charged or cancelled)."); continue; }
     const daily = (payment.order as unknown as { daily_number?: number | null }).daily_number;

@@ -241,7 +241,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
         order: {
           id: result.order_id, order_number: result.order_number, daily_number: result.daily_number ?? addTo.dailyNumber,
           parent_order_id: result.mode === "add_on" ? (result.parent_order_id ?? addTo.orderId) : null,
-          total_cents: result.total_cents, paid_cents: result.paid_cents, customer_name: returnTo?.order.customer_name ?? addTo.customerName, fulfillment_type: addTo.fulfillment, source: returnTo?.order.source ?? draft.source,
+          total_cents: result.total_cents, paid_cents: result.paid_cents, customer_name: returnTo?.order.customer_name ?? addTo.customerName, fulfillment_type: addTo.fulfillment, source: returnTo?.order.source ?? addTo.originalSource ?? draft.source,
           status: "placed", payment_method: "", payment_status: result.paid_cents >= result.total_cents ? "paid" : "unpaid", placed_at: returnTo?.order.placed_at ?? new Date().toISOString(), promised_at: null, ready_at: null,
           is_test: draft.isTest,
         },
@@ -322,7 +322,7 @@ export function OrderScreen({ canManageDiscount, menu, settings, onOpenPhone, ke
     if (!created) return;
     const order = created.order;
     setReturnTo({ order, delivery: created.delivery, fresh: created.fresh });
-    orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: (order.paid_cents ?? 0) > 0 });
+    orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, source: order.source, paid: (order.paid_cents ?? 0) > 0 });
     setCreated(null); setPrintNote(""); setError("");
   }
 

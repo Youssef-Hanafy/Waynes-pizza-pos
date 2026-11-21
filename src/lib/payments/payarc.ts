@@ -6,7 +6,7 @@ export type PayarcCharge = {
   captured?: number | boolean; failure_code?: string | null; failure_message?: string | null;
   statement_description?: string;
   tip_amount?: number | string;
-  card?: { data?: { brand?: string; last4digit?: string } };
+  card?: { data?: { id?: string; customer_id?: string | null; brand?: string; last4digit?: string } };
   refund?: { data?: PayarcRefund[] };
 };
 type PayarcRefund = { id?: string; charge_id?: string; status?: string; refund_amount?: number | string; description?: string };
@@ -60,6 +60,20 @@ export function createPayarcProvider(config: { apiToken: string; environment: "s
     async createOnlinePayment({ amountCents, idempotencyKey, sourceId, referenceId }) {
       const charge = await call<PayarcCharge>("/charges", "POST", { amount: amountCents, currency: "usd", token_id: sourceId, capture: 1, statement_description: referenceId }, idempotencyKey);
       if (!charge.id) throw new PaymentProviderError("Payarc returned no charge ID. Check Payarc before paying again.", "INVALID_RESPONSE", true);
+      return mapPayarcCharge(charge);
+    },
+    async createAdditionalPayment({ originalProviderPaymentId, amountCents, idempotencyKey, referenceId }) {
+      const original = await readCharge(originalProviderPaymentId);
+      const card = original.card?.data;
+      if (original.id !== originalProviderPaymentId || mapPayarcCharge(original).status !== "captured" || !["submitted_for_settlement", "settled", "captured"].includes(original.status ?? "") || !card?.id) {
+        throw new PaymentProviderError("The original card cannot be used for this extra charge. Collect the balance with another payment method.", "ORIGINAL_CARD_UNAVAILABLE");
+      }
+      const charge = await call<PayarcCharge>("/charges", "POST", {
+        amount: amountCents, currency: "usd", card_id: card.id,
+        ...(card.customer_id ? { customer_id: card.customer_id } : {}),
+        capture: 1, statement_description: referenceId,
+      }, idempotencyKey);
+      if (!charge.id) throw new PaymentProviderError("Payarc returned no charge ID. Check this extra charge before paying again.", "INVALID_RESPONSE", true);
       return mapPayarcCharge(charge);
     },
     createOnlinePaymentIntent: unsupported, getOnlinePaymentIntent: unsupported,

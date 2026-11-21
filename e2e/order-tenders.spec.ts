@@ -97,3 +97,73 @@ for (const viewport of [{ width: 1024, height: 600 }, { width: 1280, height: 800
   expect(stripeRequests).toEqual([]);
   await page.screenshot({ path: `test-results/payarc-pos-${viewport.width}.png` });
 });
+
+
+test("online extras charge the original card for the added balance without card entry", async ({ page }) => {
+  let body: Record<string, unknown> | null = null;
+  await page.route("**/original-card", async (route) => {
+    body = route.request().postDataJSON();
+    await route.fulfill({ json: { payment_status: "captured", amount_cents: 535 } });
+  });
+  await page.goto("/online-extra");
+  const charge = page.getByRole("button", { name: "Charge original card · $5.35", exact: true });
+  await expect(charge).toBeDisabled();
+  await page.getByRole("checkbox", { name: "Customer approved the added items and $5.35 charge." }).check();
+  await charge.click();
+  await expect(page.locator("output")).toHaveText("Finished");
+  expect(body).toMatchObject({ expected_amount_cents: 535, customer_approved: true });
+  expect(body).not.toHaveProperty("source_id");
+  expect(body).not.toHaveProperty("card_id");
+});
+
+test("a pending original-card charge survives refresh and is checked with the same request", async ({ page }) => {
+  const requests: Array<{ idempotency_key: string; expected_amount_cents: number }> = [];
+  await page.route("**/original-card", async (route) => {
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 2) { await route.fulfill({ status: 403, json: { error: "Sign in again" } }); return; }
+    await route.fulfill({ json: { payment_status: requests.length === 1 ? "pending" : "captured", amount_cents: 535 } });
+  });
+  await page.goto("/online-extra");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Charge original card · $5.35", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check extra charge · $5.35", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Cash", exact: false })).toBeDisabled();
+  await page.reload();
+  await page.getByRole("button", { name: "Check extra charge · $5.35", exact: true }).click();
+  await expect(page.getByText("Sign in again", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Check extra charge · $5.35", exact: true }).click();
+  await expect(page.locator("output")).toHaveText("Finished");
+  expect(requests).toHaveLength(3);
+  expect(requests[0]).toEqual(requests[1]);
+  expect(requests[1]).toEqual(requests[2]);
+});
+
+
+test("online item notes can be saved, edited, and restored from the cart", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("wayne-order-details-v1", JSON.stringify({ fulfillment: "pickup", first_name: "Pat", last_name: "Customer", phone: "5085550144" })));
+  await page.goto("/menu-notes");
+  await page.getByRole("checkbox", { name: /^Pepperoni/ }).check();
+  await page.getByLabel("Item notes (optional)").fill("Please add extra cheese");
+  await page.getByRole("button", { name: "Add · $10.00", exact: true }).click();
+  const lines = await page.evaluate(() => JSON.parse(localStorage.getItem("wayne-cart-v2") ?? "[]"));
+  expect(lines[0].special_instructions).toBe("Please add extra cheese");
+  await page.reload();
+  await page.getByRole("button", { name: "Close item", exact: true }).click();
+  await expect(page.getByText("Note: Please add extra cheese", { exact: true })).toBeVisible();
+});
+
+test("checkout preserves item notes and submits order notes", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("wayne-cart-v2", JSON.stringify([{ line_id: "notes-line", menu_item_id: "7d000000-0000-4000-8000-000000000002", variant_id: null, quantity: 1, special_instructions: "Please add extra cheese", modifiers: [{ choice_id: "7d000000-0000-4000-8000-000000000004", quantity: 1 }] }])));
+  let payload: Record<string, unknown> | null = null;
+  await page.route("**/api/orders", async (route) => { payload = route.request().postDataJSON(); await route.fulfill({ status: 400, json: { error: "Fixture recorded" } }); });
+  await page.goto("/online-notes");
+  await expect(page.getByText("Note: Please add extra cheese", { exact: true })).toBeVisible();
+  await page.getByLabel("First name").fill("Pat");
+  await page.getByLabel("Last name").fill("Customer");
+  await page.getByRole("textbox", { name: "Phone", exact: true }).fill("5085550144");
+  await page.getByLabel("Order notes (optional)").fill("Call before delivery");
+  await page.getByRole("button", { name: /Place/ }).click();
+  await expect(page.getByText("Fixture recorded", { exact: true })).toBeVisible();
+  expect(payload).toMatchObject({ special_instructions: "Call before delivery", items: [{ special_instructions: "Please add extra cheese" }] });
+});

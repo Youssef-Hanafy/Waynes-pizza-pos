@@ -57,6 +57,8 @@ export type WebhookEnvelope = {
  */
 export interface PaymentProvider {
   readonly code: string;
+  /** Charge only an added order balance using the card behind an earlier payment. */
+  createAdditionalPayment?(input: { originalProviderPaymentId: string; amountCents: number; idempotencyKey: string; referenceId: string }): Promise<ProviderPayment>;
   /** Charge a card tokenized in the browser. */
   createOnlinePayment(input: { amountCents: number; idempotencyKey: string; sourceId: string; referenceId: string; note: string; verificationToken?: string | null }): Promise<ProviderPayment>;
   /** Create an online PaymentIntent before Stripe.js collects the card details. */

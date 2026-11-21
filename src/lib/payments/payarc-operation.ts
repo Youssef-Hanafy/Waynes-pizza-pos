@@ -18,14 +18,17 @@ export async function settlePayarcPayment(service: Service, connectionId: string
 }
 
 /** A duplicate request only reads; it never submits a new charge or another token. */
-export async function executePayarcPayment(service: Service, provider: PaymentProvider, connectionId: string, attempt: PayarcAttempt, sourceId: string, key: string) {
+export async function executePayarcPayment(service: Service, provider: PaymentProvider, connectionId: string, attempt: PayarcAttempt, sourceId: string, key: string, originalProviderPaymentId?: string) {
   if (attempt.duplicate) {
     if (!attempt.provider_payment_id) return { status: attempt.status, payment_id: attempt.payment_id };
     return settlePayarcPayment(service, connectionId, await provider.getPaymentStatus(attempt.provider_payment_id));
   }
   let payment: ProviderPayment;
   try {
-    payment = await provider.createOnlinePayment({ amountCents: attempt.amount_cents, sourceId, idempotencyKey: key, referenceId: attempt.reference, note: "Wayne's payment" });
+    if (originalProviderPaymentId && !provider.createAdditionalPayment) throw new PaymentProviderError("Charging the original card is not available.", "UNSUPPORTED_OPERATION");
+    payment = originalProviderPaymentId
+      ? await provider.createAdditionalPayment!({ originalProviderPaymentId, amountCents: attempt.amount_cents, idempotencyKey: key, referenceId: attempt.reference })
+      : await provider.createOnlinePayment({ amountCents: attempt.amount_cents, sourceId, idempotencyKey: key, referenceId: attempt.reference, note: "Wayne's payment" });
   } catch (error) {
     if (error instanceof PaymentProviderError && !error.retryable) {
       const failed = await service.rpc("wayne_settle_payment", { payload: { payment_id: attempt.payment_id, status: "failed", provider_status: error.code, failure_reason: error.message } });

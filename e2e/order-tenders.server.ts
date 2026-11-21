@@ -5,7 +5,7 @@ import postcss, { type Plugin } from "postcss";
 // @ts-expect-error The application PostCSS config is JavaScript.
 import config from "../postcss.config.mjs";
 import { createServer } from "node:http";
-const bundle = await build({ entryPoints: ["e2e/order-tenders-fixture.tsx"], bundle: true, write: false, platform: "browser", format: "esm", jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' } });
+const bundle = await build({ entryPoints: ["e2e/order-tenders-fixture.tsx"], bundle: true, write: false, loader: { ".css": "empty", ".module.css": "empty" }, platform: "browser", format: "esm", jsx: "automatic", define: { "process.env": "{}", "process.env.NODE_ENV": '"development"' } });
 const css = await postcss(await Promise.all(config.plugins.map(async (p: string | Plugin) => typeof p === "string" ? (await import(p)).default() : p))).process(readFileSync("src/app/globals.css", "utf8"), { from: `${process.cwd()}/src/app/globals.css` });
 createServer((req, res) => {
   if (req.url === "/app.css") { res.setHeader("Content-Type", "text/css"); res.end(css.css); return; }

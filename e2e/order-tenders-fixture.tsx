@@ -1,3 +1,6 @@
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { CheckoutClient } from "../src/app/checkout/checkout-client";
+import { OrderMenuClient } from "../src/app/menu/order-menu-client";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PaymentPrompt } from "../src/app/pos/payments-screen";
@@ -11,7 +14,15 @@ const order = openOrderSchema.parse({ id: id(1), order_number: "W000001", daily_
 function Fixture() {
   const [done, setDone] = useState<unknown>(null);
   if (location.pathname === "/modifiers") return <><PosItemDialog initialLine={null} item={item} onAdd={setDone} onClose={() => {}} /><output>{done ? JSON.stringify(done) : ""}</output></>;
-  const payarc = location.pathname === "/payarc";
-  return <><PaymentPrompt keyedCardConfig={payarc ? { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } : null} onFinished={setDone} onPayLater={() => {}} order={payarc ? { ...order, is_test: false } : order} /><output>{done ? "Finished" : "Order open"}</output></>;
+  if (location.pathname === "/online-notes" || location.pathname === "/menu-notes") {
+    const router = { bfcacheId: "fixture", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
+    const menu = [{ id: id(10), name: "Pizza", description: "", image_path: null, image_alt: "", items: [item] }];
+    return <AppRouterContext.Provider value={router}>{location.pathname === "/online-notes"
+      ? <CheckoutClient fulfillment="pickup" menu={menu} paymentConfig={null} settings={{ delivery_enabled: true, delivery_fee_cents: 200, delivery_minimum_cents: 0, pickup_enabled: true, pickup_minimum_cents: 0, suggested_tip_percentages: [], tax_rate_basis_points: 700, test_ordering_enabled: true, tips_enabled: false }} />
+      : <OrderMenuClient menu={menu} initialFulfillment="pickup" orderingOpen pickupEnabled deliveryEnabled timezone="America/New_York" initialItemId={item.id} pickupMinutes={20} deliveryMinutes={40} />}</AppRouterContext.Provider>;
+  }
+  const originalCard = location.pathname === "/online-extra";
+  const payarc = location.pathname === "/payarc" || originalCard;
+  return <><PaymentPrompt keyedCardConfig={payarc ? { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } : null} onFinished={setDone} onPayLater={() => {}} order={originalCard ? { ...order, source: "online", is_test: false, total_cents: 3535, paid_cents: 3000 } : payarc ? { ...order, is_test: false } : order} /><output>{done ? "Finished" : "Order open"}</output></>;
 }
 createRoot(document.getElementById("root")!).render(<Fixture />);

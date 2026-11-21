@@ -123,7 +123,7 @@ export function PosApp(props: Props) {
       if (["cancelled", "draft", "payment_pending"].includes(order.status) || ["refunded", "partially_refunded"].includes(order.payment_status)) throw new Error("That order can't be changed.");
       orderActions.editOrder({
         id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name,
-        fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0, discount_cents: order.discount_cents, delivery_fee_cents: order.delivery_fee_cents, tip_cents: order.tip_cents,
+        fulfillment_type: order.fulfillment_type, source: order.source, paid: order.paid_cents > 0, discount_cents: order.discount_cents, delivery_fee_cents: order.delivery_fee_cents, tip_cents: order.tip_cents,
       }, existingLinesFrom(menu, lines));
       setPayFocus(null); setSection("order");
     } catch (cause) {
@@ -322,14 +322,14 @@ export function PosApp(props: Props) {
     </div> : null}
     {section === "pay" ? <PaymentsScreen initialOrderId={payFocus?.orderId ?? null} keyedCardConfig={keyedCardConfig} onAddItems={(order) => {
       // Same as Today's Orders → Add items; adding to an unpaid order brings its payment straight back with the new total.
-      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 });
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number ?? null, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, source: order.source, paid: order.paid_cents > 0 });
       setPayFocus(null); setSection("order");
     }} key={payFocus ? `pay-${payFocus.n}` : "pay"} timeZone={settings.timezone} /> : null}
     {section === "phone" && callerIdEnabled ? <PhoneScreen onOpenCustomer={(customer) => { setCustomerFocus(customer); setSection("customers"); }} onStartOrder={startPhoneOrder} profileId={profileId} simulatorAvailable={runtimeReady && hardware.simulator_enabled} timeZone={settings.timezone} /> : null}
     {section === "today" ? <DayOrdersScreen onAddItems={(order) => {
       // Add items to an order already sent (owner, 2026-10-13): the menu opens with a ticket for just the extra items,
       // and they go on that same order even if it was paid (owner, 2026-10-19).
-      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, paid: order.paid_cents > 0 || order.payment_status === "paid" || order.payment_status === "authorized" });
+      orderActions.addToOrder({ id: order.id, order_number: order.order_number, daily_number: order.daily_number, customer_name: order.customer_name, fulfillment_type: order.fulfillment_type, source: order.source, paid: order.paid_cents > 0 || order.payment_status === "paid" || order.payment_status === "authorized" });
       setPayFocus(null); setSection("order");
     }} onEdit={(order) => { void editOrder(order.id); }} onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onEdit={(orderId) => { void editOrder(orderId); }} onPay={takePayment} timeZone={settings.timezone} /></div> : null}

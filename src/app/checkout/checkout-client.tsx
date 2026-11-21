@@ -101,7 +101,7 @@ export function CheckoutClient({
   useEffect(() => {
     const saved = readCart(window.localStorage.getItem(CART_STORAGE_KEY));
     queueMicrotask(() => {
-      setCart(saved.map((line) => ({ ...line, special_instructions: "" })));
+      setCart(saved);
       setReady(true);
     });
   }, []);
@@ -152,7 +152,7 @@ export function CheckoutClient({
       email_opt_in: form.get("email_opt_in") === "on",
       tip_cents: tipCents,
       promo_code: String(form.get("promo_code") ?? ""),
-      special_instructions: "",
+      special_instructions: String(form.get("special_instructions") ?? ""),
       address: {
         address1: String(form.get("address1") ?? ""),
         address2: String(form.get("address2") ?? ""),
@@ -165,7 +165,7 @@ export function CheckoutClient({
         menu_item_id: line.menu_item_id,
         variant_id: line.variant_id,
         quantity: line.quantity,
-        special_instructions: "",
+        special_instructions: line.special_instructions,
         modifiers: line.modifiers,
         lists_included: true,
       })),
@@ -442,6 +442,12 @@ export function CheckoutClient({
             />
           </div>
         </section>
+        <section className="rounded-2xl border border-wayne-border bg-white p-6">
+          <label className="grid gap-2 font-bold">Order notes (optional)
+            <textarea className="rounded-xl border border-wayne-border p-3 font-normal" name="special_instructions" maxLength={1500} rows={3} placeholder="Special requests for the kitchen" />
+          </label>
+          <p className="mt-2 text-sm text-wayne-muted">Choose priced extras from the menu when available. Requests in notes may cost extra; we will confirm the added charge with you.</p>
+        </section>
         {paymentConfig ? (
           <section className="rounded-2xl border border-wayne-border bg-white p-6">
             <h2 className="text-2xl font-black">Card payment</h2>
@@ -600,6 +606,7 @@ function CartLineOptions({
       {options.length ? (
         <p className="mt-1 text-sm text-wayne-muted">{options.join(", ")}</p>
       ) : null}
+      {line.special_instructions ? <p className="mt-1 text-sm text-wayne-muted">Note: {line.special_instructions}</p> : null}
     </>
   );
 }

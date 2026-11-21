@@ -225,3 +225,33 @@ No additional API keys or webhook subscriptions are needed.
 Actual merchant response semantics, eligibility and batch deadlines still need an
 owner-authorized real card test. Local tests use mocked Payarc responses and an
 isolated PostgreSQL database; they do not move money.
+
+
+## Online order extras on the original card
+
+Apply `20261207090000_online_original_card_extras.sql` with this release.
+
+- Online item notes and checkout order notes are available again and retained in
+  the submitted order. Notes explain that paid extras require confirmation.
+- In **POS → Today's Orders**, open an online order and choose **Add extras /
+  charge original card**. Edit its priced modifiers, add items, or add an open
+  item with a description and price. Existing order editing calculates tax and
+  leaves only the added balance due on the same order.
+- On the payment screen, confirm the customer approved the extra amount and tap
+  **Charge original card**. The server reads the card identifier from the original
+  captured Payarc charge, then creates a separate sale for the remaining balance.
+  No checkout token is reused and no card number or CVV is stored or requested.
+  This uses the documented `card_id` (and `customer_id` when present) fields of
+  [Create a Charge](https://docs.payarc.net/reference/create-a-charge-keyed).
+- The supplemental payment keeps its original payment ID, staff actor, approval,
+  amount, and unique processor reference. Retrying an existing request only reads
+  its charge. If the initial submission's outcome is unknown and there is no
+  charge ID yet, it remains pending for webhook/reference reconciliation; it is
+  never automatically submitted again.
+- Canceled, refunded, already cashed-out, cross-workspace and stale-balance
+  requests are refused. Pending tips/refunds/voids must be reconciled first.
+  A missing reusable card or processor refusal leaves the balance unpaid.
+- Supplemental food charges are excluded from the slip-tip queue. The original
+  payment can still receive its extra slip tip after these sales are confirmed.
+- Verification uses real isolated PostgreSQL, mocked processor responses and
+  browser fixtures. No live customer charge was submitted during development.

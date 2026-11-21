@@ -110,6 +110,7 @@ export const posDraftSchema = z.object({
    */
   addTo: z.object({
     orderId: z.uuid(),
+    originalSource: z.string().optional(),
     orderNumber: z.string(),
     dailyNumber: z.number().int().nullable(),
     customerName: z.string(),
