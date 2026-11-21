@@ -194,8 +194,8 @@ export function CloseoutScreen({ storeName, onOpenTips, tipPayoutName = "the own
         </div>
       </div>
       {tenders.card_held_for_tip_cents ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-wayne-gold bg-wayne-gold/15 p-3">
-        <p className="font-black">💳 {formatCents(tenders.card_held_for_tip_cents)} in delivery cards still waiting for the driver&apos;s tip. Cash out the drivers (or charge them in Tips) before closing out.</p>
-        {onOpenTips ? <Button onClick={onOpenTips} size="sm">Go to Tips</Button> : null}
+        <p className="font-black">💳 {formatCents(tenders.card_held_for_tip_cents)} in cards still waiting to be processed. Open Deliveries to finish card tips and cash out the drivers before closing out.</p>
+        {onOpenTips ? <Button onClick={onOpenTips} size="sm">Go to Deliveries</Button> : null}
       </div> : null}
       {report.unpaid.count ? <div className="rounded-xl border-2 border-wayne-alert bg-wayne-alert-soft p-3">
         <p className="font-black text-wayne-alert">⚠ {report.unpaid.count} order{report.unpaid.count === 1 ? "" : "s"} still not paid · {formatCents(report.unpaid.total_cents)}</p>

@@ -38,7 +38,6 @@ import { OpenOrdersPanel } from "./open-orders-panel";
 import { CurrentOrdersRail } from "./current-orders-rail";
 import { DayOrdersScreen } from "./day-orders-screen";
 import { CloseoutScreen } from "./closeout-screen";
-import { TipsScreen } from "./tips-screen";
 import { OrderScreen } from "./order-screen";
 import { PosKeyboard, getPosKeyboardSetting, setPosKeyboardSetting } from "./pos-keyboard";
 import { PaymentsScreen } from "./payments-screen";
@@ -262,8 +261,8 @@ export function PosApp(props: Props) {
     ...(canManageOrders ? [{ id: "orders" as const, label: "Orders" }] : []),
     { id: "today", label: "Today's Orders" },
     { id: "customers", label: "Customers" },
-    ...(canManageOrders && deliveryEnabled && settings.delivery_enabled ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
-    ...(canCloseOut ? [{ id: "tips" as const, label: "Tips" }, { id: "closeout" as const, label: "Close Out" }] : []),
+    ...((canManageOrders && deliveryEnabled && settings.delivery_enabled) || canCloseOut ? [{ id: "delivery" as const, label: "Deliveries" }] : []),
+    ...(canCloseOut ? [{ id: "closeout" as const, label: "Close Out" }] : []),
     { id: "more", label: "More" },
   ];
 
@@ -333,10 +332,9 @@ export function PosApp(props: Props) {
       setPayFocus(null); setSection("order");
     }} onEdit={(order) => { void editOrder(order.id); }} onPay={takePayment} timeZone={settings.timezone} /> : null}
     {section === "orders" && canManageOrders ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><OpenOrdersPanel inline onEdit={(orderId) => { void editOrder(orderId); }} onPay={takePayment} timeZone={settings.timezone} /></div> : null}
-    {section === "delivery" && canManageOrders && deliveryEnabled ? <DeliveriesScreen storeName={settings.store_name || workspaceName} timeZone={settings.timezone} /> : null}
+    {(section === "delivery" || section === "tips") && (canCloseOut || (canManageOrders && deliveryEnabled && settings.delivery_enabled)) ? <DeliveriesScreen canProcessCards={canCloseOut} dispatchEnabled={canManageOrders && deliveryEnabled && settings.delivery_enabled} storeName={settings.store_name || workspaceName} timeZone={settings.timezone} /> : null}
     {section === "customers" ? <CustomersScreen focus={customerFocus} key={customerFocus?.id ?? "search"} onStartOrder={startCustomerOrder} timeZone={settings.timezone} /> : null}
-    {section === "tips" && canCloseOut ? <TipsScreen onOpenDeliveries={canManageOrders && deliveryEnabled && settings.delivery_enabled ? () => setSection("delivery") : undefined} /> : null}
-    {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("tips")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
+    {section === "closeout" && canCloseOut ? <CloseoutScreen onOpenTips={() => setSection("delivery")} storeName={settings.store_name || workspaceName} tipPayoutName={settings.tip_payout_name || "the owner"} /> : null}
     {section === "more" ? <MoreScreen onApplyUpdate={applyUpdate} canManageHardware={canManageHardware} hardware={hardware} runtimeReady={runtimeReady} /> : null}
   </div>;
 }
@@ -345,7 +343,7 @@ export function PosApp(props: Props) {
 function sectionName(section: string) {
   const names: Record<string, string> = {
     order: "New Order", phone: "Phone", pay: "Payments", orders: "Orders", today: "Today's Orders", customers: "Customers",
-    delivery: "Deliveries", tips: "Tips", closeout: "Close Out", more: "More",
+    delivery: "Deliveries", tips: "Deliveries", closeout: "Close Out", more: "More",
   };
   return names[section] ?? section;
 }

@@ -28,9 +28,10 @@ export function findMenuItem(menu: PublicMenu, itemId: string) {
 // an explicit override; anything else -- including every choice on an item
 // with no sizes at all -- uses the flat `price_delta_cents`.
 export function choicePriceDeltaCents(
-  choice: { price_delta_cents: number; variant_prices: { variant_id: string; price_delta_cents: number }[] },
+  choice: { shared_price_cents?: number | null; price_delta_cents: number; variant_prices: { variant_id: string; price_delta_cents: number }[] },
   variantId: string | null | undefined,
 ) {
+  if (choice.shared_price_cents != null) return choice.shared_price_cents;
   if (variantId) {
     const override = choice.variant_prices.find((entry) => entry.variant_id === variantId);
     if (override) return override.price_delta_cents;
@@ -39,6 +40,7 @@ export function choicePriceDeltaCents(
 }
 
 type ChoiceLike = {
+  shared_price_cents?: number | null;
   id: string;
   name: string;
   default_selected: boolean;
@@ -163,7 +165,7 @@ export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId
     if (isInstructionChoice(choice) || isExtraChoice(choice)) return { choice_id: choice.id, portions: quantity, free: 0, unit_cents: unit, charge_cents: unit * quantity };
     const free = Math.min(quantity, freeLeft);
     freeLeft -= free;
-    const each = rule.extra_each_cents ?? unit;
+    const each = choice.shared_price_cents ?? rule.extra_each_cents ?? unit;
     return { choice_id: choice.id, portions: quantity, free, unit_cents: each, charge_cents: (quantity - free) * each };
   });
 }

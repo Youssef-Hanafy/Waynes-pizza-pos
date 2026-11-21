@@ -33,7 +33,7 @@ export function MenuImage({
         alt={alt}
         className="menu-photo-img"
         fill
-        priority={preload}
+        preload={preload}
         sizes={sizes}
         src={url}
       />

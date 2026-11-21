@@ -352,6 +352,7 @@ export function OrderMenuClient({
                         alt={item.image_alt || item.name}
                         name={item.name}
                         category={category.name}
+                        sizes="(max-width: 360px) 76px, (max-width: 700px) 96px, (max-width: 1024px) 45vw, 28vw"
                         path={item.image_path}
                       />
                       <div className="menu-product-content">
@@ -846,8 +847,8 @@ function ItemDialog({
                   <p className="mt-1 text-sm font-bold text-wayne-ok">
                     {rule.included_count} included{sizeName ? ` with a ${sizeName}` : ""} — mix and match
                     {used > rule.included_count
-                      ? ` · ${used - rule.included_count} extra${rule.extra_each_cents !== null ? ` at ${formatCents(rule.extra_each_cents)} each` : ""}`
-                      : rule.extra_each_cents !== null
+                      ? ` · ${used - rule.included_count} extra${rule.extra_each_cents !== null && !group.choices.some(choice => choice.shared_price_cents != null) ? ` at ${formatCents(rule.extra_each_cents)} each` : ""}`
+                      : rule.extra_each_cents !== null && !group.choices.some(choice => choice.shared_price_cents != null)
                         ? ` · extras ${formatCents(rule.extra_each_cents)} each`
                         : ""}
                   </p>

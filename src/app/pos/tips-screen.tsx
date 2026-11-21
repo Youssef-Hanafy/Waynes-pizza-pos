@@ -34,20 +34,11 @@ function when(iso: string) {
   return new Date(iso).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
-/**
- * Tips from the signed slips (owner, 2026-10-13).
- *
- * Every card — the M2 at the counter, a card keyed in over the phone, an
- * online order — is approved for the order and held.  At the end of the night
- * the slips come out, the tip written on each is typed here, and "Charge
- * cards" captures every card ONCE for order + tip (processor overcapture).  A
- * slip with no tip: leave it blank, the card is charged for the order.
- *
- * Delivery cards on a driver's run go through Deliveries → cash-out instead,
- * so the driver is paid the tip out of the drawer.  Anything still waiting at
- * 4:30 am is charged automatically with no added tip.
+/** Pending pickup/counter cards, embedded below the driver runs in Deliveries.
+ * Delivery cards always stay with dispatch and the driver's cash-out, even
+ * before a driver has been assigned. Tip drafts keep their existing storage.
  */
-export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void }) {
+export function TipsScreen({ embedded = false }: { embedded?: boolean }) {
   const [cards, setCards] = useState<HeldCard[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -95,8 +86,7 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
 
   useVisiblePolling(load, 120_000);
 
-  const here = useMemo(() => cards.filter((card) => !card.with_driver), [cards]);
-  const drivers = useMemo(() => cards.filter((card) => card.with_driver), [cards]);
+  const here = useMemo(() => cards.filter((card) => !card.with_driver && card.fulfillment_type !== "delivery"), [cards]);
   const entered = here.map((card) => ({ card, cents: parseTipInput(tips[card.order_id] ?? "") }));
   const invalid = entered.filter((line) => line.cents === null);
   const tooBig = entered.filter((line) => line.cents !== null && line.cents > tipRoom(line.card));
@@ -132,12 +122,12 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
     }
   }
 
-  return <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-    <div className="mx-auto grid max-w-5xl gap-3">
+  return <section className={embedded ? "rounded-3xl border border-wayne-border bg-white p-4 shadow-sm" : "min-h-0 flex-1 overflow-y-auto p-3 sm:p-4"}>
+    <div className={embedded ? "grid gap-3" : "mx-auto grid max-w-5xl gap-3"}>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black">Tips from the slips</h1>
-          <p className="text-sm font-bold text-wayne-muted">Type the tip written on each signed slip, then charge the cards. Blank = no tip (charged for the order). Each card is charged once.</p>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-black">Other cards · end-of-day processing</h2>
+          <p className="text-sm font-bold text-wayne-muted">Pickup and counter orders: add the tip from each signed slip, then process the cards at the end of the day. Blank = no added tip. Delivery cards are processed with their driver’s cash-out above.</p>
         </div>
         <p className="text-sm text-wayne-muted">Payarc: add extra tips to the existing charge before batching. Stripe: capture held cards.</p>
         <Button disabled={busy || !here.length || tooBig.some((line) => line.card.provider === "payarc")} onClick={() => { void charge(entered); }} size="lg">{busy ? "Processing…" : `Process ${here.length} card${here.length === 1 ? "" : "s"}${tipTotal ? ` · ${formatCents(tipTotal)} tips` : ""}`}</Button>
@@ -182,14 +172,8 @@ export function TipsScreen({ onOpenDeliveries }: { onOpenDeliveries?: () => void
         })}
       </ul> : null}
 
-      {drivers.length ? <section className="rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-3">
-        <h2 className="font-black">On a driver&apos;s run ({drivers.length})</h2>
-        <p className="text-sm text-wayne-muted">These delivery cards get their tip at the driver&apos;s cash-out, so the driver is paid the tip from the drawer: {drivers.map((card) => `#${ticketNumber(card)} ${card.customer_name}`).join(" · ")}</p>
-        {onOpenDeliveries ? <Button className="mt-2" onClick={onOpenDeliveries} size="sm" variant="secondary">Go to Deliveries → cash-out</Button> : null}
-      </section> : null}
-
       <p className="text-xs text-wayne-muted">Payarc cards are already charged: enter only an extra tip from the signed slip, before batching. Payarc determines eligibility; a declined or uncertain adjustment is kept for review. Stripe: anything still waiting at 4:30 am is charged automatically for the order with no added tip, so no card approval runs out. Tip adjustments depend on the payment processor and the original card approval.</p>
       {invalid.length ? <p className="sr-only">Some tips are not numbers.</p> : null}
     </div>
-  </div>;
+  </section>;
 }

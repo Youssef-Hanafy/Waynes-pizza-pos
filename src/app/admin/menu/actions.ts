@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth/access";
 import { uploadOptimizedImage } from "@/lib/images/upload";
 import {
+  modifierSizeRuleSchema,
   menuItemPayloadSchema,
   parseMoneyToCents,
   parseSignedMoneyToCents,
@@ -36,6 +37,7 @@ const editorConfigSchema = z.object({
         allow_quantities: z.boolean(),
         // Left / right halves on the POS (owner, 2026-10-20). Kept on every save.
         allow_halves: z.boolean().default(false),
+        size_rules: z.array(modifierSizeRuleSchema).max(101).optional(),
         choices: z
           .array(
             z.object({
@@ -413,7 +415,7 @@ const categoryOptionsSchema = z.object({
           .array(
             z.object({
               size_name: z.string().trim().max(120),
-              included_count: z.number().int().min(0).max(20),
+              included_count: z.number().int().min(0).max(20).nullable(),
               max_portions: z.number().int().min(1).max(20).nullable(),
               extra_each_cents: z.number().int().min(0).max(100_000).nullable(),
             }),
@@ -489,23 +491,12 @@ export async function saveCategoryOptionsAction(
     );
   }
   const supabase = await createServerSupabaseClient();
-  const { data, error } = parsed.data!.sections.length
-    ? await supabase.rpc("wayne_save_category_options", {
-        target_category_id: categoryId,
-        payload: { sections: parsed.data!.sections },
-      })
-    : { data: {}, error: null };
+  const { data, error } = await supabase.rpc("wayne_save_category_menu_options", {
+    target_category_id: categoryId,
+    payload: { sections: parsed.data!.sections, size_rules: parsed.data!.size_rules },
+  });
   if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
-  // A new option used to go to the end of each item's copy, so it sat in a different spot on every item.
   await alignCategoryOptionOrder(supabase, categoryId);
-  // Included portions per size ("a Large comes with 3 sauces").
-  if (parsed.data!.size_rules.length) {
-    const saved = await supabase.rpc("wayne_save_category_size_rules", {
-      target_category_id: categoryId,
-      payload: { sections: parsed.data!.size_rules },
-    });
-    if (saved.error) redirect(`${back}?error=${encodeURIComponent(saved.error.message)}`);
-  }
   revalidateMenu();
   revalidatePath("/pos");
   revalidatePath(back);
@@ -646,4 +637,20 @@ export async function savePosAutoAddAction(formData: FormData) {
   revalidatePath("/pos");
   revalidatePath(`/admin/menu/items/${id.data!}`);
   redirect(`/admin/menu/items/${id.data!}?${error ? `error=${encodeURIComponent(error.message)}` : `saved=${encodeURIComponent(on ? "Adds itself to the POS ticket once its first choice is picked." : "Auto-add switched off — the POS waits for Add to ticket.")}`}`);
+}
+
+
+export async function saveSharedSaucePricesAction(formData: FormData) {
+  await requirePermission("menu.manage", "/admin/menu/sauces");
+  const back = "/admin/menu/sauces";
+  let input: unknown;
+  try { input = JSON.parse(text(formData, "prices")); } catch { redirect(`${back}?error=Invalid+prices`); }
+  const parsed = z.array(z.object({ key: z.string().trim().min(1).max(120), price_cents: z.number().int().min(0).max(100_000) })).min(1).max(200).safeParse(input);
+  if (!parsed.success) redirect(`${back}?error=Enter+valid+sauce+prices`);
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("wayne_save_shared_sauce_prices", { payload: parsed.data });
+  if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
+  revalidateMenu();
+  revalidatePath(back);
+  redirect(`${back}?saved=1`);
 }

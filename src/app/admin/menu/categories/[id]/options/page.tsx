@@ -125,16 +125,20 @@ export default async function CategoryOptionsPage({
     section.required = section.requireds.every(Boolean);
     section.allow_quantities = section.quantities.some(Boolean);
     section.allow_halves = section.halves.some(Boolean);
-    // Included portions per size, read from the first group that has any.
-    const ruleGroup = [...sectionGroupIds].find((groupId) => rules.some((rule) => rule.modifier_group_id === groupId));
-    section.size_rules = Object.fromEntries(rules.filter((rule) => rule.modifier_group_id === ruleGroup).map((rule) => [
-      rule.size_name.trim(), { included_count: rule.included_count, max_portions: rule.max_portions, extra_each_cents: rule.extra_each_cents },
-    ]));
+    // Report differing item settings instead of presenting the first as universal.
+    const ruleNames = [...new Set(["", ...sizeNames, ...rules.filter(r => sectionGroupIds.has(r.modifier_group_id)).map(r => r.size_name.trim())])];
+    section.mixed_size_rules = [];
+    for (const name of ruleNames) {
+      const rows = [...sectionGroupIds].map(gid => rules.find(r => r.modifier_group_id === gid && r.size_name.trim().toLowerCase() === name.toLowerCase()));
+      const values = rows.map(r => JSON.stringify(r ? { included_count: r.included_count, max_portions: r.max_portions, extra_each_cents: r.extra_each_cents } : null));
+      if (new Set(values).size > 1) section.mixed_size_rules.push(name);
+      else if (rows[0]) section.size_rules[name] = { included_count: rows[0].included_count, max_portions: rows[0].max_portions, extra_each_cents: rows[0].extra_each_cents };
+    }
   }
   const ordered: OptionSection[] = [...sections.values()].sort((a, b) => a.order - b.order).map((section) => ({
     key: section.key, label: section.label, min_select: section.min_select, max_select: section.max_select,
     required: section.required, allow_quantities: section.allow_quantities, allow_halves: section.allow_halves, item_count: section.item_count, choices: section.choices,
-    size_rules: section.size_rules,
+    size_rules: section.size_rules, mixed_size_rules: section.mixed_size_rules,
   }));
 
   const [updated, added, removed] = (query.saved ?? "").split("-").map(Number);

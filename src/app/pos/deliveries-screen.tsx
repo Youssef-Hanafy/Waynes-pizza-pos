@@ -18,6 +18,7 @@ import { tipSaveState } from "@/lib/tips/drafts";
 import { tipRetrySchema, type TipRetry } from "@/lib/tips/schemas";
 import { clearTipDrafts, loadTipDrafts, refreshTipDrafts, setTipDraft, syncTipDrafts, useTipDrafts } from "@/stores/tip-drafts";
 import { TipSavedNote, TipsSavedBanner } from "./tip-saved-note";
+import { TipsScreen } from "./tips-screen";
 
 async function readError(response: Response, fallback: string) {
   const body: unknown = await response.json().catch(() => null);
@@ -60,7 +61,16 @@ function minutesAgo(iso: string | null | undefined) {
  *                        charges each delivery card once (order + the tip on
  *                        the signed slip), and pays the tips out of the drawer.
  */
-export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { timeZone: string; storeName?: string }) {
+export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza", canProcessCards = false, dispatchEnabled = true }: { timeZone: string; storeName?: string; canProcessCards?: boolean; dispatchEnabled?: boolean }) {
+  return <div className="min-h-0 flex-1 overflow-y-auto bg-wayne-cream-deep p-3 sm:p-4">
+    <div className="mx-auto grid max-w-7xl gap-4">
+      {dispatchEnabled ? <DeliveryBoard timeZone={timeZone} storeName={storeName} /> : <h1 className="text-2xl font-black">Deliveries</h1>}
+      {canProcessCards ? <TipsScreen embedded /> : null}
+    </div>
+  </div>;
+}
+
+function DeliveryBoard({ timeZone, storeName }: { timeZone: string; storeName: string }) {
   const [board, setBoard] = useState<PosDeliveryBoard | null>(null);
   const [error, setError] = useState("");
   // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
@@ -247,10 +257,9 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
   const onShift = drivers.filter((driver) => driver.clocked_in);
   const ticked = selected.filter((id) => waiting.some((order) => order.order_id === id));
 
-  return <div className="min-h-0 flex-1 overflow-y-auto bg-wayne-cream-deep p-3 sm:p-4">
-    <div className="mx-auto grid max-w-7xl gap-4">
+  return <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-black">Deliveries</h1>
+        <div><h1 className="text-2xl font-black">Deliveries</h1><p className="text-sm text-wayne-muted">Assign online and phone deliveries to a driver. Add tips below each driver, then cash out to process their cards at the end of the day.</p></div>
         <div className="flex flex-wrap gap-2">
           <ClockButton className="min-h-11 rounded-xl border border-wayne-border bg-white px-4 text-sm font-black shadow-sm" label="⏱ Driver clock in/out" onClocked={() => { void load(); }} />
           <Button onClick={() => { void load(); }} size="sm" variant="secondary">Refresh</Button>
@@ -311,7 +320,7 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
               <div className="min-w-0">
                 <p className="text-lg font-black">#{ticketNumber(order)} · {order.customer_name || "Customer"}{order.is_test ? " · TEST" : ""}</p>
                 <p className="truncate text-sm">{order.address || "No address"}{order.city ? `, ${order.city}` : ""}</p>
-                <p className="text-xs font-bold text-wayne-muted">{paidByLabel(order)} · {formatCents(order.total_cents)} · placed {time(order.placed_at)} ({minutesAgo(order.placed_at)} ago)</p>
+                <p className="text-xs font-bold text-wayne-muted">{order.source === "online" ? "Online" : order.source === "phone" ? "Phone" : "Counter"} · {paidByLabel(order)} · {formatCents(order.total_cents)} · placed {time(order.placed_at)} ({minutesAgo(order.placed_at)} ago)</p>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -401,6 +410,5 @@ export function DeliveriesScreen({ timeZone, storeName = "Wayne's Pizza" }: { ti
           </section>;
         })}
       </div>
-    </div>
   </div>;
 }

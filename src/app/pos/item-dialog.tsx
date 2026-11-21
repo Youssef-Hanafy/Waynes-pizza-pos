@@ -146,7 +146,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           const used = rule ? countedPortions(group, selectedChoices) : 0;
           return <fieldset className="mt-3" key={group.id}><legend className="font-black">{isExtras(group) ? "Options" : group.customer_label} <span className="font-normal text-wayne-muted">({group.min_select}–{groupMaxPortions(group, rule)})</span></legend>
           {rule ? <p className={`mt-1 inline-block rounded-lg px-3 py-1 text-sm font-black ${used > rule.included_count ? "bg-wayne-warn-soft" : "bg-wayne-ok-soft text-wayne-ok"}`}>
-            {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
+            {rule.included_count} included{variantName ? ` on a ${variantName}` : ""} · {Math.min(used, rule.included_count)} of {rule.included_count} used{used > rule.included_count ? ` · ${used - rule.included_count} extra` : ""}{rule.extra_each_cents !== null && !group.choices.some(choice => choice.shared_price_cents != null) ? ` · extra ${formatCents(rule.extra_each_cents)} each` : ""}{rule.max_portions ? ` · up to ${rule.max_portions}` : ""}
           </p> : null}
           {/* The same option group shares its register layout across items. */}
           <div className="mt-1.5 grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${group.allow_halves ? "22rem" : "16rem"}), 1fr))` }}><ReorderTiles key={group.id} label="modifiers" scope={`modifiers:${group.id}`}>{entries.map(({ group, choice }) => {
@@ -163,7 +163,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
             ? (!count ? (comesWith ? "NO — taken off" : "not on it") : `× ${count}${portion ? ` · ${portion.free} free${portion.portions > portion.free ? ` + ${portion.portions - portion.free} extra` : ""}` : ""}`)
             : state === "removed" ? "NO — taken off" : !count ? "not on it" : comesWith ? (count > 1 ? `comes with it + ${count - 1} extra` : "comes with it") : count > 1 ? `added × ${count}` : "added";
           const side = count && group.allow_halves ? sides[choice.id] : undefined;
-          const extraEach = rule?.extra_each_cents ?? delta;
+          const extraEach = choice.shared_price_cents ?? rule?.extra_each_cents ?? delta;
           const price = ruled
             ? (portion && portion.charge_cents ? ` · +${formatCents(portion.charge_cents)}` : extraEach && used >= (rule?.included_count ?? 0) ? ` · next +${formatCents(extraEach)}` : "")
             : delta ? ` · ${delta > 0 ? "+" : ""}${formatCents(delta)}${comesWith ? " per extra" : choiceAllowsExtra(group, choice) ? " each" : ""}` : "";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { isSauceOption } from "@/lib/menu/shared-sauces";
 import { Button } from "@/components/ui/button";
 
 export type OptionSection = {
@@ -18,6 +19,7 @@ export type OptionSection = {
    * Included portions per size (owner, 2026-10-12): "Large comes with 3
    * sauces, up to 5, each extra $0.75".  Key "" = items without sizes.
    */
+  mixed_size_rules?: string[];
   size_rules: Record<string, { included_count: number; max_portions: number | null; extra_each_cents: number | null }>;
   choices: {
     key: string;
@@ -66,6 +68,7 @@ function parseMoney(value: string): number | null | "bad" {
 
 /** The saved included-portions rule of a section on one size, as form text. */
 function ruleOf(section: OptionSection, size: string): RuleState {
+  if (section.mixed_size_rules?.some(name => name.toLowerCase() === size.toLowerCase())) return { included: "", max: "", extra: "" };
   const rule = Object.entries(section.size_rules ?? {}).find(([name]) => name.trim().toLowerCase() === size.trim().toLowerCase())?.[1];
   return { included: rule ? String(rule.included_count) : "", max: rule?.max_portions ? String(rule.max_portions) : "", extra: rule && rule.extra_each_cents !== null ? money(rule.extra_each_cents) : "" };
 }
@@ -81,7 +84,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
 }) {
   const showSizes = sizeNames.length > 1;
   // Included-portion rows: one per size, or one for the whole category.
-  const ruleSizes = useMemo(() => (sizeNames.length ? sizeNames : [""]), [sizeNames]);
+  const ruleSizes = useMemo(() => ["", ...sizeNames.filter(Boolean)], [sizeNames]);
   const [state, setState] = useState<SectionState[]>(() => sections.map((section) => ({
     rules: Object.fromEntries(ruleSizes.map((size) => [size, ruleOf(section, size)])),
     key: section.key,
@@ -127,7 +130,7 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
   /** Only what changed goes to the server. */
   const payload = useMemo(() => {
     const problems: string[] = [];
-    const sizeRules: { label: string; rules: { size_name: string; included_count: number; max_portions: number | null; extra_each_cents: number | null }[] }[] = [];
+    const sizeRules: { label: string; rules: { size_name: string; included_count: number | null; max_portions: number | null; extra_each_cents: number | null }[] }[] = [];
     const out = state.map((section) => {
       const min = Number(section.min);
       const max = Number(section.max);
@@ -168,12 +171,14 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
         return now.included.trim() !== before.included || now.max.trim() !== before.max || (parseMoney(now.extra) ?? null) !== (parseMoney(before.extra) ?? null);
       });
       if (sizeRulesChanged) {
-        const rules = ruleSizes.flatMap((size) => {
+        const rules = ruleSizes.flatMap<{ size_name: string; included_count: number | null; max_portions: number | null; extra_each_cents: number | null }>((size) => {
           const row = section.rules[size]!;
           const where = `${section.label}${size ? ` › ${size}` : ""}`;
+          const before = ruleOf(original, size);
+          if (row.included.trim() === before.included && row.max.trim() === before.max && (parseMoney(row.extra) ?? null) === (parseMoney(before.extra) ?? null)) return [];
           if (!row.included.trim()) {
             if (row.max.trim() || row.extra.trim()) problems.push(`${where}: fill in how many come included (0 is fine), or clear the row.`);
-            return [];
+            return [{ size_name: size, included_count: null, max_portions: null, extra_each_cents: null }];
           }
           const included = Number(row.included);
           const most = row.max.trim() ? Number(row.max) : null;
@@ -230,16 +235,16 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
           </div>
           <div className="mt-4 rounded-xl border border-wayne-ok/40 bg-wayne-ok-soft/40 p-3">
             <p className="text-sm font-black">Comes with (free) — e.g. a Large comes with 3 sauces, any mix, 2 of the same is fine</p>
-            <p className="text-xs text-wayne-muted">Leave &quot;Included&quot; blank for the normal way (only what each item comes with is free). &quot;Each extra&quot; blank = each option&apos;s own price. Turns on extra portions automatically.</p>
+            <p className="text-xs text-wayne-muted">Size rows override the all-sizes fallback. Only rows you change are applied across this category. Different item settings are shown as “Varies”; edit the item to change it individually.</p>
             <div className="mt-2 grid gap-2">
               {ruleSizes.map((size) => {
                 const row = section.rules[size]!;
                 const set = (patch: Partial<RuleState>) => patchSection(sectionIndex, { rules: { ...section.rules, [size]: { ...row, ...patch } } });
-                return <div className="grid grid-cols-[minmax(6rem,1fr)_7rem_7rem_8rem] items-end gap-2" key={size || "all"}>
-                  <span className="min-h-10 content-center text-sm font-bold">{size || "All sizes"}</span>
-                  <label className="grid gap-1 text-xs font-bold">Included<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="numeric" onChange={(e) => set({ included: e.target.value })} placeholder="—" value={row.included} /></label>
+                return <div className="grid grid-cols-2 sm:grid-cols-[minmax(6rem,1fr)_7rem_7rem_8rem] items-end gap-2" key={size || "all"}>
+                  <span className="min-h-10 content-center text-sm font-bold">{size || "All sizes / fallback"}</span>
+                  <label className="grid gap-1 text-xs font-bold">Included<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="numeric" onChange={(e) => set({ included: e.target.value })} placeholder={section.original.mixed_size_rules?.includes(size) ? "Varies" : "—"} value={row.included} /></label>
                   <label className="grid gap-1 text-xs font-bold">Most<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="numeric" onChange={(e) => set({ max: e.target.value })} placeholder="no limit" value={row.max} /></label>
-                  <label className="grid gap-1 text-xs font-bold">Each extra $<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="decimal" onChange={(e) => set({ extra: e.target.value })} placeholder="option price" value={row.extra} /></label>
+                  {!/(sauce|dressing)/i.test(section.label) ? <label className="grid gap-1 text-xs font-bold">Each extra $<input className="min-h-10 rounded-lg border border-wayne-border bg-white px-2 text-base" inputMode="decimal" onChange={(e) => set({ extra: e.target.value })} placeholder="option price" value={row.extra} /></label> : <a className="self-center text-sm font-bold text-wayne-red underline" href="/admin/menu/sauces">Shared sauce prices</a>}
                 </div>;
               })}
             </div>
@@ -267,9 +272,9 @@ export function CategoryOptionsForm({ action, itemCount, sections, sizeNames }: 
                   return (
                     <tr className={`border-t border-wayne-border align-middle ${choice.remove ? "opacity-40" : ""}`} key={choice.id}>
                       <td className="py-2 pr-2"><input className={`min-h-10 w-full rounded-lg border px-2 font-semibold ${choice.remove ? "line-through" : ""} ${choice.key ? "border-wayne-border" : "border-wayne-ok"}`} disabled={choice.remove} onChange={(e) => patchChoice(sectionIndex, choice.id, { name: e.target.value })} placeholder="New option name" value={choice.name} /></td>
-                      <td className="py-2 pr-2"><input className="min-h-10 w-full rounded-lg border border-wayne-border px-2" disabled={choice.remove} inputMode="decimal" onChange={(e) => patchChoice(sectionIndex, choice.id, { price: e.target.value })} placeholder={choice.original && choice.original.price_cents === null ? "varies" : "0.00"} value={choice.price} /></td>
+                      <td className="py-2 pr-2">{isSauceOption(section.label, choice.name) ? <a className="font-bold text-wayne-red underline" href="/admin/menu/sauces">Shared price</a> : <input className="min-h-10 w-full rounded-lg border border-wayne-border px-2" disabled={choice.remove} inputMode="decimal" onChange={(e) => patchChoice(sectionIndex, choice.id, { price: e.target.value })} placeholder={choice.original && choice.original.price_cents === null ? "varies" : "0.00"} value={choice.price} />}</td>
                       {showSizes ? sizeNames.map((size) => (
-                        <td className="py-2 pr-2" key={size}><input className="min-h-10 w-full rounded-lg border border-wayne-border px-2" disabled={choice.remove} inputMode="decimal" onChange={(e) => patchChoice(sectionIndex, choice.id, { sizes: { ...choice.sizes, [size]: e.target.value } })} placeholder={choice.original?.size_prices[size] === "varies" ? "varies" : "same"} value={choice.sizes[size] ?? ""} /></td>
+                        <td className="py-2 pr-2" key={size}><input className="min-h-10 w-full rounded-lg border border-wayne-border px-2" disabled={choice.remove || isSauceOption(section.label, choice.name)} inputMode="decimal" onChange={(e) => patchChoice(sectionIndex, choice.id, { sizes: { ...choice.sizes, [size]: e.target.value } })} placeholder={choice.original?.size_prices[size] === "varies" ? "varies" : "same"} value={choice.sizes[size] ?? ""} /></td>
                       )) : null}
                       <td className="py-2 pr-2 text-xs font-bold text-wayne-muted">
                         {choice.key ? (

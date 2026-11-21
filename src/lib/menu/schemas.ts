@@ -28,6 +28,13 @@ export const modifierChoiceSchema = z.object({
   variant_prices: z.array(modifierChoiceVariantPriceSchema).max(100).default([])
 });
 
+export const modifierSizeRuleSchema = z.object({
+  variant_name: z.string().trim().max(120),
+  included_count: z.number().int().min(0).max(20),
+  max_portions: z.number().int().min(1).max(20).nullable(),
+  extra_each_cents: z.number().int().min(0).max(100_000).nullable(),
+}).refine(rule => rule.max_portions === null || rule.max_portions >= rule.included_count, { message: "Maximum portions must be at least the included quantity." });
+
 export const modifierGroupSchema = z.object({
   id: z.uuid().optional(),
   name: z.string().trim().min(1).max(120),
@@ -41,6 +48,7 @@ export const modifierGroupSchema = z.object({
   // Legacy cleanup can leave an optional group with no active choices.
   // It must not block an unrelated item/price save. Required groups still
   // need an active choice, and an empty group cannot require selections.
+  size_rules: z.array(modifierSizeRuleSchema).max(101).optional(),
   choices: z.array(modifierChoiceSchema).max(100)
 }).refine((value) => value.choices.length > 0 || (!value.required && value.min_select === 0), {
   message: "A group requiring selections must contain an active choice.",
@@ -87,6 +95,7 @@ export const publicMenuChoiceVariantPriceSchema = z.object({
 });
 export const publicMenuChoiceSchema = modifierChoiceSchema.extend({
   id: z.uuid(),
+  shared_price_cents: z.number().int().nonnegative().nullable().optional(),
   variant_prices: z.array(publicMenuChoiceVariantPriceSchema).default([])
 });
 // A fresh object (not .safeExtend on modifierGroupSchema) because that schema

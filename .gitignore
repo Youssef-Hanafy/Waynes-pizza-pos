@@ -33,3 +33,5 @@ Claude outputs/
 
 # Browser traces can include authenticated fixture sessions.
 /test-results/
+
+/e2e/pricing-fixture/.generated/

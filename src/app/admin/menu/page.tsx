@@ -80,6 +80,7 @@ export default async function MenuAdminPage({
   const archived = categories.filter((category) => category.archived_at);
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
+      <Link className="mb-5 inline-flex min-h-11 items-center rounded-xl border border-wayne-border bg-white px-4 font-bold text-wayne-red" href="/admin/menu/sauces">Sauce &amp; dressing prices · edit once for all items</Link>
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red">

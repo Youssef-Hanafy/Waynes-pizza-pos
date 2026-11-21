@@ -4,6 +4,9 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { editorConfiguration } from "@/lib/menu/editor-configuration";
+import { IncludedPortionsEditor } from "./included-portions-editor";
+import { isSauceOption } from "@/lib/menu/shared-sauces";
+import type { SizeRule } from "@/lib/orders/cart";
 import { uuid } from "@/lib/uuid";
 
 // Phase 14: variant_prices holds one $ string per size the owner has
@@ -26,6 +29,7 @@ type DraftGroup = {
   allow_quantities: boolean;
   /** Left / Whole / Right buttons on the POS (pizza toppings). */
   allow_halves?: boolean;
+  size_rules?: SizeRule[];
   choices: DraftChoice[];
 };
 type DraftVariant = { price_key?: string; id?: string; name: string; price: string; sku: string };
@@ -71,6 +75,7 @@ const emptyGroup = (): DraftGroup => ({
   required: false,
   allow_quantities: false,
   allow_halves: false,
+  size_rules: [],
   choices: [emptyChoice()],
 });
 
@@ -413,6 +418,7 @@ export function MenuItemForm({
                 }
               />
             </div>
+            <IncludedPortionsEditor rules={group.size_rules ?? []} sizes={variants.filter(v => v.name.trim()).map(v => ({ key: v.price_key ?? v.name, name: v.name }))} sharedPrices={/(sauce|dressing)/i.test(group.customer_label)} onChange={size_rules => changeGroup(groupIndex, { size_rules, allow_quantities: size_rules.length ? true : group.allow_quantities })} />
             <div className="grid gap-3">
               <strong>Choices</strong>
               {group.choices.length === 0 && <p className="text-sm text-wayne-muted">This optional group has no active choices. You can leave it empty or add a choice.</p>}
@@ -431,7 +437,7 @@ export function MenuItemForm({
                         })
                       }
                     />
-                    <Input
+                    {isSauceOption(group.customer_label, choice.name) ? <p className="self-center text-sm"><a className="font-bold text-wayne-red underline" href="/admin/menu/sauces">Edit shared sauce price</a><span className="block text-wayne-muted">Same price on every item</span></p> : <Input
                       label={
                         variants.length > 0
                           ? "Default price change ($)"
@@ -444,9 +450,10 @@ export function MenuItemForm({
                         })
                       }
                     />
+                    }
                     <Check
                       checked={choice.default_selected}
-                      label="Comes with it"
+                      label="Selected by default"
                       onChange={(event) =>
                         changeChoice(groupIndex, choiceIndex, {
                           default_selected: event.target.checked,
@@ -474,7 +481,7 @@ export function MenuItemForm({
                       Remove
                     </Button>
                   </div>
-                  {variants.length > 0 && (
+                  {variants.length > 0 && !isSauceOption(group.customer_label, choice.name) && (
                     <div className="grid gap-2 rounded-lg border border-dashed border-wayne-border p-3">
                       <span className="text-xs font-semibold text-wayne-muted">
                         Price by size -- leave a size blank to use the default
