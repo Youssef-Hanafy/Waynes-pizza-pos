@@ -39,6 +39,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/pos/:path*", headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }] }, { source: "/pos-sw.js", headers: [{ key: "Cache-Control", value: "no-cache, max-age=0, must-revalidate" }] }];
   },
+  async redirects() {
+    return [{ source: "/menu.html", destination: "/menu", permanent: true }];
+  },
   poweredByHeader: false,
   reactStrictMode: true
 };
