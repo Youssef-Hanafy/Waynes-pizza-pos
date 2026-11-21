@@ -58,7 +58,7 @@ export async function SiteHeader({ settings }: { settings: StoreSettings }) {
               </strong>
               <span>
                 <i className={open ? "status-dot is-open" : "status-dot"} />
-                {open ? "Open now" : "Currently closed"}{" "}
+                {open ? "Online ordering open" : "Online ordering closed"}{" "}
                 <span className="location-address">
                   · {settings.address_line1}
                 </span>

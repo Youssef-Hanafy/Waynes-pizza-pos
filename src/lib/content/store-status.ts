@@ -3,7 +3,7 @@ import { dayKeys, type StoreSettings } from "./schemas";
 type StatusSettings = Pick<
   StoreSettings,
   "business_hours" | "ordering_open" | "special_hours" | "timezone"
->;
+> & Partial<Pick<StoreSettings, "online_ordering_hours">>;
 
 function minutes(value: string) {
   const [hour, minute] = value.split(":").map(Number);
@@ -37,7 +37,8 @@ export function isStoreOpenNow(settings: StatusSettings, now = new Date()) {
       special.closes_at !== null &&
       inCurrentWindow(special.opens_at, special.closes_at, currentMinutes)
     );
-  const today = settings.business_hours[dayKeys[dayIndex]];
+  const orderingHours = settings.online_ordering_hours ?? settings.business_hours;
+  const today = orderingHours[dayKeys[dayIndex]];
   if (
     !today.closed &&
     today.open &&
@@ -60,7 +61,7 @@ export function isStoreOpenNow(settings: StatusSettings, now = new Date()) {
     currentMinutes < minutes(yesterdaySpecial.closes_at)
   )
     return true;
-  const yesterday = settings.business_hours[dayKeys[(dayIndex + 6) % 7]];
+  const yesterday = orderingHours[dayKeys[(dayIndex + 6) % 7]];
   return (
     !yesterday.closed &&
     yesterday.open !== "" &&

@@ -375,6 +375,39 @@ export default async function SettingsPage({
             })}
           </div>
         </SettingsSection>
+        <SettingsSection title="Online ordering hours">
+          <p className="text-sm text-wayne-muted">Customers can place online pickup and delivery orders during these hours ({settings.timezone}). The ordering switch and special hours override this schedule.</p>
+          <div className="grid gap-3">
+            {dayKeys.map((day) => {
+              const hours = (settings.online_ordering_hours ?? settings.business_hours)[day];
+              return (
+                <div
+                  className="grid items-end gap-3 rounded-xl border border-wayne-border p-4 sm:grid-cols-[8rem_1fr_1fr_auto]"
+                  key={day}
+                >
+                  <strong className="capitalize sm:pb-3">{day}</strong>
+                  <Input
+                    defaultValue={hours.open}
+                    label="Opens"
+                    name={`online_${day}_open`}
+                    type="time"
+                  />
+                  <Input
+                    defaultValue={hours.close}
+                    label="Closes"
+                    name={`online_${day}_close`}
+                    type="time"
+                  />
+                  <Check
+                    defaultChecked={hours.closed}
+                    label="Closed"
+                    name={`online_${day}_closed`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </SettingsSection>
         <SettingsSection title="Frequently asked questions">
           <p className="text-sm text-wayne-muted">
             Leave both fields blank to hide a row.
