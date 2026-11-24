@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bundleComponentGroup, bundleComponentLabel } from "@/lib/menu/bundle-specials";
 import { ticketNumber } from "@/lib/orders/ticket-number";
 
 /**
@@ -137,6 +138,10 @@ function itemLines(item: PrintDocument["items"][number], withPrice: boolean): Pr
   const name = `${item.quantity}× ${item.variant ? `${item.variant} ` : ""}${item.name}`;
   const lines: PrintLine[] = [withPrice ? { kind: "pair", left: name, right: money(item.line_total_cents), bold: true } : { kind: "text", text: name, bold: true, tall: true }];
   for (const modifier of item.modifiers) {
+    if (modifier.group === bundleComponentGroup) {
+      lines.push({ kind: "text", text: `   ${bundleComponentLabel({ ...modifier, quantity: modifier.quantity * item.quantity })}`, bold: true, tall: true });
+      continue;
+    }
     // "NO <option>" lines are the ones a cook must not miss.
     const removed = modifier.name.toUpperCase().startsWith("NO ");
     // Modifiers print twice as tall (owner, 2026-10-19: "make modifiers text on printed slips bigger"); same width, so nothing is cut off.
@@ -254,7 +259,8 @@ function paymentLine(method: string, status: string, fulfillment: string, tipCen
 export function routeToKitchen(doc: PrintDocument, routingCategories: readonly string[]) {
   if (!routingCategories.length) return doc.items;
   const routed = new Set(routingCategories.map((name) => name.trim().toLowerCase()));
-  return doc.items.filter((item) => item.category !== null && routed.has(item.category.trim().toLowerCase()));
+  return doc.items.filter((item) => item.modifiers.some((modifier) => modifier.group === bundleComponentGroup)
+    || (item.category !== null && routed.has(item.category.trim().toLowerCase())));
 }
 
 /** How many things are on a ticket: quantities added up (2× Coke counts 2). */

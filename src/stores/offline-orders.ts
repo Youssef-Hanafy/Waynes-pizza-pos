@@ -6,6 +6,7 @@ import type { StoreSettings } from "@/lib/content/schemas";
 import type { HardwareSettings } from "@/lib/hardware/schemas";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
 import { cartLineUnitCents, cartSubtotalCents, describeLineModifiers, findMenuItem } from "@/lib/orders/cart";
+import { bundleComponentGroup } from "@/lib/menu/bundle-specials";
 import { activeDraft, blankDraft, draftToOrderPayload, updateDraft, type OfflineOrder, type OfflinePayment, type PosDraft } from "@/lib/orders/drafts";
 import { buildKitchenTicket, buildReceipt, type PrintDocument } from "@/lib/printing/document";
 import { posOrderCreatedSchema } from "@/lib/pos/schemas";
@@ -191,7 +192,9 @@ function documentFor(draft: PosDraft, ctx: Context): PrintDocument {
         id: line.line_id, name: line.open_item ? line.open_item.name : item?.name ?? "Item", variant: line.open_item ? null : variant?.name ?? null,
         category: line.open_item ? "Open food" : category?.name ?? null, station: "kitchen", quantity: line.quantity,
         line_total_cents: cartLineUnitCents(ctx.menu, line) * line.quantity, instructions: line.special_instructions.trim(),
-        modifiers: line.open_item ? [] : describeLineModifiers(item, line).map((note) => ({ name: note.label, group: "", quantity: 1 })),
+        modifiers: line.open_item ? [] : item?.special_bundle
+          ? item.special_bundle.map(({ name, quantity }) => ({ name, quantity, group: bundleComponentGroup }))
+          : describeLineModifiers(item, line).map((note) => ({ name: note.label, group: "", quantity: 1 })),
       };
     }),
   };

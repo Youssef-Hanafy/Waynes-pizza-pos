@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requirePermission } from "@/lib/auth/access";
 import { getWorkspaceStoreSettings } from "@/lib/content/queries";
+import { bundleComponentLabel, type BundleComponent } from "@/lib/menu/bundle-specials";
 import { formatCents } from "@/lib/menu/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { removeSpecialAction, saveSpecialAction, saveSpecialPricesAction } from "../actions";
+import { BundleForm, type BundleOptions } from "./bundle-form";
 
 export const metadata: Metadata = { title: "Specials" };
 export const dynamic = "force-dynamic";
@@ -16,16 +18,18 @@ type Item = {
   category_id: string;
   name: string;
   base_price_cents: number;
-  customer_visible: boolean;
+  pos_visible: boolean;
   sold_out: boolean;
   special: boolean;
   special_note: string;
-  special_online: boolean;
   special_ends_on: string | null;
   special_source_item_id: string | null;
+  special_bundle: BundleComponent[] | null;
+  menu_revision: number;
+  menu_item_variants: (Variant & { active: boolean; archived_at: string | null })[];
 };
 type Category = { id: string; name: string };
-type Variant = { id: string; menu_item_id: string; name: string; price_cents: number; sort_order: number };
+type Variant = { id: string; name: string; price_cents: number; sort_order: number };
 
 /**
  * Specials (owner, 2026-10-19, evening): "the special section should only be
@@ -40,14 +44,15 @@ type Variant = { id: string; menu_item_id: string; name: string; price_cents: nu
 export default async function SpecialsPage({ searchParams }: { searchParams: Promise<{ add?: string; saved?: string; error?: string }> }) {
   await requirePermission("menu.manage", "/admin/menu/specials");
   const supabase = await createServerSupabaseClient();
-  const [{ data: itemData }, { data: categoryData }, params, settings] = await Promise.all([
+  const [{ data: itemData, error: itemError }, { data: categoryData, error: categoryError }, params, settings] = await Promise.all([
     supabase.from("menu_items")
-      .select("id,category_id,name,base_price_cents,customer_visible,sold_out,special,special_note,special_online,special_ends_on,special_source_item_id")
+      .select("id,category_id,name,base_price_cents,pos_visible,sold_out,special,special_note,special_ends_on,special_source_item_id,special_bundle,menu_revision,menu_item_variants(id,name,price_cents,sort_order,active,archived_at)")
       .is("archived_at", null).order("sort_order").order("name"),
     supabase.from("menu_categories").select("id,name").is("archived_at", null).order("sort_order").order("name"),
     searchParams,
     getWorkspaceStoreSettings(),
   ]);
+  if (itemError || categoryError) throw new Error("Could not load the menu for Specials.");
   const items = (itemData ?? []) as Item[];
   const categories = (categoryData ?? []) as Category[];
   const categoryName = new Map(categories.map((category) => [category.id, category.name]));
@@ -55,11 +60,19 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
   // Each special beside the regular item it was made from (same name, same category), size by size,
   // so the special price and the regular price can't be mixed up (owner, 2026-10-20).
   const regularFor = new Map(specials.map((special) => [special.id, items.find((item) => !item.special && (special.special_source_item_id ? item.id === special.special_source_item_id : item.category_id === special.category_id && item.name === special.name)) ?? null]));
-  const variantItemIds = [...specials.map((item) => item.id), ...[...regularFor.values()].flatMap((item) => (item ? [item.id] : []))];
-  const { data: variantData } = variantItemIds.length
-    ? await supabase.from("menu_item_variants").select("id,menu_item_id,name,price_cents,sort_order").in("menu_item_id", variantItemIds).is("archived_at", null).eq("active", true).order("sort_order")
-    : { data: [] };
-  const variants = (variantData ?? []) as Variant[];
+  const variants = new Map(items.map((item) => [item.id, item.menu_item_variants
+    .filter((variant) => variant.active && variant.archived_at === null)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))]));
+  const options: BundleOptions = categories.flatMap((category) => {
+    const choices = items.filter((item) => !item.special && item.pos_visible && item.category_id === category.id)
+      .flatMap((item) => {
+        const sizes = variants.get(item.id) ?? [];
+        return sizes.length
+          ? sizes.map((size) => ({ value: `${item.id}:${size.id}`, name: `${item.name} · ${size.name}` }))
+          : [{ value: `${item.id}:`, name: item.name }];
+      });
+    return choices.length ? [{ id: category.id, category: category.name, choices }] : [];
+  });
   const adding = items.find((item) => item.id === params.add && !item.special) ?? null;
   // The store's own date (an end date means "through that day" where the store is).
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings.timezone || "America/New_York" }).format(new Date());
@@ -69,16 +82,19 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
       <p className="text-sm font-black uppercase tracking-[0.2em] text-wayne-red"><Link className="hover:underline" href="/admin/menu">Menu</Link> / Specials</p>
       <h1 className="mt-3 text-4xl font-black">⭐ Specials</h1>
       <p className="mt-3 max-w-3xl text-wayne-muted">
-        Specials are for the POS only: they sit under the <strong>⭐ Specials</strong> button for walk-in, pickup and phone pickup orders — never in the regular menu,
-        never on deliveries, never online. Making an item a special makes <strong>its own copy</strong> with its own price, so the regular item doesn&apos;t change.
-        After adding one, type its <strong>special price</strong> for each size below — the regular price is shown beside it and never changes here. For a brand-new deal (e.g. “2 Large Cheese + 2-Liter $24.99”), first
-        {" "}<Link className="font-bold underline" href="/admin/menu/new">create it as a menu item</Link> (untick “show online”), then add it here.
+        Specials are available under <strong>⭐ Specials</strong> on the POS for walk-in and pickup orders, including phone pickups.
       </p>
       {params.saved ? <p className="mt-5 rounded-xl border border-wayne-ok/30 bg-wayne-ok-soft p-4 font-semibold text-wayne-ok">{params.saved}</p> : null}
       {params.error ? <p className="mt-5 rounded-xl border border-wayne-alert/30 bg-wayne-alert-soft p-4 font-semibold text-wayne-alert">{params.error}</p> : null}
 
       <Card className="mt-8 p-6">
-        <h2 className="text-2xl font-black">{adding ? `Make “${adding.name}” a special` : "Add a special"}</h2>
+        <h2 className="text-2xl font-black">Create a bundle special</h2>
+        <p className="mt-2 text-sm text-wayne-muted">Choose the items and sizes included in one fixed price. For two of the same item and size, set the quantity to 2.</p>
+        <BundleForm key={params.saved} options={options} />
+      </Card>
+
+      <Card className="mt-8 p-6">
+        <h2 className="text-2xl font-black">{adding ? `Make “${adding.name}” a special` : "Add a single-item special"}</h2>
         <SpecialForm categories={categories} items={items.filter((item) => !item.special)} selected={adding} today={today} />
       </Card>
 
@@ -91,28 +107,37 @@ export default async function SpecialsPage({ searchParams }: { searchParams: Pro
               <Card className={`p-5 ${ended ? "opacity-70" : ""}`} key={item.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-wayne-muted">{categoryName.get(item.category_id) ?? "Menu"}</p>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-wayne-muted">{item.special_bundle ? "Bundle special" : categoryName.get(item.category_id) ?? "Menu"}</p>
                     <h3 className="text-xl font-black">⭐ {item.name} <span className="rounded-lg bg-wayne-red px-2 py-0.5 text-sm font-black uppercase tracking-wide text-white">Special</span></h3>
                     <p className="mt-1 text-sm font-bold">
                       {ended ? <span className="text-wayne-alert">Ended {item.special_ends_on} — not on the POS</span> : item.special_ends_on ? `Runs through ${item.special_ends_on}` : "No end date"}
                       {" · "}POS Specials only · walk-in &amp; pickup
                       {item.sold_out ? " · Sold out" : ""}
                     </p>
+                    {item.special_bundle ? <p className="mt-1 text-sm"><strong>{formatCents(item.base_price_cents)}</strong> · {item.special_bundle.map(bundleComponentLabel).join(" · ")}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit the special&apos;s options</Link></Button>
+                    {!item.special_bundle ? <Button asChild variant="secondary"><Link href={`/admin/menu/items/${item.id}`}>Edit the special&apos;s options</Link></Button> : null}
                     <form action={removeSpecialAction}><input name="id" type="hidden" value={item.id} /><Button type="submit" variant="danger">Stop the special</Button></form>
                   </div>
                 </div>
-                <SpecialPrices regular={regularFor.get(item.id) ?? null} special={item} variants={variants} />
-                <form action={saveSpecialAction} className="mt-4 grid gap-3 border-t border-wayne-border pt-4 md:grid-cols-[1fr_12rem_auto] md:items-end">
-                  <input name="id" type="hidden" value={item.id} />
-                  <Field defaultValue={item.special_note} label="Headline (shown on the POS button)" name="special_note" />
-                  <label className="grid gap-1.5 text-sm font-semibold">Ends on (optional)
-                    <input className="min-h-11 rounded-lg border border-wayne-border px-3 font-normal" defaultValue={item.special_ends_on ?? ""} name="special_ends_on" type="date" />
-                  </label>
-                  <Button type="submit">Save</Button>
-                </form>
+                {item.special_bundle ? <details className="mt-4 border-t border-wayne-border pt-4">
+                  <summary className="cursor-pointer font-bold">Edit bundle</summary>
+                  <BundleForm key={item.menu_revision} options={options} initial={{
+                    id: item.id, revision: item.menu_revision, name: item.name, price: (item.base_price_cents / 100).toFixed(2),
+                    endsOn: item.special_ends_on, components: item.special_bundle,
+                  }} />
+                </details> : <>
+                  <SpecialPrices regular={regularFor.get(item.id) ?? null} special={item} variants={variants} />
+                  <form action={saveSpecialAction} className="mt-4 grid gap-3 border-t border-wayne-border pt-4 md:grid-cols-[1fr_12rem_auto] md:items-end">
+                    <input name="id" type="hidden" value={item.id} />
+                    <Field defaultValue={item.special_note} label="Headline (shown on the POS button)" name="special_note" />
+                    <label className="grid gap-1.5 text-sm font-semibold">Ends on (optional)
+                      <input className="min-h-11 rounded-lg border border-wayne-border px-3 font-normal" defaultValue={item.special_ends_on ?? ""} name="special_ends_on" type="date" />
+                    </label>
+                    <Button type="submit">Save</Button>
+                  </form>
+                </>}
               </Card>
             );
           })}
@@ -155,9 +180,9 @@ function SpecialForm({ items, categories, selected, today }: { items: Item[]; ca
   );
 }
 
-function SpecialPrices({ special, regular, variants }: { special: Item; regular: Item | null; variants: Variant[] }) {
-  const sizes = variants.filter((variant) => variant.menu_item_id === special.id);
-  const regularPrice = new Map(variants.filter((variant) => regular && variant.menu_item_id === regular.id).map((variant) => [variant.name, variant.price_cents]));
+function SpecialPrices({ special, regular, variants }: { special: Item; regular: Item | null; variants: Map<string, Variant[]> }) {
+  const sizes = variants.get(special.id) ?? [];
+  const regularPrice = new Map((regular ? variants.get(regular.id) ?? [] : []).map((variant) => [variant.name, variant.price_cents]));
   if (!sizes.length) return null;
   return (
     <form action={saveSpecialPricesAction} className="mt-4 border-t border-wayne-border pt-4">

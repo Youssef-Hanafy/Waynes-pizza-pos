@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bundleComponentSchema } from "./bundle-specials";
 
 export const variantSchema = z.object({
   id: z.uuid().optional(),
@@ -147,6 +148,7 @@ export const publicMenuItemSchema = z.object({
    * regular category — it shows only under the Specials button (owner, 2026-10-19).
    */
   special_item: z.boolean().optional(),
+  special_bundle: z.array(bundleComponentSchema).nullish(),
   /** POS: adds itself to the ticket once its first option group is filled, e.g. One Topping Pizza (owner, 2026-10-19). */
   pos_auto_add: z.boolean().optional(),
   available_days: z.array(z.number().int()),

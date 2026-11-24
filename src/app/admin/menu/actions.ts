@@ -12,6 +12,7 @@ import {
   parseSignedMoneyToCents,
 } from "@/lib/menu/schemas";
 import { parsePosColor } from "@/lib/menu/pos-colors";
+import { bundleComponentInputSchema } from "@/lib/menu/bundle-specials";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const categorySchema = z.object({
@@ -536,6 +537,41 @@ export async function saveMenuColorAction(
 
 function specialsRedirect(message: string, key: "error" | "saved" = "saved"): never {
   redirect(`/admin/menu/specials?${key}=${encodeURIComponent(message)}`);
+}
+
+export async function saveBundleSpecialAction(_previousError: string, formData: FormData): Promise<string> {
+  await requirePermission("menu.manage", "/admin/menu/specials");
+  const id = z.uuid().nullable().safeParse(text(formData, "id") || null);
+  const revision = z.coerce.number().int().nonnegative().safeParse(text(formData, "expected_revision"));
+  const name = z.string().trim().min(1).max(160).safeParse(text(formData, "name"));
+  const price = parseMoneyToCents(text(formData, "price"));
+  const endDate = text(formData, "special_ends_on");
+  const quantities = formData.getAll("component_quantity");
+  const components = bundleComponentInputSchema.array().min(1).max(20).safeParse(
+    formData.getAll("component").map((value, index) => {
+      const [menu_item_id, variant_id] = String(value).split(":");
+      return { menu_item_id, variant_id: variant_id || null, quantity: Number(quantities[index]) };
+    }),
+  );
+  if (!id.success || !revision.success) return "Reopen the bundle before saving.";
+  if (!name.success || price === null || price < 1 || price > 100_000) {
+    return "Enter a name and a bundle price between $0.01 and $1,000.00.";
+  }
+  if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return "Choose a valid end date.";
+  if (!components.success || components.data.length !== quantities.length) return "Choose an item and quantity for each row.";
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.rpc("wayne_save_bundle_special", {
+    target_id: id.data,
+    payload: {
+      name: name.data, price_cents: price, ends_on: endDate || null,
+      expected_revision: id.data ? revision.data : null, components: components.data,
+    },
+  });
+  if (error?.code === "23505") return "A bundle special with that name already exists. Edit it below or choose another name.";
+  if (error) return error.message;
+  revalidateMenu();
+  revalidatePath("/admin/menu/specials");
+  specialsRedirect(`${name.data} saved.`);
 }
 
 /*

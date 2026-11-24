@@ -135,6 +135,7 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
         <button aria-label="Close item" className="h-12 w-12 shrink-0 rounded-full border text-xl" onClick={onClose}>×</button>
       </div>
       <FitToSpace innerClassName="px-4 pb-3 pt-3" label="Item options" min={0.7}>
+        {!item.special_bundle ? <>
         <ComesWithPanel included={included} onToggle={(group, choiceId) => setChoiceCount(group, choiceId, (selectedChoices[choiceId] ?? 0) + 1)} selectedChoices={selectedChoices} />
         {halvesChoiceIds.size ? <PizzaHalves groups={item.modifier_groups.filter((group) => group.allow_halves)} selectedChoices={selectedChoices} sides={sides} /> : null}
         <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-wayne-muted"><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-wayne-ok" /> on the item</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border-2 border-dashed border-wayne-red" /> comes with it, taken off</span><span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-wayne-border bg-white" /> not on it</span><span>Red − takes a portion off, green + adds one. What it comes with is free; extra portions are charged.</span></p>
@@ -180,7 +181,8 @@ export function PosItemDialog({ initialLine, item, onAdd, onClose }: { initialLi
           </div>;
         })}</ReorderTiles></div></fieldset>;
         }) : <div className="mt-5 rounded-xl border-2 border-dashed border-wayne-border bg-wayne-cream p-5"><strong>No modifier group is assigned to this item yet.</strong><p className="mt-1 text-sm text-wayne-muted">The menu configuration needs a customization group before ingredients can be adjusted. This screen will show it as soon as it is assigned.</p></div>}
-        <label className="mt-3 grid gap-1 font-bold">Item notes<textarea className="rounded-xl border p-2 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={1} value={instructions} /></label>
+        </> : null}
+        <label className="mt-3 grid gap-1 font-bold">{item.special_bundle ? "Bundle notes" : "Item notes"}<textarea className="rounded-xl border p-2 font-normal" maxLength={500} onChange={(event) => setInstructions(event.target.value)} rows={1} value={instructions} /></label>
       </FitToSpace>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-wayne-border px-4 py-2"><div className="flex items-center gap-2"><button aria-label="Decrease item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.max(1, quantity - 1))} type="button">−</button><strong>{quantity}</strong><button aria-label="Increase item quantity" className="h-12 w-12 rounded-xl border" onClick={() => setQuantity(Math.min(20, quantity + 1))} type="button">+</button></div><Button className="min-h-14" onClick={add}>{initialLine ? "Save changes" : "Add to ticket"} · {formatCents(cartLineUnitCents(draftMenu, draftLine) * quantity)}</Button></div>
       {error ? <p aria-live="polite" className="mx-4 mb-3 shrink-0 rounded-lg bg-wayne-alert-soft p-3 font-bold text-wayne-alert">{error}</p> : null}

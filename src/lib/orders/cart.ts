@@ -1,4 +1,5 @@
 import type { PublicMenu } from "@/lib/menu/schemas";
+import { bundleComponentLabel, type BundleComponent } from "@/lib/menu/bundle-specials";
 import { cartLineSchema, type CartLine } from "./schemas";
 
 // v2: lines now list what the item comes with.  A v1 cart never pre-selected
@@ -47,7 +48,7 @@ type ChoiceLike = {
   price_delta_cents: number;
   variant_prices: { variant_id: string; price_delta_cents: number }[];
 };
-type ItemLike = { modifier_groups: { choices: ChoiceLike[] }[] };
+type ItemLike = { modifier_groups: { choices: ChoiceLike[] }[]; special_bundle?: BundleComponent[] | null };
 
 // `default_selected` in the menu feed means "this item comes with it": the
 // database sets it per item from the "Comes with" list (or the Admin -> Menu
@@ -80,7 +81,7 @@ export function includedSelection(item: ItemLike): Record<string, number> {
   );
 }
 
-export type LineModifierNote = { kind: "removed" | "extra" | "added"; label: string };
+export type LineModifierNote = { kind: "removed" | "extra" | "added" | "included"; label: string };
 
 /** "LEFT ½ " / "RIGHT ½ " in front of a topping on one half of a pizza (same words as the kitchen slip). */
 export function placementPrefix(placement: "left" | "right" | undefined) {
@@ -94,6 +95,7 @@ export function placementPrefix(placement: "left" | "right" | undefined) {
  */
 export function describeLineModifiers(item: ItemLike | undefined, line: Pick<CartLine, "modifiers">): LineModifierNote[] {
   if (!item) return [];
+  if (item.special_bundle) return item.special_bundle.map((component) => ({ kind: "included", label: bundleComponentLabel(component) }));
   const choices = new Map<string, ChoiceLike>();
   for (const group of item.modifier_groups) for (const choice of group.choices) if (!choices.has(choice.id)) choices.set(choice.id, choice);
   const selected = new Map(line.modifiers.map((modifier) => [modifier.choice_id, modifier.quantity]));

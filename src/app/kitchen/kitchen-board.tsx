@@ -9,6 +9,7 @@ import { elapsedLabel, kitchenBoardSchema, nextKitchenAction, type KitchenTicket
 import { nextHandOff } from "@/lib/orders/status";
 import { nextReconciliationDelay } from "@/lib/refresh/reconciliation";
 import { workspaceRealtimeFilter } from "@/lib/tenancy/client-scope";
+import { bundleComponentGroup, bundleComponentLabel } from "@/lib/menu/bundle-specials";
 
 type Props = { initialTickets: KitchenTicket[]; initialError: string; staffName: string; businessName: string; canOpenAdmin: boolean; canOpenPos: boolean; canManageOrders: boolean };
 
@@ -152,7 +153,9 @@ export function KitchenBoard({ initialTickets, initialError, staffName, business
             <p className="mt-1 font-mono text-sm">Placed {now ? elapsedLabel(ticket.placed_at, now) : "—"} ago{ticket.accepted_at && now ? ` · accepted ${elapsedLabel(ticket.accepted_at, now)} ago` : ""}</p>
           </div>
           <div className="p-5">{ticket.payload.instructions ? <p className="mb-4 whitespace-pre-wrap rounded-lg border border-wayne-alert/30 bg-wayne-alert-soft p-3 font-bold">Order note: {ticket.payload.instructions}</p> : null}
-            <ul className="divide-y divide-wayne-border">{ticket.payload.items.map((item) => <li className="py-3" key={item.id}><strong className="text-xl">{item.quantity}× {item.name}</strong>{item.variant ? <p className="font-bold">{item.variant}</p> : null}<p className="text-xs text-wayne-muted">Station: {item.station}</p>{item.modifiers.length ? <ul className="mt-2 space-y-1">{item.modifiers.map((modifier, index) => <li key={index}>{modifier.group}: {modifier.quantity}× {modifier.name}</li>)}</ul> : null}{item.instructions ? <p className="mt-2 whitespace-pre-wrap font-bold text-wayne-red">{item.instructions}</p> : null}</li>)}</ul>
+            <ul className="divide-y divide-wayne-border">{ticket.payload.items.map((item) => <li className="py-3" key={item.id}><strong className="text-xl">{item.quantity}× {item.name}</strong>{item.variant ? <p className="font-bold">{item.variant}</p> : null}<p className="text-xs text-wayne-muted">Station: {item.station}</p>{item.modifiers.length ? <ul className="mt-2 space-y-1">{item.modifiers.map((modifier, index) => <li key={index}>{modifier.group === bundleComponentGroup
+              ? bundleComponentLabel({ ...modifier, quantity: modifier.quantity * item.quantity })
+              : `${modifier.group}: ${modifier.quantity}× ${modifier.name}`}</li>)}</ul> : null}{item.instructions ? <p className="mt-2 whitespace-pre-wrap font-bold text-wayne-red">{item.instructions}</p> : null}</li>)}</ul>
             {action ? <Button className="mt-5 min-h-14 w-full text-lg" disabled={pending !== null || stale || Boolean(error)} onClick={() => { void transition(ticket); }}>{pending === ticket.order_id ? "Saving…" : action.label}</Button> : <><p className="mt-5 rounded-xl bg-wayne-ok-soft p-4 font-bold text-wayne-ok">{ticket.payload.fulfillment_type === "delivery" ? "Ready for driver pickup" : "Ready at the counter"}</p>{canManageOrders && nextHandOff(ticket.status, ticket.payload.fulfillment_type) ? <Button className="mt-3 min-h-14 w-full text-lg" disabled={pending !== null || stale || Boolean(error)} onClick={() => { void handOff(ticket); }} variant="secondary">{pending === ticket.order_id ? "Saving…" : nextHandOff(ticket.status, ticket.payload.fulfillment_type)!.label}</Button> : null}</>}
           </div>
         </article>;
