@@ -17,10 +17,13 @@ import {
   cartLineUnitCents,
   cartSubtotalCents,
   choicePriceDeltaCents,
+  choiceUsesGroupPortionPrice,
   describeLineModifiers,
   findMenuItem,
   includedSelection,
+  isExtraChoice,
   isIncludedChoice,
+  isInstructionChoice,
   readCart,
 } from "@/lib/orders/cart";
 import { formatCents, type PublicMenu } from "@/lib/menu/schemas";
@@ -847,8 +850,8 @@ function ItemDialog({
                   <p className="mt-1 text-sm font-bold text-wayne-ok">
                     {rule.included_count} included{sizeName ? ` with a ${sizeName}` : ""} — mix and match
                     {used > rule.included_count
-                      ? ` · ${used - rule.included_count} extra${rule.extra_each_cents !== null && !group.choices.some(choice => choice.shared_price_cents != null) ? ` at ${formatCents(rule.extra_each_cents)} each` : ""}`
-                      : rule.extra_each_cents !== null && !group.choices.some(choice => choice.shared_price_cents != null)
+                      ? ` · ${used - rule.included_count} extra${rule.extra_each_cents !== null && group.choices.every(choiceUsesGroupPortionPrice) ? ` at ${formatCents(rule.extra_each_cents)} each` : ""}`
+                      : rule.extra_each_cents !== null && group.choices.every(choiceUsesGroupPortionPrice)
                         ? ` · extras ${formatCents(rule.extra_each_cents)} each`
                         : ""}
                   </p>
@@ -862,8 +865,11 @@ function ItemDialog({
                   )
                   .map((choice) => {
                   const count = selectedChoices[choice.id] ?? 0;
-                  // what this option costs on the size chosen above
-                  const delta = choicePriceDeltaCents(choice, variantId);
+                  const rule = groupSizeRule(group, sizeName);
+                  const usesGroupPrice = !isInstructionChoice(choice) && !isExtraChoice(choice) && choiceUsesGroupPortionPrice(choice);
+                  const showGroupPrice = usesGroupPrice && rule?.extra_each_cents != null && group.choices.every(choiceUsesGroupPortionPrice);
+                  const optionPrice = choicePriceDeltaCents(choice, variantId);
+                  const delta = usesGroupPrice ? rule?.extra_each_cents ?? optionPrice : optionPrice;
                   const included = isIncludedChoice(choice);
                   return (
                     <div
@@ -905,11 +911,11 @@ function ItemDialog({
                               {count ? "Included" : "Removed"}
                             </small>
                           ) : null}
-                          {delta && (!included || count > 0) && groupSizeRule(group, sizeName)?.extra_each_cents == null ? (
+                          {delta && (!included || count > 0) && !showGroupPrice ? (
                             <small className="ml-2 text-wayne-muted">
                               {delta > 0 ? "+" : ""}
                               {formatCents(delta)}
-                              {included || groupSizeRule(group, sizeName) ? " per extra portion" : ""}
+                              {included || rule ? " per extra portion" : ""}
                             </small>
                           ) : null}
                         </span>

@@ -26,6 +26,7 @@ export const modifierChoiceSchema = z.object({
   name: z.string().trim().min(1).max(120),
   price_delta_cents: z.number().int().min(-100_000).max(1_000_000),
   default_selected: z.boolean().default(false),
+  use_shared_price: z.boolean().optional(),
   variant_prices: z.array(modifierChoiceVariantPriceSchema).max(100).default([])
 });
 

@@ -28,3 +28,26 @@ test("saves shared Marinara pricing and this item's size allowances through the 
   await page.getByRole("button", {name:/Add to ticket.*10.85/}).click();
   await expect(page.getByRole("status")).toHaveText("Database order price: 1085");
 });
+
+test("turns off shared sauce pricing for one menu item and charges its own size price", async ({ page }) => {
+  await page.goto(`/admin/menu/items/${id}`);
+  const sharedPrice = page.getByRole("checkbox", { name: "Use shared price for Marinara" });
+  await expect(sharedPrice).toBeChecked();
+  await sharedPrice.uncheck();
+  await page.getByRole("textbox", { name: "Default price change ($)", exact: true }).fill("1.25");
+  await page.getByRole("textbox", { name: "Large ($)", exact: true }).fill("1.75");
+  await page.getByRole("button", { name: "Save menu item", exact: true }).click();
+  await expect(page).toHaveURL(/admin\/menu\?saved=1/);
+  await page.goto(`/admin/menu/items/${id}`);
+  await expect(sharedPrice).not.toBeChecked();
+  await expect(page.getByRole("textbox", { name: "Default price change ($)", exact: true })).toHaveValue("1.25");
+  await expect(page.getByRole("textbox", { name: "Large ($)", exact: true })).toHaveValue("1.75");
+  await page.goto(`/pos/${id}`);
+  await page.getByRole("button", { name: /^Large/ }).click();
+  const addMarinara = page.getByRole("button", { name: "Add Marinara", exact: true });
+  await addMarinara.click();
+  await expect(page.getByRole("button", { name: /Add to ticket.*10.00/ })).toBeVisible();
+  await addMarinara.click();
+  await page.getByRole("button", { name: /Add to ticket.*11.75/ }).click();
+  await expect(page.getByRole("status")).toHaveText("Database order price: 1175");
+});

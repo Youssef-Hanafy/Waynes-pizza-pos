@@ -19,7 +19,7 @@ export function SaucePricesForm({ sauces, action }: { sauces: SharedSauce[]; act
     startTransition(async () => { await action(data); });
   }}>
     {sauces.map(sauce => <label className="grid gap-3 rounded-xl border border-wayne-border bg-white p-4 sm:grid-cols-[minmax(0,1fr)_10rem]" key={sauce.key}>
-      <span><strong className="block text-lg">{sauce.name}</strong><span className="text-sm text-wayne-muted">On {sauce.item_count} items · {sauce.price_cents !== null ? `Shared price ${formatCents(sauce.price_cents)}` : sauce.min_cents === sauce.max_cents ? `Current price ${formatCents(sauce.min_cents)}` : `Prices vary: ${formatCents(sauce.min_cents)}–${formatCents(sauce.max_cents)}`}</span></span>
+      <span><strong className="block text-lg">{sauce.name}</strong><span className="text-sm text-wayne-muted">Shared on {sauce.item_count} items · {sauce.price_cents !== null ? `Shared price ${formatCents(sauce.price_cents)}` : sauce.min_cents === sauce.max_cents ? `Current price ${formatCents(sauce.min_cents)}` : `Prices vary: ${formatCents(sauce.min_cents)}–${formatCents(sauce.max_cents)}`}</span></span>
       <span className="grid gap-1 text-sm font-bold">Price per extra portion ($)<input aria-label={`${sauce.name} shared price`} className="min-h-11 min-w-0 rounded-lg border border-wayne-border px-3" inputMode="decimal" placeholder={((sauce.price_cents ?? sauce.min_cents) / 100).toFixed(2)} value={values[sauce.key] ?? ""} onChange={event => setValues({ ...values, [sauce.key]: event.target.value })} /></span>
     </label>)}
     {invalid ? <p role="alert" className="font-bold text-wayne-alert">Enter prices from $0.00 to $1,000.00.</p> : null}

@@ -41,6 +41,7 @@ export function choicePriceDeltaCents(
 }
 
 type ChoiceLike = {
+  use_shared_price?: boolean;
   shared_price_cents?: number | null;
   id: string;
   name: string;
@@ -149,13 +150,18 @@ export function groupMaxPortions(group: { max_select: number }, rule: SizeRule |
   return rule?.max_portions ?? group.max_select;
 }
 
+/** The group rate applies only to choices without a shared or item-specific price. */
+export function choiceUsesGroupPortionPrice(choice: Pick<ChoiceLike, "use_shared_price" | "shared_price_cents">) {
+  return choice.use_shared_price !== false && choice.shared_price_cents == null;
+}
+
 export type AllowanceLine = { choice_id: string; portions: number; free: number; unit_cents: number; charge_cents: number };
 
 /**
  * How the picks in a rule group are charged (mirrors
  * wayne_group_allowance_lines): the first N portions are free, any mix and
  * repeats allowed, given to the dearest picks first; each one after that costs
- * the rule's extra price (or the option's own price when none is set).
+ * the option’s shared or item-specific price, or the group rate when applicable.
  */
 export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId: string | null | undefined, selected: { choice_id: string; quantity: number }[]): AllowanceLine[] {
   const picks = selected.flatMap((pick) => {
@@ -167,7 +173,7 @@ export function groupAllowanceLines(group: RuledGroup, rule: SizeRule, variantId
     if (isInstructionChoice(choice) || isExtraChoice(choice)) return { choice_id: choice.id, portions: quantity, free: 0, unit_cents: unit, charge_cents: unit * quantity };
     const free = Math.min(quantity, freeLeft);
     freeLeft -= free;
-    const each = choice.shared_price_cents ?? rule.extra_each_cents ?? unit;
+    const each = choiceUsesGroupPortionPrice(choice) ? rule.extra_each_cents ?? unit : unit;
     return { choice_id: choice.id, portions: quantity, free, unit_cents: each, charge_cents: (quantity - free) * each };
   });
 }

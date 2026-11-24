@@ -45,6 +45,7 @@ const editorConfigSchema = z.object({
               name: z.string(),
               price: z.string(),
               default_selected: z.boolean(),
+              use_shared_price: z.boolean().optional(),
               // Phase 14: per-size price overrides, keyed by the size's own
               // name (e.g. "Small", "Large"). Empty for items with no sizes.
               variant_prices: z.record(z.string(), z.string()).default({}),

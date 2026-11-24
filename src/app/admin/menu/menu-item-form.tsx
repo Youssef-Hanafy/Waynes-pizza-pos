@@ -17,6 +17,7 @@ type DraftChoice = {
   name: string;
   price: string;
   default_selected: boolean;
+  use_shared_price?: boolean;
   variant_prices: Record<string, string>;
 };
 type DraftGroup = {
@@ -436,96 +437,109 @@ export function MenuItemForm({
             <div className="grid gap-3">
               <strong>Choices</strong>
               {group.choices.length === 0 && <p className="text-sm text-wayne-muted">This optional group has no active choices. You can leave it empty or add a choice.</p>}
-              {group.choices.map((choice, choiceIndex) => (
-                <div
-                  className="grid gap-3 rounded-lg bg-white p-3"
-                  key={choiceIndex}
-                >
-                  <div className="grid gap-3 md:grid-cols-[1fr_10rem_auto_auto]">
-                    <Input
-                      label="Choice"
-                      value={choice.name}
-                      onChange={(event) =>
-                        changeChoice(groupIndex, choiceIndex, {
-                          name: event.target.value,
-                        })
+              {group.choices.map((choice, choiceIndex) => {
+                const isSauce = isSauceOption(group.customer_label, choice.name);
+                const shared = isSauce && choice.use_shared_price !== false;
+                return (
+                  <div
+                    className="grid gap-3 rounded-lg bg-white p-3"
+                    key={choiceIndex}
+                  >
+                    <div className="grid gap-3 md:grid-cols-[1fr_10rem_auto_auto]">
+                      <Input
+                        id={`choice-${groupIndex}-${choiceIndex}`}
+                        label="Choice"
+                        value={choice.name}
+                        onChange={(event) =>
+                          changeChoice(groupIndex, choiceIndex, {
+                            name: event.target.value,
+                          })
+                        }
+                      />
+                      {shared ? <a className="self-center text-sm font-bold text-wayne-red underline" href="/admin/menu/sauces">Edit shared sauce price</a> : <Input
+                        id={`choice-price-${groupIndex}-${choiceIndex}`}
+                        label={
+                          variants.length > 0
+                            ? "Default price change ($)"
+                            : "Price change ($)"
+                        }
+                        value={choice.price}
+                        onChange={(event) =>
+                          changeChoice(groupIndex, choiceIndex, {
+                            price: event.target.value,
+                          })
+                        }
+                      />
                       }
-                    />
-                    {isSauceOption(group.customer_label, choice.name) ? <p className="self-center text-sm"><a className="font-bold text-wayne-red underline" href="/admin/menu/sauces">Edit shared sauce price</a><span className="block text-wayne-muted">Same price on every item</span></p> : <Input
-                      label={
-                        variants.length > 0
-                          ? "Default price change ($)"
-                          : "Price change ($)"
-                      }
-                      value={choice.price}
-                      onChange={(event) =>
-                        changeChoice(groupIndex, choiceIndex, {
-                          price: event.target.value,
-                        })
-                      }
-                    />
-                    }
-                    <Check
-                      checked={choice.default_selected}
-                      label="Selected by default"
-                      onChange={(event) =>
-                        changeChoice(groupIndex, choiceIndex, {
-                          default_selected: event.target.checked,
-                        })
-                      }
-                    />
-                    <Button
-                      onClick={() =>
-                        setGroups(
-                          groups.map((item, index) =>
-                            index === groupIndex
-                              ? {
-                                  ...item,
-                                  choices: item.choices.filter(
-                                    (_, innerIndex) => innerIndex !== choiceIndex,
-                                  ),
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                      type="button"
-                      variant="secondary"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                  {variants.length > 0 && !isSauceOption(group.customer_label, choice.name) && (
-                    <div className="grid gap-2 rounded-lg border border-dashed border-wayne-border p-3">
-                      <span className="text-xs font-semibold text-wayne-muted">
-                        Price by size -- leave a size blank to use the default
-                        price change above
-                      </span>
-                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                        {variants
-                          .filter((variant) => variant.name.trim())
-                          .map((variant) => (
-                            <Input
-                              key={variant.price_key ?? variant.name}
-                              id={`override-${groupIndex}-${choiceIndex}-${variant.price_key ?? variant.name}`}
-                              label={`${variant.name} ($)`}
-                              placeholder={choice.price}
-                              value={choice.variant_prices[variant.price_key ?? variant.name] ?? ""}
-                              onChange={(event) =>
-                                changeChoiceVariantPrice(
-                                  groupIndex,
-                                  choiceIndex,
-                                  variant.price_key ?? variant.name,
-                                  event.target.value,
-                                )
-                              }
-                            />
-                          ))}
-                      </div>
+                      <Check
+                        checked={choice.default_selected}
+                        label="Selected by default"
+                        onChange={(event) =>
+                          changeChoice(groupIndex, choiceIndex, {
+                            default_selected: event.target.checked,
+                          })
+                        }
+                      />
+                      <Button
+                        onClick={() =>
+                          setGroups(
+                            groups.map((item, index) =>
+                              index === groupIndex
+                                ? {
+                                    ...item,
+                                    choices: item.choices.filter(
+                                      (_, innerIndex) => innerIndex !== choiceIndex,
+                                    ),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="button"
+                        variant="secondary"
+                      >
+                        Remove
+                      </Button>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {isSauce && <Check
+                      checked={shared}
+                      label={`Use shared price for ${choice.name}`}
+                      onChange={(event) =>
+                        changeChoice(groupIndex, choiceIndex, { use_shared_price: event.target.checked })
+                      }
+                    />}
+                    {variants.length > 0 && !shared && (
+                      <div className="grid gap-2 rounded-lg border border-dashed border-wayne-border p-3">
+                        <span className="text-xs font-semibold text-wayne-muted">
+                          Price by size -- leave a size blank to use the default
+                          price change above
+                        </span>
+                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                          {variants
+                            .filter((variant) => variant.name.trim())
+                            .map((variant) => (
+                              <Input
+                                key={variant.price_key ?? variant.name}
+                                id={`override-${groupIndex}-${choiceIndex}-${variant.price_key ?? variant.name}`}
+                                label={`${variant.name} ($)`}
+                                placeholder={choice.price}
+                                value={choice.variant_prices[variant.price_key ?? variant.name] ?? ""}
+                                onChange={(event) =>
+                                  changeChoiceVariantPrice(
+                                    groupIndex,
+                                    choiceIndex,
+                                    variant.price_key ?? variant.name,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               <Button
                 className="justify-self-start"
                 onClick={() =>

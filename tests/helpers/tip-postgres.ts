@@ -13,7 +13,7 @@ const categoryId = "79000000-0000-4000-8000-000000000002";
 const itemId = "79000000-0000-4000-8000-000000000003";
 
 /** Always creates its own local cluster. Never reads a connection URL or .env. */
-export async function startTipPostgres(options: { skipMigration?: string } = {}) {
+export async function startTipPostgres(options: { skipMigration?: string | string[] } = {}) {
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, "127.0.0.1", resolve));
   const address = socket.address();
@@ -47,8 +47,9 @@ export async function startTipPostgres(options: { skipMigration?: string } = {})
       create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text references storage.buckets(id),name text not null);
       grant usage on schema public to anon, authenticated, service_role;
     `);
+    const skippedMigrations = new Set([options.skipMigration].flat());
     for (const file of (await readdir("supabase/migrations")).filter((file) => file.endsWith(".sql")).sort()) {
-      if (file !== options.skipMigration) await admin.query(await readFile(join("supabase/migrations", file), "utf8"));
+      if (!skippedMigrations.has(file)) await admin.query(await readFile(join("supabase/migrations", file), "utf8"));
     }
     await admin.query(`
       update public.pos_tip_capture_control set execution_enabled=true;

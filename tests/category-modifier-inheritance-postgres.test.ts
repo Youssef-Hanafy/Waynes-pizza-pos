@@ -6,6 +6,7 @@ import { eggRollPricing } from "./fixtures/egg-roll-pricing";
 import { ownerId, startTipPostgres } from "./helpers/tip-postgres";
 
 const migration = "20261211080000_inherit_category_modifiers.sql";
+const sauceOverrides = "20261212080000_item_sauce_price_overrides.sql";
 const categoryId = eggRollPricing.category_id;
 const large = { name: "Large", price_cents: 2000, sku: "", sort_order: 0 };
 const pizza = { ...eggRollPricing, variants: [large], modifier_groups: [] };
@@ -55,7 +56,7 @@ async function getMenuItems(id: string) {
 }
 
 beforeAll(async () => {
-  db = await startTipPostgres({ skipMigration: migration });
+  db = await startTipPostgres({ skipMigration: [migration, sauceOverrides] });
   await db.admin.query("update public.menu_categories set name = 'Build Your Own Pizza' where id = $1", [categoryId]);
   await createItem({ ...pizza, name: "Cheese Pizza", modifier_groups: [sauces, meats] });
   await createItem({
@@ -67,7 +68,9 @@ beforeAll(async () => {
     ],
   });
   partyPizzaId = await createItem({ ...pizza, name: "Party Pizza" });
-  await db.admin.query(await readFile(`supabase/migrations/${migration}`, "utf8"));
+  for (const file of [migration, sauceOverrides]) {
+    await db.admin.query(await readFile(`supabase/migrations/${file}`, "utf8"));
+  }
 }, 60_000);
 
 afterAll(async () => { await db?.stop(); });

@@ -91,3 +91,56 @@ it("keeps another business's Marinara independent", async () => {
   await call("wayne_save_shared_sauce_prices", [[{key:"marinara",price_cents:95}]]);
   expect((await db.admin.query("select price_delta_cents from modifier_choices where id=$1",[choice])).rows[0].price_delta_cents).toBe(444);
 });
+
+it("prices one item's sauce independently and lets it return to the shared price", async () => {
+  async function saveSaucePricing(useSharedPrice?: boolean) {
+    const current = item((await menus())[0], second);
+    const { menu_revision } = (await db.admin.query("select menu_revision from menu_items where id = $1", [second])).rows[0];
+    const group = base.modifier_groups[0];
+    await call("wayne_update_menu_item", [second, {
+      ...base,
+      name: current.name,
+      expected_revision: menu_revision,
+      variants: current.variants.map((variant, sort_order) => ({ ...variant, sort_order })),
+      modifier_groups: [{
+        ...group,
+        id: current.modifier_groups[0].id,
+        choices: [{
+          ...group.choices[0],
+          use_shared_price: useSharedPrice,
+          price_delta_cents: 125,
+          variant_prices: [{ variant_name: "Large", price_delta_cents: 175 }],
+        }],
+      }],
+    }]);
+  }
+
+  await saveSaucePricing(false);
+  await saveSaucePricing(); // A client that omits the flag keeps the item's setting.
+  await call("wayne_save_shared_sauce_prices", [[{ key: "marinara", price_cents: 90 }]]);
+
+  for (const menu of await menus()) {
+    const current = item(menu, second);
+    const choice = current.modifier_groups[0].choices[0];
+    expect(item(menu, first).modifier_groups[0].choices[0]).toMatchObject({ shared_price_cents: 90 });
+    expect(choice).toMatchObject({ use_shared_price: false, shared_price_cents: null });
+
+    for (const variant of current.variants) {
+      const free = variant.name === "Large" ? 2 : 1;
+      const paidCents = variant.name === "Large" ? 175 : 125;
+      const line = {
+        line_id: randomUUID(), menu_item_id: second, variant_id: variant.id, quantity: 1, special_instructions: "",
+        modifiers: [{ choice_id: choice.id, quantity: free + 1 }],
+      };
+      expect(cartLineUnitCents(menu, line)).toBe(1000 + paidCents);
+      const result = await db.admin.query("select public.wayne_line_modifier_total($1, $2, $3) as cents", [
+        second, variant.id, JSON.stringify(line.modifiers),
+      ]);
+      expect(result.rows[0].cents).toBe(paidCents);
+    }
+  }
+  await saveSaucePricing(true);
+  for (const menu of await menus()) {
+    expect(item(menu, second).modifier_groups[0].choices[0]).toMatchObject({ use_shared_price: true, shared_price_cents: 90 });
+  }
+});
