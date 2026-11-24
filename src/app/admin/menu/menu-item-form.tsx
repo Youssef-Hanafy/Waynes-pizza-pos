@@ -99,6 +99,12 @@ export function MenuItemForm({
     },
     {},
   );
+  const sizesChanged = initial && (
+    variants.length !== initial.variants.length ||
+    variants.some((variant, index) => variant.id !== initial.variants[index]?.id ||
+      variant.name.trim() !== initial.variants[index]?.name)
+  );
+
   return (
     <form
       action={formAction}
@@ -117,7 +123,10 @@ export function MenuItemForm({
         value={JSON.stringify(editorConfiguration(variants, groups))}
       />
       <section className="grid gap-4 rounded-2xl border border-wayne-border bg-white p-6">
-        <h2 className="text-2xl font-black">Item details</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-black">Item details</h2>
+          <a className="font-bold text-wayne-red underline" href="#menu-item-sizes">Manage sizes</a>
+        </div>
         <label className="grid gap-2 text-sm font-semibold">
           Category
           <select
@@ -251,24 +260,26 @@ export function MenuItemForm({
           />
         </div>
       </section>
-      <section className="grid gap-4 rounded-2xl border border-wayne-border bg-white p-6">
-        <div className="flex items-center justify-between gap-4">
+      <section id="menu-item-sizes" className="grid scroll-mt-6 gap-4 rounded-2xl border border-wayne-border bg-white p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-black">Variants / sizes</h2>
+            <h2 className="text-2xl font-black">Sizes</h2>
             <p className="text-sm text-wayne-muted">
               A selected size uses its full price below, replacing the base price. Modifiers add their price changes.
             </p>
           </div>
           <Button
-            onClick={() =>
-              setVariants([...variants, { name: "", price: "0.00", sku: "", price_key: uuid() }])
-            }
+            onClick={() => {
+              const size = { name: "", price: "", sku: "", price_key: uuid() };
+              setVariants((current) => [...current, size]);
+              setDirty(true);
+            }}
             type="button"
-            variant="secondary"
           >
-            Add variant
+            Add size
           </Button>
         </div>
+        {sizesChanged && <p className="text-sm font-semibold">Use Save menu item to save size changes.</p>}
         {variants.map((variant, index) => (
           <div
             className="grid gap-3 rounded-xl border border-wayne-border p-4 md:grid-cols-[1fr_10rem_1fr_auto]"
@@ -276,7 +287,8 @@ export function MenuItemForm({
           >
             <Input
               id={`variant-${index}-name`}
-              label="Name"
+              label="Size name"
+              required
               value={variant.name}
               onChange={(event) =>
                 setVariants(
@@ -290,7 +302,8 @@ export function MenuItemForm({
             />
             <Input
               id={`variant-${index}-price`}
-              label="Price ($)"
+              label="Size price ($)"
+              required
               value={variant.price}
               onChange={(event) =>
                 setVariants(
@@ -334,8 +347,9 @@ export function MenuItemForm({
           <div>
             <h2 className="text-2xl font-black">Modifier groups</h2>
             <p className="text-sm text-wayne-muted">
-              Required or optional single/multiple-choice options with price
-              changes.
+              {initial
+                ? "Required or optional single/multiple-choice options with price changes."
+                : "New items get the selected category’s modifiers when saved. Add a group below to customize that section."}
             </p>
           </div>
           <Button
@@ -539,7 +553,7 @@ export function MenuItemForm({
         ))}
       </section>
       <div className="sticky bottom-4 flex flex-wrap justify-end gap-3">
-        {initial && <Button disabled={pending} name="save_mode" value="prices" type="submit" variant="secondary">{pending ? "Saving…" : "Save prices only"}</Button>}
+        {initial && <Button disabled={pending || sizesChanged} name="save_mode" value="prices" type="submit" variant="secondary">{pending ? "Saving…" : "Save prices only"}</Button>}
         <Button className="min-w-44 shadow-lg" disabled={pending} type="submit">
           {pending ? "Saving…" : submitLabel}
         </Button>

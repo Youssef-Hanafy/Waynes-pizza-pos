@@ -50,3 +50,18 @@ test('database failure keeps the typed draft and never confirms success; stale r
   await b.reload();await expect(b.getByRole('textbox',{name:'Item price ($)',exact:true})).toHaveValue('14.25');
   await a.close();await b.close();
 });
+
+test('adds a new size and saves its price through the item editor', async ({ page }) => {
+  const path = `/admin/menu/items/${ids[1]}`;
+  await page.goto(path);
+  await page.getByRole('link', { name: 'Manage sizes' }).click();
+  await page.getByRole('button', { name: 'Add size', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Size name' }).fill('Party');
+  await page.getByRole('textbox', { name: 'Size price ($)' }).fill('24.50');
+  await expect(page.getByRole('button', { name: 'Save prices only' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Save menu item' }).click();
+  await expect(page).toHaveURL(/admin\/menu\?saved=1/);
+  await page.goto(path);
+  await expect(page.getByRole('textbox', { name: 'Size name' })).toHaveValue('Party');
+  await expect(page.getByRole('textbox', { name: 'Size price ($)' })).toHaveValue('24.50');
+});
