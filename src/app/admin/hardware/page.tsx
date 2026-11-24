@@ -84,12 +84,12 @@ export default async function HardwarePage({ searchParams }: { searchParams: Pro
           >
             <PrinterFields defaultPaper={80} namePlaceholder="Front receipt" printer={receipt} prefix="receipt" />
             <div className="grid gap-4 md:grid-cols-2">
-              <SelectField defaultValue={receipt.tip_slip === "card" || receipt.tip_slip === "never" ? receipt.tip_slip : "always"} id="receipt_tip_slip" label="Tip & signature slip for online orders"
-                options={[["always", "Every online order"], ["card", "Only card orders"], ["never", "Never"]]} />
-              <label className="flex min-h-11 items-center gap-3 self-end text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.online_order_slips !== false} name="receipt_online_slips" type="checkbox" />Print every online order automatically</label>
+              <SelectField defaultValue={receipt.tip_slip === "card" || receipt.tip_slip === "never" ? receipt.tip_slip : "always"} id="receipt_tip_slip" label="Tip & signature slip for online deliveries"
+                options={[["always", "Every online delivery"], ["card", "Only card orders"], ["never", "Never"]]} />
+              <label className="flex min-h-11 items-center gap-3 self-end text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.online_order_slips !== false} name="receipt_online_slips" type="checkbox" />Print online delivery receipts automatically</label>
             </div>
             <label className="flex min-h-11 items-center gap-3 text-sm font-bold"><input className="h-5 w-5 shrink-0" defaultChecked={receipt.auto_delivery_receipts !== false} name="receipt_delivery_receipts" type="checkbox" />Print the receipt automatically for delivery orders (counter and phone)</label>
-            <p className="-mt-2 text-xs text-wayne-muted">Pickup and takeout orders only print the kitchen ticket. Use Print receipt on the order when a customer asks for one.</p>
+            <p className="-mt-2 text-xs text-wayne-muted">For pickup and takeout, including online pickup, use Print receipt on the order when a customer asks for one.</p>
           </PrinterPanel>
 
           <PrinterPanel

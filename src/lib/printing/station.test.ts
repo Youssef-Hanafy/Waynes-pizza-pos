@@ -79,14 +79,14 @@ describe("print station", () => {
     expect(base.fail).toHaveBeenCalledOnce();
   });
 
-  it("prints online orders with the tip & signature slip per the setting", async () => {
+  it("prints online deliveries with the tip & signature slip per the setting", async () => {
     expect(tipSlipWanted("always", "cash")).toBe(true);
     expect(tipSlipWanted("card", "cash")).toBe(false);
     expect(tipSlipWanted("card", "card")).toBe(true);
     expect(tipSlipWanted("never", "card")).toBe(false);
     const out = printer({ ok: true });
     const adapter = createOnlineOrderStationAdapter({ printer: out, tipSlip: "card", now: () => now });
-    await adapter.print(job({ destination: "receipt", job_type: "online_order" }), {});
+    await adapter.print(job({ destination: "receipt", job_type: "online_order", payload: { fulfillment_type: "delivery", payment_method: "card" } }), {});
     expect(out.printOnlineOrder).toHaveBeenCalledWith(doc.order.id, { tipSlip: true });
   });
 
@@ -94,7 +94,7 @@ describe("print station", () => {
     const out = printer({ ok: true });
     const adapter = createOnlineOrderStationAdapter({ printer: out, tipSlip: "always", now: () => now });
     await adapter.print(job({ destination: "receipt", job_type: "delivery_receipt" }), {});
-    await adapter.print(job({ destination: "receipt", job_type: "receipt_request" }), {});
+    await adapter.print(job({ destination: "receipt", job_type: "receipt_request", payload: { fulfillment_type: "pickup" } }), {});
     expect(out.printReceipt).toHaveBeenCalledTimes(2);
     expect(out.printOnlineOrder).not.toHaveBeenCalled();
   });

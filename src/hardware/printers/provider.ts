@@ -19,7 +19,7 @@ export interface PrinterProvider {
   printReceipt(orderId: string): Promise<PrintResult>;
   printKitchenTicket(orderId: string): Promise<PrintResult>;
   printTest(): Promise<PrintResult>;
-  /** Online order: the order slip, then (if asked) the tip & signature slip. */
+  /** Online delivery: the order slip, then (if asked) the tip & signature slip. */
   printOnlineOrder(orderId: string, options: { tipSlip: boolean }): Promise<PrintResult>;
   /** Any layout, already built (the print station uses this). */
   printLayout(layout: PrintLayout): Promise<PrintResult>;
@@ -42,7 +42,7 @@ export type PrinterConfig = {
   columns: number | null;
   /** A black/red ribbon is fitted (impact printers). */
   twoColor: boolean;
-  /** Receipt printer: what prints for every online order. */
+  /** Whether online delivery slips print automatically. */
   onlineOrderSlips: boolean;
   tipSlip: "always" | "card" | "never";
   /** How big the text prints (Admin → Hardware; default large). */
@@ -107,6 +107,8 @@ abstract class LayoutPrinter implements PrinterProvider {
   async printOnlineOrder(orderId: string, options: { tipSlip: boolean }) {
     try {
       const doc = await fetchPrintDocument(orderId);
+      // Fulfillment can change after the station claims the automatic slip.
+      if (doc.order.fulfillment_type !== "delivery") return { ok: true as const, jobId: "online-pickup-slip-skipped" };
       const slip = await this.output(buildOnlineOrderSlip(doc));
       if (!slip.ok || !options.tipSlip) return slip;
       const tip = await this.output(buildTipSignatureSlip(doc));

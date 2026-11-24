@@ -7,7 +7,7 @@ Wayne's has two Epson network printers. The POS is set up for exactly these mode
 | Model | Epson **TM-T20III L** (M352A), thermal | Epson **TM-U220B** (M188B), impact / ribbon |
 | Network | Built-in Ethernet | **UB-E04** Ethernet card (MAC `50:57:9C:58:F4:CE`) |
 | Paper | 80 mm thermal, 48 characters a line | 76 mm plain paper, 40 characters a line |
-| Prints | Customer receipts · **every online order**: order slip + tip & signature slip · test pages | **Kitchen tickets** for every order (register, phone, online) |
+| Prints | Customer receipts · online delivery slips and tip & signature slips · test pages | **Kitchen tickets** for every order (register, phone, online) |
 | Also | Cash drawer plugged into its DK port. The POS opens it through the printer | Black ribbon (ERC-38 B). With a black/red ribbon (ERC-38 B/R), "NO …" lines and notes print in red |
 | Talks | ESC/POS, TCP port 9100 | ESC/POS, TCP port 9100 |
 
@@ -41,7 +41,7 @@ In the router, **reserve** both addresses (a DHCP reservation / static lease) so
 
 Admin → Hardware → Printers:
 
-1. **Receipt & online orders:** IP address, port `9100`, *How to print* = ESC/POS, paper 80 mm, tick **Printer on**. Leave *Print every online order* ticked. *Tip & signature slip* = Every online order (what the printer does today) or Only card orders.
+1. **Receipt & online orders:** IP address, port `9100`, *How to print* = ESC/POS, paper 80 mm, tick **Printer on**. Leave *Print online delivery receipts automatically* ticked. Choose when to print the *Tip & signature slip for online deliveries*.
 2. **Kitchen tickets:** IP address, port `9100`, ESC/POS, paper 76 mm, **Printer on**. Tick *Black/red ribbon* only if a red/black ribbon is fitted. *Categories that print in the kitchen*: leave all unticked to print the whole order, or tick only the food categories (then drinks-only orders don't print in the kitchen).
 3. Save. Then press **Test receipt printer**, **Test kitchen printer** and **Open cash drawer** on the same page, **from the Wayne's POS Android app** (a browser can't reach printers).
    The test page ends with a line-width ruler. It should fill one line exactly. If it wraps or stops short, type the right number into *Chars / line*. For the TM-U220B that's 40, or 42 if its DIP switch is set to the 42-column mode.
@@ -54,8 +54,8 @@ From then on:
 
 * **Every order** gets a kitchen ticket on the TM-U220B.
 * **Delivery orders** (counter and phone) also print the customer receipt on the TM-T20III for the driver. Switch: Admin → Hardware → *Print the receipt automatically for delivery orders*.
-* **Pickup / takeout orders** print only the kitchen ticket. If the customer asks for a receipt, tap **Print receipt**. It's on the order-sent screen and on every order in Orders / Deliveries, from any register or phone.
-* Every online order prints its order slip, then the tip & signature slip, on the TM-T20III.
+* For **pickup and takeout orders**, including online pickups, tap **Print receipt** on the order when a customer asks for one.
+* **Online delivery orders** print their order slip on the TM-T20III when automatic printing is enabled. The tip & signature slip follows according to its setting.
 * It happens within a second or two (Supabase Realtime), with a 20-second safety check.
 * **Printer off or unplugged?** Nothing is lost. Tickets wait, the POS header shows *"Kitchen printer: … Tickets are waiting"*, and they print as soon as it answers.
 * **Paper jam mid-print?** That ticket is **not** reprinted automatically. It shows in **Admin → Printing** as *needs inspection*, so the kitchen never gets a surprise duplicate. Check the paper, then press *Retry*.
@@ -66,4 +66,4 @@ The cash drawer opens **only when cash goes into it** (owner, 2026-10-12): choos
 
 ## Running alongside Thrive
 
-Both systems can send to the same printers (port 9100 takes one job at a time; the other waits a moment). While Thrive is still live, an online order that comes through **both** systems prints twice. Keep *Print every online order* **unticked** until online orders move to this website, then tick it.
+Both systems can send to the same printers (port 9100 takes one job at a time; the other waits a moment). While Thrive is still live, both systems can print slips for the same online delivery. Keep *Print online delivery receipts automatically* **unticked** until online orders move to this website, then tick it.

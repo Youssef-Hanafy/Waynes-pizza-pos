@@ -9,7 +9,7 @@ import type { PrintQueueRepository } from "./worker";
  *
  *   destination "kitchen", job kitchen_ticket  → TM-U220B, kitchen ticket
  *   destination "kitchen", job kitchen_addition → TM-U220B, only the items added to an order after its ticket printed
- *   destination "receipt", job online_order    → TM-T20III, order slip (+ tip & signature slip)
+ *   destination "receipt", job online_order    → TM-T20III, online delivery slip (+ tip & signature slip)
  *   destination "receipt", job delivery_receipt → TM-T20III, customer receipt (register/phone delivery)
  *   destination "receipt", job receipt_request  → TM-T20III, customer receipt someone asked for
  *   destination "receipt", job drawer_kick      → cash drawer on the TM-T20III's DK port (every payment taken at the store)

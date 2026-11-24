@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
  * Phase 7 — Wayne's two Epson printers and the print station, on the full
- * migration chain: online orders queue a receipt-printer slip, every order
+ * migration chain: online deliveries queue a receipt-printer slip, every order
  * queues a kitchen ticket, and the print station (a cashier's register) can
  * claim, hand back and finish jobs but not manage them.
  */
@@ -80,13 +80,26 @@ describe("Phase 7 — store printers and the print station", () => {
     expect(drawer).toMatchObject({ connection: "receipt_printer" });
   });
 
-  it("queues one receipt-printer slip per online order, once it is placed", async () => {
-    const waiting = await onlineOrder("payment_pending");
+  it("queues one receipt-printer slip per online delivery, once it is placed", async () => {
+    const waiting = await onlineOrder("payment_pending", "online", "delivery");
     expect((await database.query("select 1 from public.print_jobs where order_id = $1", [waiting])).rows).toHaveLength(0);
     await database.query("update public.orders set status = 'placed' where id = $1", [waiting]);
     await database.query("update public.orders set status = 'accepted' where id = $1", [waiting]);
     const jobs = await database.query<Job>("select * from public.print_jobs where order_id = $1", [waiting]);
     expect(jobs.rows).toEqual([expect.objectContaining({ destination: "receipt", job_type: "online_order", status: "pending" })]);
+  });
+
+  it("queues only the kitchen ticket when an online pickup is placed", async () => {
+    const pickup = await onlineOrder("payment_pending");
+    await database.query(
+      `insert into public.order_items(order_id, menu_item_id, item_name_snapshot, unit_price_cents, quantity, line_total_cents)
+       values ($1, $2, 'Cheese Pizza', 1500, 1, 1500)`,
+      [pickup, itemId],
+    );
+    await database.query("update public.orders set status = 'placed' where id = $1", [pickup]);
+    await database.query("update public.orders set status = 'accepted' where id = $1", [pickup]);
+    const { rows } = await database.query<Job>("select * from public.print_jobs where order_id = $1", [pickup]);
+    expect(rows.map((job) => `${job.destination}/${job.job_type}`)).toEqual(["kitchen/kitchen_ticket"]);
   });
 
   it("queues a kitchen ticket but no slip for a register order", async () => {
@@ -124,8 +137,8 @@ describe("Phase 7 — store printers and the print station", () => {
     expect(await receiptJobs(pickup)).toEqual([]);
   });
 
-  it("queues a receipt when someone asks, once at a time, and again after it printed", async () => {
-    const pickup = await onlineOrder("placed", "pos", "pickup");
+  it("queues a manual online pickup receipt once at a time and again after it printed", async () => {
+    const pickup = await onlineOrder();
     expect(await call<{ status: string }>("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [pickup])).toMatchObject({ status: "queued" });
     expect(await call<{ status: string }>("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [pickup])).toMatchObject({ status: "already_queued" });
     expect((await receiptJobs(pickup)).map((job) => `${job.job_type}/${job.status}`)).toEqual(["receipt_request/pending"]);
@@ -135,9 +148,16 @@ describe("Phase 7 — store printers and the print station", () => {
     await expect(call("anon", null, "public.wayne_request_receipt_print($1::uuid)", [pickup])).rejects.toThrow();
   });
 
-  it("stops queueing slips when online order printing is switched off", async () => {
+  it("removes a pending automatic slip when an online delivery changes to pickup", async () => {
+    const order = await onlineOrder("placed", "online", "delivery");
+    await call("authenticated", cashierId, "public.wayne_request_receipt_print($1::uuid)", [order]);
+    await database.query("update public.orders set fulfillment_type = 'pickup', status = status where id = $1", [order]);
+    expect((await receiptJobs(order)).map((job) => job.job_type)).toEqual(["receipt_request"]);
+  });
+
+  it("stops queueing online delivery slips when the setting is switched off", async () => {
     await database.exec("update public.pos_hardware_settings set receipt_printer = receipt_printer || '{\"online_order_slips\": false}'::jsonb");
-    const id = await onlineOrder();
+    const id = await onlineOrder("placed", "online", "delivery");
     expect((await database.query("select 1 from public.print_jobs where order_id = $1", [id])).rows).toHaveLength(0);
   });
 });

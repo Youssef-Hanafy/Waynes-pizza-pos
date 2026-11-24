@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { encodeDrawerKick, encodeEscPos } from "@/hardware/printers/escpos";
 import { renderLayoutHtml } from "@/hardware/printers/render-html";
 import { columnsFor, printerModel } from "@/hardware/printers/models";
+import { NativeEscPosPrinterProvider, printerConfigFrom } from "@/hardware/printers/provider";
 import { buildKitchenTicket, buildOnlineOrderSlip, buildReceipt, buildTestPage, buildTipSignatureSlip, kitchenModifierOrder, kitchenOrder, layoutToText, routeToKitchen, type PrintDocument } from "./document";
 
 const doc: PrintDocument = {
@@ -21,6 +22,22 @@ const doc: PrintDocument = {
 };
 
 describe("receipts and kitchen tickets (build sheet §23)", () => {
+  it("skips an automatic slip for a current online pickup and sends its manual receipt", async () => {
+    const pickup = { ...doc, order: { ...doc.order, source: "online", fulfillment_type: "pickup" } };
+    const send = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(pickup)));
+    vi.stubGlobal("window", { WaynesNativeHardware: { printer: { send } } });
+    try {
+      const printer = new NativeEscPosPrinterProvider(printerConfigFrom({ ip: "192.168.1.10", port: 9100 }), "Receipt printer");
+      await expect(printer.printOnlineOrder(doc.order.id, { tipSlip: true })).resolves.toMatchObject({ ok: true });
+      expect(send).not.toHaveBeenCalled();
+      await expect(printer.printReceipt(doc.order.id)).resolves.toMatchObject({ ok: true });
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("matches every order slip line to kitchen item text without oversized headings or figures", () => {
     const pickup = { ...doc, order: { ...doc.order, fulfillment_type: "pickup" as const } };
     for (const layout of [buildReceipt(doc), buildReceipt(pickup), buildOnlineOrderSlip(pickup), buildTipSignatureSlip(doc), buildTipSignatureSlip(pickup), buildKitchenTicket(doc)!]) {
