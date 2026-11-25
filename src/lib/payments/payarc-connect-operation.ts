@@ -43,6 +43,7 @@ export async function applyPayarcConnectOutcome(service: Service, attempt: Payar
   return saveState(service, attempt.id, {
     status: result.status, trace_id: result.traceId, provider_status: result.providerStatus,
     charge_id: result.chargeId, card_brand: result.card?.brand, card_last4: result.card?.last4,
+    failure_reason: result.failureReason,
   });
 }
 
@@ -122,15 +123,28 @@ export async function handlePayarcConnectPayment(access: CurrentAccess, request:
   const { data, error } = await query.maybeSingle();
   if (error || !data) return Response.json({ error: "No matching reader attempt could be loaded." }, { status: error ? 503 : 404 });
   const attempt = payarcConnectAttemptSchema.parse(data);
-  if (attempt.status !== "pending" || !attempt.terminal_checkout_id) return stateResponse(attempt);
-  if (attempt.metadata.environment !== config.environment || attempt.metadata.payarc_connect_serial !== config.serial) return stateResponse(attempt);
+  if (attempt.status !== "pending") return stateResponse(attempt);
+  const cancelling = request.action === "cancel";
+  if (!attempt.terminal_checkout_id || attempt.metadata.environment !== config.environment ||
+      attempt.metadata.payarc_connect_serial !== config.serial) {
+    return cancelling
+      ? Response.json({ error: "Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet." }, { status: 409 })
+      : stateResponse(attempt, "pending", "Waiting for Payarc to confirm the request on this reader…");
+  }
 
   try {
     const token = await payarcConnectAccessToken(config);
-    if (request.action === "cancel") await cancelPayarcConnectSale(config, token, attempt.terminal_checkout_id, config.serial);
+    const cancelAccepted = cancelling && await cancelPayarcConnectSale(config, token, attempt.terminal_checkout_id, config.serial);
     const body = await readPayarcConnectSale(config, token, attempt.terminal_checkout_id);
-    return stateResponse(attempt, await applyPayarcConnectOutcome(service, attempt, body));
+    const state = await applyPayarcConnectOutcome(service, attempt, body);
+    if (state !== "pending" || !cancelling) {
+      const outcome = state === "failed" ? payarcConnectOutcome(body, attempt) : null;
+      return stateResponse(attempt, state, outcome?.failureReason);
+    }
+    if (cancelAccepted) return stateResponse(attempt, state, "Cancellation requested. Waiting for the reader to confirm.");
+    return Response.json({ error: "Payarc could not cancel the reader payment. The POS is still checking its result." }, { status: 409 });
   } catch {
+    if (cancelling) return Response.json({ error: "The POS could not confirm the cancellation with Payarc." }, { status: 503 });
     // Polling remains available while a callback or later lookup resolves the attempt.
     return stateResponse(attempt);
   }

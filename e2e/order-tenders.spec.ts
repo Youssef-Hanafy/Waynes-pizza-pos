@@ -201,6 +201,9 @@ test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits 
     }
     const payload = route.request().postDataJSON();
     if (payload.action === "resume") return route.fulfill({ json: { state: "none" } });
+    if (payload.action === "cancel") {
+      return route.fulfill({ status: 409, json: { error: "Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet." } });
+    }
     if (payload.action === "start") sales.push(payload);
     return route.fulfill({ json: { payment_id: paymentId, amount_cents: 3500, state: approve ? "captured" : "pending" } });
   });
@@ -213,7 +216,10 @@ test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits 
   await page.goto("/reader");
   const tablet = await context.newPage();
   await tablet.goto("/tablet");
-  await tablet.getByRole("button", { name: "Tap anywhere to start" }).click();
+  const startCover = tablet.getByRole("button", { name: "Tap anywhere to start" });
+  await expect(startCover).toBeVisible();
+  await tablet.mouse.click(10, 10);
+  await expect(startCover).toBeHidden();
   await page.getByRole("button", { name: /^Card reader/ }).click();
   await page.getByRole("button", { name: "Pay $30.00", exact: true }).click();
   await expect(tablet.getByText("Add a tip?")).toBeVisible();
@@ -228,6 +234,8 @@ test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits 
   expect(sales[0]).toMatchObject({ expected_amount_cents: 3500, terminal_id: readerId });
   await expect(tablet.getByText("$35.00", { exact: true })).toBeVisible();
   await expect(page.locator("output")).toHaveText("Order open");
+  await page.getByRole("button", { name: "Cancel on reader" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet.");
   approve = true;
   await expect(page.getByText("Approved · $35.00", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Skip signature" }).click();

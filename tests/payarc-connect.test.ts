@@ -91,10 +91,34 @@ describe("Payarc Connect V3", () => {
   it("only releases a definitive pre-dispatch rejection", async () => {
     const send = vi.fn()
       .mockResolvedValueOnce(Response.json({ response: { status: "FAILURE", error: { code: "TERMINAL_OFFLINE" } } }, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({}, { status: 502 }))
       .mockResolvedValueOnce(Response.json({}, { status: 502 }));
     vi.stubGlobal("fetch", send);
     expect(await sendPayarcConnectSale(payarcConnectConfig(env)!, "token", attempt)).toEqual({ rejected: "TERMINAL_OFFLINE" });
     expect(await sendPayarcConnectSale(payarcConnectConfig(env)!, "token", attempt)).toEqual({});
+  });
+
+  it("recovers one missing acknowledgement with the original Payarc request", async () => {
+    const send = vi.fn()
+      .mockRejectedValueOnce(new Error("network timeout"))
+      .mockResolvedValueOnce(Response.json({ traceId, response: { status: "SUCCESS" } }));
+    vi.stubGlobal("fetch", send);
+    expect(await sendPayarcConnectSale(payarcConnectConfig(env)!, "token", attempt)).toEqual({ traceId });
+    expect(send).toHaveBeenCalledTimes(2);
+    const [first, second] = send.mock.calls.map((call) => call[1]);
+    expect(first.headers["X-Idempotency-Key"]).toBe(attempt.id);
+    expect(second.headers["X-Idempotency-Key"]).toBe(attempt.id);
+    expect(second.body).toBe(first.body);
+  });
+
+  it("closes a zero-value timeout only when Payarc confirms the transaction failed", () => {
+    const timedOut = {
+      ...approval, status: "100001 TIMEOUT", error: { code: "TRANSACTION_FAILED" },
+      amount: { total: 0, approved: 0, currency: "USD", tip: 0, tax: 0 },
+    };
+    expect(payarcConnectOutcome(timedOut, attempt)).toMatchObject({ status: "failed", providerStatus: "100001 TIMEOUT" });
+    expect(payarcConnectOutcome({ ...timedOut, error: null }, attempt)).toBeNull();
+    expect(payarcConnectOutcome({ ...timedOut, amount: { ...timedOut.amount, approved: 100 } }, attempt)).toBeNull();
   });
 
   it("accepts a matching approval before a trace has been written and rejects mismatched or ambiguous results", () => {

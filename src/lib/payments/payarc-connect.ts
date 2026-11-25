@@ -87,6 +87,7 @@ export function payarcConnectNoticeTrace(input: unknown, attempt: PayarcConnectA
 
 const outcomeSchema = noticeSchema.extend({
   status: z.string(),
+  error: z.object({ code: z.string() }).nullish().catch(undefined),
   chargeId: z.string().trim().min(1).max(200).nullish(),
   amount: z.object({
     total: z.number().int(),
@@ -104,7 +105,7 @@ const outcomeSchema = noticeSchema.extend({
 export function payarcConnectOutcome(input: unknown, attempt: PayarcConnectAttempt) {
   const result = outcomeSchema.safeParse(input);
   if (!result.success) return null;
-  const { traceId, transactionId, status, chargeId, amount, card } = result.data;
+  const { traceId, transactionId, status, chargeId, amount, card, error } = result.data;
   if (transactionId !== attempt.metadata.payarc_connect_ref ||
       (attempt.terminal_checkout_id && traceId !== attempt.terminal_checkout_id)) return null;
 
@@ -121,7 +122,11 @@ export function payarcConnectOutcome(input: unknown, attempt: PayarcConnectAttem
   if (amount?.approved === 0 && ["ABORTED", "100002 ABORTED"].includes(outcome)) {
     return { status: "voided", traceId, providerStatus: outcome };
   }
-  // A timeout, duplicate, or unrecognized response can still conceal an approval.
+  if (outcome === "100001 TIMEOUT" && error?.code === "TRANSACTION_FAILED" &&
+      amount?.approved === 0 && amount.total === 0) {
+    return { status: "failed", traceId, providerStatus: outcome, failureReason: "The reader timed out before approving a card." };
+  }
+  // An unconfirmed timeout or duplicate can still conceal an approval.
   return null;
 }
 
@@ -155,27 +160,43 @@ async function connectRequest(config: PayarcConnectConfig, token: string, path: 
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json", "X-Idempotency-Key": key },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  return { ok: response.ok, body: await response.json().catch(() => null) as unknown };
+  return { ok: response.ok, httpStatus: response.status, body: await response.json().catch(() => null) as unknown };
+}
+
+type ConnectResponse = Awaited<ReturnType<typeof connectRequest>>;
+
+function connectSaleOutcome(reply: ConnectResponse | null): { traceId?: string; rejected?: string } {
+  if (!reply) return {};
+  const result = z.object({
+    traceId: z.uuid().optional(),
+    response: z.object({ status: z.string().optional(), error: z.object({ code: z.string() }).nullish() }),
+  }).safeParse(reply.body);
+  const traceId = result.success ? result.data.traceId : undefined;
+  if (reply.ok && result.success && result.data.response.status === "SUCCESS" && traceId) return { traceId };
+  const code = result.success ? result.data.response.error?.code : undefined;
+  if (!reply.ok && code && ["TERMINAL_OFFLINE", "TERMINAL_NOT_ON_V3", "TERMINAL_STATUS_UNAVAILABLE"].includes(code)) return { rejected: code };
+  return {};
 }
 
 export async function sendPayarcConnectSale(config: PayarcConnectConfig, token: string, attempt: PayarcConnectAttempt) {
   const { payarc_connect_ref, payarc_connect_tip_cents: tip, payarc_connect_tax_cents: tax, payarc_connect_serial: terminalId } = attempt.metadata;
   const total = attempt.amount_cents;
-  const { ok, body } = await connectRequest(config, token, "/transactions/sale", attempt.id, {
+  const payload = {
     tenantId: config.mid, terminalId, transactionId: payarc_connect_ref, tenderType: "CREDIT",
     amount: { total, subtotal: total - tip - tax, currency: "USD", tip, tax },
     tipRequestFlag: false, printReceipt: 0,
     callbackURL: `${config.callbackOrigin}/api/payments/payarc-connect/${attempt.id}?key=${callbackKey(config, attempt.id)}`,
-  });
-  const result = z.object({
-    traceId: z.uuid().optional(),
-    response: z.object({ status: z.string().optional(), error: z.object({ code: z.string() }).nullish() }),
-  }).safeParse(body);
-  const traceId = result.success ? result.data.traceId : undefined;
-  if (ok && result.success && result.data.response.status === "SUCCESS" && traceId) return { traceId };
-  const code = result.success ? result.data.response.error?.code : undefined;
-  if (!ok && code && ["TERMINAL_OFFLINE", "TERMINAL_NOT_ON_V3", "TERMINAL_STATUS_UNAVAILABLE"].includes(code)) return { rejected: code };
-  return {};
+  };
+  const send = () => connectRequest(config, token, "/transactions/sale", attempt.id, payload).catch(() => null);
+  const reply = await send();
+  const outcome = connectSaleOutcome(reply);
+  if (outcome.traceId || outcome.rejected) return outcome;
+  const proxyRejected = reply?.httpStatus === 403 && reply.body && typeof reply.body === "object" && "cloudflare_error" in reply.body;
+  if (!reply || reply.ok || reply.httpStatus >= 500 || [408, 429].includes(reply.httpStatus) || proxyRejected) {
+    // The terminal transaction ID, exact payload and idempotency key must stay identical.
+    return connectSaleOutcome(await send());
+  }
+  return outcome;
 }
 
 export async function readPayarcConnectSale(config: PayarcConnectConfig, token: string, traceId: string) {
@@ -184,7 +205,8 @@ export async function readPayarcConnectSale(config: PayarcConnectConfig, token: 
 }
 
 export async function cancelPayarcConnectSale(config: PayarcConnectConfig, token: string, traceId: string, terminalId: string) {
-  await connectRequest(config, token, `/transactions/${traceId}/cancel`, randomUUID(), { tenantId: config.mid, terminalId });
+  const response = await connectRequest(config, token, `/transactions/${traceId}/cancel`, randomUUID(), { tenantId: config.mid, terminalId });
+  return response.ok;
 }
 
 export async function checkPayarcConnectReader(config: PayarcConnectConfig) {

@@ -416,6 +416,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   const [checking, setChecking] = useState(Boolean(resumeId));
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [last4, setLast4] = useState("");
   const [approval, setApproval] = useState("");
   const alive = useRef(true);
@@ -431,7 +432,6 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
     try {
       setChecking(true);
       let action: "start" | "status" = attemptId.current ? "status" : "start";
-      setNote("Waiting for the customer to tap, dip or swipe…");
       const deadline = Date.now() + 5 * 60_000;
       while (alive.current && Date.now() < deadline) {
         const response = await callReader(action);
@@ -443,6 +443,10 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
         }
         const body = readerPaymentSchema.parse(await response.json());
         if (pax && body.payment_id) attemptId.current = body.payment_id;
+        if (body.state === "pending") {
+          if (body.reason) setNote(body.reason);
+          else if (action === "start") setNote("Waiting for the customer to tap, dip or swipe…");
+        }
         if (body.state === "captured") {
           onPaid({ order: { ...order, total_cents: body.amount_cents ?? order.total_cents }, method: "card", changeCents: 0, tenderedCents: null });
           return;
@@ -474,7 +478,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
         idempotency_key: !pax && action === "cancel" ? `pos-terminal-cancel-${order.id}-${Date.now()}` : requestKey.current,
         amount_cents: amountCents, expected_amount_cents: pax ? order.total_cents : undefined, payment_id: attemptId.current,
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(action === "start" ? 28_000 : 20_000),
     });
   }
 
@@ -488,8 +492,21 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   }, [autoStart, terminals.length, terminalId]);
 
   async function cancelOnReader() {
-    try { await callReader("cancel"); }
-    catch { /* the wait loop reports whatever the reader ends up saying */ }
+    if (cancelling) return;
+    setCancelling(true);
+    onError("");
+    try {
+      const response = await callReader("cancel");
+      if (!response.ok) throw new Error(await readError(response, "The cancellation could not be confirmed."));
+      const body = readerPaymentSchema.safeParse(await response.json());
+      if (alive.current && inFlight.current) {
+        setNote(body.success && body.data.reason ? body.data.reason : "Checking the reader for the final result…");
+      }
+    } catch (cause) {
+      if (alive.current && inFlight.current) onError(cause instanceof Error ? cause.message : "The cancellation could not be confirmed.");
+    } finally {
+      if (alive.current) setCancelling(false);
+    }
   }
 
   /** A standalone reader (not linked yet): the total was keyed in and approved. */
@@ -528,7 +545,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
-      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button onClick={() => { void cancelOnReader(); }} variant="secondary">Cancel on reader</Button></div>
+      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button disabled={cancelling} onClick={() => { void cancelOnReader(); }} variant="secondary">{cancelling ? "Cancelling…" : "Cancel on reader"}</Button></div>
         : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">{checking && pax ? "Check reader payment" : `Charge ${formatCents(order.total_cents)} on the reader`}</Button>}
     </div> : null}
 
