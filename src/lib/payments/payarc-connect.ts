@@ -87,7 +87,7 @@ export function payarcConnectNoticeTrace(input: unknown, attempt: PayarcConnectA
 
 const outcomeSchema = noticeSchema.extend({
   status: z.string(),
-  chargeId: z.string().trim().min(1).max(200).optional(),
+  chargeId: z.string().trim().min(1).max(200).nullish(),
   amount: z.object({
     total: z.number().int(),
     approved: z.number().int(),
@@ -115,8 +115,12 @@ export function payarcConnectOutcome(input: unknown, attempt: PayarcConnectAttem
         (amount.tax ?? 0) !== attempt.metadata.payarc_connect_tax_cents) return null;
     return { status: "captured", traceId, providerStatus: outcome, chargeId, card };
   }
+  if ((amount?.approved ?? 0) > 0) return null;
   if (["DECLINE", "DECLINED"].includes(outcome)) return { status: "failed", traceId, providerStatus: outcome };
   if (["CANCELLED", "CANCELED"].includes(outcome)) return { status: "voided", traceId, providerStatus: outcome };
+  if (amount?.approved === 0 && ["ABORTED", "100002 ABORTED"].includes(outcome)) {
+    return { status: "voided", traceId, providerStatus: outcome };
+  }
   // A timeout, duplicate, or unrecognized response can still conceal an approval.
   return null;
 }

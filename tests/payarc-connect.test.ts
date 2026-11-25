@@ -105,8 +105,22 @@ describe("Payarc Connect V3", () => {
       { amount: { ...approval.amount, currency: "CAD" } }, { chargeId: undefined },
     ]) expect(payarcConnectOutcome({ ...approval, ...change }, attempt)).toBeNull();
     expect(payarcConnectOutcome(approval, { ...attempt, terminal_checkout_id: randomUUID() })).toBeNull();
-    expect(payarcConnectOutcome({ ...approval, status: "DECLINE" }, attempt)).toMatchObject({ status: "failed" });
-    expect(payarcConnectOutcome({ ...approval, status: "CANCELLED" }, attempt)).toMatchObject({ status: "voided" });
+    const unapproved = { ...approval, amount: { ...approval.amount, total: 0, approved: 0, tip: 0, tax: 0 } };
+    expect(payarcConnectOutcome({ ...unapproved, status: "DECLINE" }, attempt)).toMatchObject({ status: "failed" });
+    expect(payarcConnectOutcome({ ...unapproved, status: "CANCELLED" }, attempt)).toMatchObject({ status: "voided" });
+  });
+
+  it("closes a Payarc 100002 ABORTED result only when the verified sale approved zero", () => {
+    const aborted = {
+      ...approval,
+      status: "100002 ABORTED",
+      amount: { total: 0, approved: 0, currency: "USD", tip: 0, tax: 0 },
+      error: { code: "TRANSACTION_FAILED" },
+    };
+    expect(payarcConnectOutcome(aborted, attempt)).toEqual({ status: "voided", traceId, providerStatus: "100002 ABORTED" });
+    expect(payarcConnectOutcome({ ...aborted, amount: { ...aborted.amount, approved: 100 } }, attempt)).toBeNull();
+    expect(payarcConnectOutcome({ ...aborted, amount: undefined }, attempt)).toBeNull();
+    expect(payarcConnectOutcome({ ...aborted, transactionId: "other" }, attempt)).toBeNull();
   });
 
   it("settles only the authenticated Payarc lookup, even when the callback claims approval", async () => {

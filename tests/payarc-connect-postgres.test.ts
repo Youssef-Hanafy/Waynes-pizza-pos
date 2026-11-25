@@ -54,7 +54,11 @@ describe("PAX A35 payment ledger", () => {
     expect(await applyPayarcConnectOutcome(service.api, attempt, { ...approval, status: "TIMEOUT" })).toBe("pending");
     expect(await applyPayarcConnectOutcome(service.api, attempt, approval)).toBe("captured");
     expect(await applyPayarcConnectOutcome(service.api, attempt, approval)).toBe("captured");
-    expect(await applyPayarcConnectOutcome(service.api, attempt, { ...approval, status: "DECLINE" })).toBe("captured");
+    expect(await applyPayarcConnectOutcome(service.api, attempt, {
+      ...approval,
+      status: "DECLINE",
+      amount: { ...approval.amount, approved: 0 },
+    })).toBe("captured");
     const saved = await db.admin.query(`select o.payment_status, p.provider_payment_id, p.terminal_checkout_id, p.amount_cents,
       (select count(*)::int from public.order_events where order_id=o.id and event_type='payment.captured') captured_events
       from public.orders o join public.payments p on p.order_id=o.id where p.id=$1`, [attempt.id]);
@@ -62,6 +66,19 @@ describe("PAX A35 payment ledger", () => {
       payment_status: "paid", provider_payment_id: chargeId, terminal_checkout_id: traceId,
       amount_cents: first.amount + 500, captured_events: 1,
     });
-    expect((await begin(second.orderId, second.amount + 500)).error).toBeNull();
+    const openedSecond = await begin(second.orderId, second.amount + 500);
+    expect(openedSecond.error).toBeNull();
+    const secondAttempt = payarcConnectAttemptSchema.parse(openedSecond.data);
+    expect(await applyPayarcConnectOutcome(service.api, secondAttempt, {
+      traceId: randomUUID(),
+      transactionId: secondAttempt.metadata.payarc_connect_ref,
+      transType: "SALE",
+      status: "100002 ABORTED",
+      chargeId: randomUUID(),
+      amount: { total: 0, approved: 0, currency: "USD", tip: 0, tax: 0 },
+    })).toBe("voided");
+    const retry = await begin(second.orderId, second.amount + 500);
+    expect(retry.error).toBeNull();
+    expect(retry.data).toMatchObject({ status: "pending", duplicate: false });
   });
 });

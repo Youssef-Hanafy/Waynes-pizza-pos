@@ -451,7 +451,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
           attemptId.current = undefined;
           requestKey.current = `pos-terminal-${order.id}-${uuid()}`;
           setChecking(false); onLock?.(false);
-          throw new Error(body.reason ?? (body.state === "voided" ? "The customer cancelled at the reader." : "The card was declined at the reader."));
+          throw new Error(body.reason ?? (body.state === "voided" ? "The reader cancelled the payment." : "The card was declined at the reader."));
         }
         action = "status";
         await new Promise((resolve) => setTimeout(resolve, pax ? 4000 : 2500));
