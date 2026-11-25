@@ -16,6 +16,7 @@ const configSchema = z.object({
   email: z.email(),
   clientSecret: z.string().min(1),
   apiToken: z.string().min(1),
+  connectToken: z.string().min(1).optional(),
   callbackOrigin: originSchema,
   loginOrigin: connectOriginSchema,
   apiOrigin: connectOriginSchema,
@@ -36,6 +37,7 @@ export function payarcConnectConfig(env: Record<string, string | undefined> = pr
     email: env.PAYARC_CONNECT_EMAIL,
     clientSecret: env.PAYARC_CONNECT_CLIENT_SECRET,
     apiToken: env.PAYARC_API_TOKEN,
+    connectToken: env.PAYARC_CONNECT_API_TOKEN?.trim() || undefined,
     callbackOrigin: env.PAYARC_CONNECT_CALLBACK_ORIGIN,
     loginOrigin: env.PAYARC_CONNECT_LOGIN_ORIGIN || (sandbox ? "https://testpayarcconnectapi.curvpos.com" : undefined),
     apiOrigin: env.PAYARC_CONNECT_API_ORIGIN || (sandbox ? "https://testpayarcconnectapi.payarc.net" : undefined),
@@ -121,7 +123,8 @@ export function payarcConnectOutcome(input: unknown, attempt: PayarcConnectAttem
 
 let loginCache: { config: PayarcConnectConfig; token: string; expiresAt: number } | undefined;
 
-export async function payarcConnectLogin(config: PayarcConnectConfig) {
+export async function payarcConnectAccessToken(config: PayarcConnectConfig) {
+  if (config.connectToken) return config.connectToken;
   if (loginCache && loginCache.expiresAt > Date.now() &&
       loginCache.config.loginMid === config.loginMid && loginCache.config.email === config.email &&
       loginCache.config.loginOrigin === config.loginOrigin && loginCache.config.apiOrigin === config.apiOrigin &&

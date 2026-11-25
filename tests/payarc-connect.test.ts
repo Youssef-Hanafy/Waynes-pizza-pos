@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { reconcilePayarcConnectNotice } from "@/lib/payments/payarc-connect-operation";
 import {
-  payarcConnectCallbackAuthorized, payarcConnectConfig, payarcConnectLogin, payarcConnectOutcome,
+  payarcConnectCallbackAuthorized, payarcConnectConfig, payarcConnectAccessToken, payarcConnectOutcome,
   sendPayarcConnectSale, type PayarcConnectAttempt,
 } from "@/lib/payments/payarc-connect";
 
@@ -35,6 +35,14 @@ const approval = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Payarc Connect V3", () => {
+  it("uses a dedicated V3 bearer credential without exchanging the merchant gateway token", async () => {
+    const fetchApi = vi.fn();
+    vi.stubGlobal("fetch", fetchApi);
+    const config = payarcConnectConfig({ ...env, PAYARC_CONNECT_API_TOKEN: "verified-connect-token" })!;
+    expect(await payarcConnectAccessToken(config)).toBe("verified-connect-token");
+    expect(fetchApi).not.toHaveBeenCalled();
+  });
+
   it("keeps the merchant profile MID for Login separate from the V3 tenant ID", async () => {
     const config = payarcConnectConfig({ ...env, PAYARC_CONNECT_LOGIN_MID: "0709900000098856" })!;
     const send = vi.fn().mockResolvedValue(Response.json({
@@ -42,7 +50,7 @@ describe("Payarc Connect V3", () => {
       BearerTokenInfo: { AccessToken: "connect-access-token" },
     }));
     vi.stubGlobal("fetch", send);
-    expect(await payarcConnectLogin(config)).toBe("connect-access-token");
+    expect(await payarcConnectAccessToken(config)).toBe("connect-access-token");
     expect(JSON.parse(send.mock.calls[0]![1].body).MID).toBe("0709900000098856");
     expect(config.mid).toBe(env.PAYARC_CONNECT_MID);
     expect(payarcConnectConfig(env)?.loginMid).toBe(env.PAYARC_CONNECT_MID);

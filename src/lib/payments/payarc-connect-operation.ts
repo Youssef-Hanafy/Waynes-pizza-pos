@@ -6,7 +6,7 @@ import { paymentErrorMessage, terminalActionSchema } from "@/lib/payments/schema
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import type { z } from "zod";
 import {
-  cancelPayarcConnectSale, payarcConnectAttemptSchema, payarcConnectConfig, payarcConnectLogin,
+  cancelPayarcConnectSale, payarcConnectAttemptSchema, payarcConnectConfig, payarcConnectAccessToken,
   payarcConnectNoticeTrace, payarcConnectOutcome, readPayarcConnectSale, sendPayarcConnectSale,
   type PayarcConnectAttempt, type PayarcConnectConfig,
 } from "./payarc-connect";
@@ -54,7 +54,7 @@ export async function reconcilePayarcConnectNotice(service: Service, config: Pay
 
   // An inbound notification can only prompt a lookup. Payarc Connect's
   // authenticated response establishes the final outcome.
-  const token = await payarcConnectLogin(config);
+  const token = await payarcConnectAccessToken(config);
   const transaction = await readPayarcConnectSale(config, token, traceId);
   const state = await applyPayarcConnectOutcome(service, { ...attempt, terminal_checkout_id: traceId }, transaction);
   return state !== "pending";
@@ -88,7 +88,7 @@ export async function handlePayarcConnectPayment(access: CurrentAccess, request:
     if (data.duplicate) return stateResponse(attempt);
 
     let token: string;
-    try { token = await payarcConnectLogin(config); }
+    try { token = await payarcConnectAccessToken(config); }
     catch {
       const reason = "Payarc Connect could not sign in. Check the reader configuration.";
       const state = await saveState(service, attempt.id, { status: "failed", provider_status: "LOGIN_FAILED", failure_reason: reason });
@@ -126,7 +126,7 @@ export async function handlePayarcConnectPayment(access: CurrentAccess, request:
   if (attempt.metadata.environment !== config.environment || attempt.metadata.payarc_connect_serial !== config.serial) return stateResponse(attempt);
 
   try {
-    const token = await payarcConnectLogin(config);
+    const token = await payarcConnectAccessToken(config);
     if (request.action === "cancel") await cancelPayarcConnectSale(config, token, attempt.terminal_checkout_id, config.serial);
     const body = await readPayarcConnectSale(config, token, attempt.terminal_checkout_id);
     return stateResponse(attempt, await applyPayarcConnectOutcome(service, attempt, body));

@@ -283,6 +283,7 @@ Apply `20261207090000_online_original_card_extras.sql` with this release.
    | `PAYARC_CONNECT_LOGIN_MID` | Merchant Profile MID when Payarc assigns a different ID for Connect Login |
    | `PAYARC_CONNECT_EMAIL` | Payarc merchant dashboard sign-in email |
    | `PAYARC_CONNECT_CLIENT_SECRET` | Merchant API Client Secret |
+   | `PAYARC_CONNECT_API_TOKEN` | Optional bearer credential already verified against Payarc Connect V3 |
    | `PAYARC_CONNECT_CALLBACK_ORIGIN` | Public POS HTTPS origin, with no path or trailing slash |
    | `PAYARC_CONNECT_LOGIN_ORIGIN` | Provider-confirmed production Connect Login origin |
    | `PAYARC_CONNECT_API_ORIGIN` | Provider-confirmed production Connect V3 origin |
