@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { reconcilePayarcConnectNotice } from "@/lib/payments/payarc-connect-operation";
+import type { CurrentAccess } from "@/lib/auth/permissions";
+import { handlePayarcConnectPayment, reconcilePayarcConnectNotice } from "@/lib/payments/payarc-connect-operation";
+import * as supabaseServer from "@/lib/supabase/server";
 import {
   checkPayarcConnectReader, payarcConnectCallbackAuthorized, payarcConnectConfig, payarcConnectAccessToken, payarcConnectOutcome,
   sendPayarcConnectSale, type PayarcConnectAttempt,
@@ -32,7 +34,10 @@ const approval = {
   amount: { total: 2700, approved: 2700, currency: "USD", tip: 500, tax: 200 },
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("Payarc Connect V3", () => {
   it("uses a dedicated V3 bearer credential without exchanging the merchant gateway token", async () => {
@@ -65,6 +70,33 @@ describe("Payarc Connect V3", () => {
     expect(JSON.parse(send.mock.calls[0]![1].body).MID).toBe("0709900000098856");
     expect(config.mid).toBe(env.PAYARC_CONNECT_MID);
     expect(payarcConnectConfig(env)?.loginMid).toBe(env.PAYARC_CONNECT_MID);
+  });
+
+  it.each([200, 400])("responds to a Payarc %i cancellation without a second network call", async (status) => {
+    const fetchApi = vi.fn().mockResolvedValueOnce(Response.json({}, { status }));
+    vi.stubGlobal("fetch", fetchApi);
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { ...attempt, terminal_checkout_id: traceId }, error: null }),
+    };
+    const settle = vi.fn();
+    vi.spyOn(supabaseServer, "createServiceSupabaseClient").mockReturnValue({
+      from: vi.fn().mockReturnValue(query), rpc: settle,
+    } as unknown as ReturnType<typeof supabaseServer.createServiceSupabaseClient>);
+    const config = payarcConnectConfig({ ...env, PAYARC_CONNECT_API_TOKEN: "verified-connect-token" })!;
+    const reader = { id: randomUUID(), label: "PAX A35", payarc_connect: true as const };
+    const result = await handlePayarcConnectPayment({ workspace_id: randomUUID() } as CurrentAccess, {
+      action: "cancel", terminal_id: reader.id, order_id: randomUUID(), payment_id: attempt.id, idempotency_key: randomUUID(),
+    }, { ready: true, config, reader });
+
+    expect(fetchApi).toHaveBeenCalledExactlyOnceWith(
+      `https://testpayarcconnectapi.payarc.net/v3/transactions/${traceId}/cancel`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tenantId: config.mid, terminalId: config.serial }) }),
+    );
+    expect(settle).not.toHaveBeenCalled();
+    expect(result.status).toBe(status === 200 ? 200 : 409);
+    if (status === 200) await expect(result.json()).resolves.toMatchObject({ state: "pending", payment_id: attempt.id });
   });
 
   it("posts the tip-inclusive amount and suppresses the reader tip prompt", async () => {

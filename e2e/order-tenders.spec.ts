@@ -168,12 +168,14 @@ test("checkout preserves item notes and submits order notes", async ({ page }) =
   expect(payload).toMatchObject({ special_instructions: "Call before delivery", items: [{ special_instructions: "Please add extra cheese" }] });
 });
 
-test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits for approval", async ({ page, context }) => {
+for (const tipCents of [500, 0]) test(`PAX Pay sends the total once after the tablet chooses ${tipCents ? "$5" : "No tip"}`, async ({ page, context }) => {
   const readerId = "7d000000-0000-4000-8000-000000000030";
   const paymentId = "7d000000-0000-4000-8000-000000000031";
   let screenState: Record<string, unknown> = {};
   let answer: Record<string, unknown> = {};
-  let approve = false;
+  const totalCents = 3000 + tipCents;
+  const totalLabel = `$${(totalCents / 100).toFixed(2)}`;
+  let readerState: "pending" | "captured" | "voided" = "pending";
   const sales: Array<Record<string, unknown>> = [];
   let finishTipSave: () => void = () => {};
   const tipSaveGate = new Promise<void>((resolve) => { finishTipSave = resolve; });
@@ -202,15 +204,16 @@ test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits 
     const payload = route.request().postDataJSON();
     if (payload.action === "resume") return route.fulfill({ json: { state: "none" } });
     if (payload.action === "cancel") {
-      return route.fulfill({ status: 409, json: { error: "Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet." } });
+      if (tipCents) return route.fulfill({ status: 409, json: { error: "Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet." } });
+      return route.fulfill({ json: { payment_id: paymentId, state: "pending", reason: "Cancellation requested. Waiting for the reader to confirm." } });
     }
     if (payload.action === "start") sales.push(payload);
-    return route.fulfill({ json: { payment_id: paymentId, amount_cents: 3500, state: approve ? "captured" : "pending" } });
+    return route.fulfill({ json: { payment_id: paymentId, amount_cents: totalCents, state: readerState } });
   });
   await page.route("**/api/pos/orders/*/tip", async (route) => {
-    expect(route.request().postDataJSON()).toEqual({ tip_cents: 500 });
+    expect(route.request().postDataJSON()).toEqual({ tip_cents: tipCents });
     await tipSaveGate;
-    await route.fulfill({ json: { tip_cents: 500, total_cents: 3500 } });
+    await route.fulfill({ json: { tip_cents: tipCents, total_cents: totalCents } });
   });
 
   await page.goto("/reader");
@@ -225,20 +228,30 @@ test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits 
   await expect(tablet.getByText("Add a tip?")).toBeVisible();
   expect(sales).toHaveLength(0);
   const saving = page.waitForRequest((request) => request.url().endsWith("/tip"));
-  await tablet.getByRole("button", { name: "$5", exact: true }).click();
+  await tablet.getByRole("button", { name: tipCents ? "$5" : "No tip", exact: true }).click();
   await saving;
+  await expect(tablet.getByText("Confirming your total…")).toBeVisible();
   expect(sales).toHaveLength(0);
   finishTipSave();
 
   await expect.poll(() => sales.length).toBe(1);
-  expect(sales[0]).toMatchObject({ expected_amount_cents: 3500, terminal_id: readerId });
-  await expect(tablet.getByText("$35.00", { exact: true })).toBeVisible();
+  expect(sales[0]).toMatchObject({ expected_amount_cents: totalCents, terminal_id: readerId });
+  await expect(tablet.getByText(totalLabel, { exact: true })).toBeVisible();
   await expect(page.locator("output")).toHaveText("Order open");
   await page.getByRole("button", { name: "Cancel on reader" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet.");
-  approve = true;
-  await expect(page.getByText("Approved · $35.00", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Skip signature" }).click();
-  await expect(page.locator("output")).toHaveText("Finished");
+  if (tipCents) {
+    await expect(page.getByRole("alert")).toHaveText("Payarc has not confirmed the request on this reader. The POS cannot send a cancellation yet.");
+    readerState = "captured";
+    await expect(page.getByText(`Approved · ${totalLabel}`, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Skip signature" }).click();
+    await expect(page.locator("output")).toHaveText("Finished");
+  } else {
+    await expect(page.getByText("Cancellation requested. Waiting for the reader to confirm.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancelling…" })).toBeDisabled();
+    readerState = "voided";
+    await expect(page.getByRole("alert")).toHaveText("The reader cancelled the payment.");
+    await expect(page.getByRole("button", { name: `Charge ${totalLabel} on the reader` })).toBeEnabled();
+    await expect(page.locator("output")).toHaveText("Order open");
+  }
   expect(sales).toHaveLength(1);
 });

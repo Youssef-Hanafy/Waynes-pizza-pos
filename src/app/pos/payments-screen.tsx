@@ -417,6 +417,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelRequested, setCancelRequested] = useState(false);
   const [last4, setLast4] = useState("");
   const [approval, setApproval] = useState("");
   const alive = useRef(true);
@@ -427,6 +428,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   async function sendToReader() {
     if (!terminalId || inFlight.current) return;
     inFlight.current = true;
+    setCancelRequested(false);
     const finish = beginCriticalWork("card reader payment");
     onLock?.(true); setCharging(true); setBusy(true); onError(""); setNote("Sending the total to the reader…");
     try {
@@ -458,7 +460,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
           throw new Error(body.reason ?? (body.state === "voided" ? "The reader cancelled the payment." : "The card was declined at the reader."));
         }
         action = "status";
-        await new Promise((resolve) => setTimeout(resolve, pax ? 4000 : 2500));
+        await new Promise((resolve) => setTimeout(resolve, pax ? 1250 : 2500));
       }
       throw new Error("The reader did not answer in time. Check it before charging again.");
     } catch (cause) {
@@ -492,7 +494,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   }, [autoStart, terminals.length, terminalId]);
 
   async function cancelOnReader() {
-    if (cancelling) return;
+    if (cancelling || cancelRequested) return;
     setCancelling(true);
     onError("");
     try {
@@ -500,6 +502,7 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
       if (!response.ok) throw new Error(await readError(response, "The cancellation could not be confirmed."));
       const body = readerPaymentSchema.safeParse(await response.json());
       if (alive.current && inFlight.current) {
+        if (pax) setCancelRequested(true);
         setNote(body.success && body.data.reason ? body.data.reason : "Checking the reader for the final result…");
       }
     } catch (cause) {
@@ -545,8 +548,8 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
     {terminals.length ? <div className="rounded-2xl border-2 border-wayne-green p-4">
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
-      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button disabled={cancelling} onClick={() => { void cancelOnReader(); }} variant="secondary">{cancelling ? "Cancelling…" : "Cancel on reader"}</Button></div>
-        : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">{checking && pax ? "Check reader payment" : `Charge ${formatCents(order.total_cents)} on the reader`}</Button>}
+      {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{cancelling ? "Sending cancellation to the reader…" : note}</p><Button disabled={cancelling || cancelRequested} onClick={() => { void cancelOnReader(); }} variant="secondary">{cancelling || cancelRequested ? "Cancelling…" : "Cancel on reader"}</Button></div>
+        : <Button className="mt-3 w-full text-xl" disabled={busy || cancelling} onClick={() => { void sendToReader(); }} size="lg">{checking && pax ? "Check reader payment" : `Charge ${formatCents(order.total_cents)} on the reader`}</Button>}
     </div> : null}
 
     {!pax ? manualReader : null}

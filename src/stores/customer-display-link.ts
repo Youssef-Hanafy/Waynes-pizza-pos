@@ -12,8 +12,8 @@ import { uuid } from "@/lib/uuid";
  *
  * The register keeps one "what the customer should see" state and sends it to
  * the server whenever it changes. Revision events wake a read of saved answers;
- * healthy connections use a 30-second heartbeat. A disconnected link falls back
- * to the previous fast polling, including once a second during tip/signature requests.
+ * healthy idle connections use a 30-second heartbeat. Check for answers every
+ * second while waiting for a tip or signature, even if live events are connected.
  *
  * The screen is found by this register's name (More → This register).
  */
@@ -115,7 +115,7 @@ async function send() {
 
 function tick() {
   if (document.visibilityState !== "visible") return;
-  const interval = eventsReady && !failureSince ? 30_000 : activeRequestId ? 1000 : 4000;
+  const interval = waiter ? 1000 : eventsReady && !failureSince ? 30_000 : 4000;
   if (dirty || resync || getTerminalLabel() !== eventsKey || Date.now() - lastSent >= interval) void send();
 }
 

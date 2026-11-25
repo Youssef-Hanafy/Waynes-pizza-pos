@@ -51,23 +51,28 @@ beforeEach(async () => {
 });
 
 describe("customer screen connection", () => {
-  it("uses live events for answers while healthy, then resumes fast checks after disconnect", async () => {
+  it.each([300, 0])("picks up a %i-cent tip within a second even when live events are missed", async (tipCents) => {
     events.connection(true);
     await advance(20_000);
     expect(publish).toHaveBeenCalledTimes(1);
     const request = link.askCustomer({ phase: "tip", total_cents: 2000 });
     await advance(600);
     const requestId = lastState().request_id as string;
-    const sent = publish.mock.calls.length;
-    await advance(5000);
-    expect(publish).toHaveBeenCalledTimes(sent);
-    publish.mockResolvedValue(online({ response: { request_id: requestId, kind: "tip", tip_cents: 300 } }));
+    publish.mockResolvedValue(online({ response: { request_id: requestId, kind: "tip", tip_cents: tipCents } }));
+    const receive = vi.fn();
+    void request.answer.then(receive);
+    await advance(1000);
+    expect(receive).toHaveBeenCalledWith(expect.objectContaining({ tip_cents: tipCents }));
+  });
+
+  it("refreshes immediately on a live event and keeps checking after disconnect", async () => {
+    events.connection(true);
     events.changed();
-    await advance(600);
-    await expect(request.answer).resolves.toMatchObject({ tip_cents: 300 });
+    await advance(500);
+    expect(publish).toHaveBeenCalledTimes(2);
     events.connection(false);
-    await advance(1500);
-    expect(publish.mock.calls.length).toBeGreaterThan(sent + 1);
+    await advance(4000);
+    expect(publish).toHaveBeenCalledTimes(3);
   });
 
   it("one dropped heartbeat does not mark the customer screen offline", async () => {

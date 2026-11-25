@@ -81,6 +81,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
     let alive = true;
     let polling = false;
     let eventsReady = false;
+    let checkoutActive = false;
     let lastRead = 0;
     let again = false;
     async function poll() {
@@ -91,7 +92,10 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
         const result = await readCustomerDisplay(key);
         if (!alive) return;
         const next = displayStateSchema.safeParse(result.state);
-        if (next.success) setState(next.data);
+        if (next.success) {
+          checkoutActive = next.data.phase !== "idle" && next.data.phase !== "thanks";
+          setState(next.data);
+        }
         setRegisterOnline(result.found && result.register_online !== false);
         setProblem("");
         lastRead = Date.now();
@@ -105,7 +109,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
     void poll();
     const stop = watchPosRefresh("display", key.trim().slice(0, 60), () => { void poll(); }, ready => { eventsReady = ready; });
     const timer = window.setInterval(() => {
-      if (Date.now() - lastRead >= (eventsReady ? 30_000 : 900)) void poll();
+      if (Date.now() - lastRead >= (eventsReady && !checkoutActive ? 4500 : 900)) void poll();
     }, 900);
     const visible = () => { if (document.visibilityState === "visible") void poll(); };
     document.addEventListener("visibilitychange", visible);
@@ -148,7 +152,7 @@ export function CustomerScreen({ storeName }: { storeName: string }) {
       </>
       : state.phase === "thanks" ? <Thanks state={state} storeName={storeName} />
       : waitingOnRegister ? <Centered>{state.phase === "tip"
-        ? <><p className="text-4xl font-black">Thank you!</p><p className="mt-3 text-2xl">Please follow the card reader.</p></>
+        ? <p aria-live="polite" className="text-4xl font-black">Confirming your total…</p>
         // The register says Thank you once the signature is actually saved (owner, 2026-10-29).
         : <p className="text-4xl font-black">One moment…</p>}</Centered>
       : <OrderView state={state} />}
