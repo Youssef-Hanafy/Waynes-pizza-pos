@@ -184,7 +184,7 @@ export async function cancelPayarcConnectSale(config: PayarcConnectConfig, token
 }
 
 export async function checkPayarcConnectReader(config: PayarcConnectConfig) {
-  const token = await payarcConnectLogin(config);
+  const token = await payarcConnectAccessToken(config);
   const result = await connectRequest(config, token, `/terminals/${config.serial}/connectivity`, randomUUID());
   const parsed = z.object({ serialNumber: serialSchema.optional(), online: z.boolean().nullable() }).safeParse(result.body);
   if (!result.ok || !parsed.success || (parsed.data.serialNumber && parsed.data.serialNumber !== config.serial)) {

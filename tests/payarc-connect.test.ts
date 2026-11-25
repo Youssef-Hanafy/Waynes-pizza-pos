@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { reconcilePayarcConnectNotice } from "@/lib/payments/payarc-connect-operation";
 import {
-  payarcConnectCallbackAuthorized, payarcConnectConfig, payarcConnectAccessToken, payarcConnectOutcome,
+  checkPayarcConnectReader, payarcConnectCallbackAuthorized, payarcConnectConfig, payarcConnectAccessToken, payarcConnectOutcome,
   sendPayarcConnectSale, type PayarcConnectAttempt,
 } from "@/lib/payments/payarc-connect";
 
@@ -41,6 +41,17 @@ describe("Payarc Connect V3", () => {
     const config = payarcConnectConfig({ ...env, PAYARC_CONNECT_API_TOKEN: "verified-connect-token" })!;
     expect(await payarcConnectAccessToken(config)).toBe("verified-connect-token");
     expect(fetchApi).not.toHaveBeenCalled();
+  });
+
+  it("checks reader connectivity with the same V3 credential used for sales", async () => {
+    const fetchApi = vi.fn().mockResolvedValue(Response.json({ serialNumber: env.PAYARC_CONNECT_TERMINAL_SERIAL, online: true }));
+    vi.stubGlobal("fetch", fetchApi);
+    const config = payarcConnectConfig({ ...env, PAYARC_CONNECT_API_TOKEN: "verified-connect-token" })!;
+    expect(await checkPayarcConnectReader(config)).toBe(true);
+    expect(fetchApi).toHaveBeenCalledWith(
+      `https://testpayarcconnectapi.payarc.net/v3/terminals/${config.serial}/connectivity`,
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer verified-connect-token" }) }),
+    );
   });
 
   it("keeps the merchant profile MID for Login separate from the V3 tenant ID", async () => {
