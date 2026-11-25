@@ -255,3 +255,60 @@ Apply `20261207090000_online_original_card_extras.sql` with this release.
   payment can still receive its extra slip tip after these sales are confirmed.
 - Verification uses real isolated PostgreSQL, mocked processor responses and
   browser fixtures. No live customer charge was submitted during development.
+
+## PAX A35 counter setup
+
+1. Attach the communication cable to the USB-C port under the back cover and
+   reinstall the cover. Connect Ethernet through the communication cable and
+   power the A35 using the cable's DC input and the supplied adapter. The exact
+   power connection depends on the supplied cable. Confirm Ethernet has an IP
+   address. Position the reader where the customer can shield PIN entry.
+   [PAX A35 Quick Setup Guide](https://www.pax.us/support/documents/a35-quick-setup-guide/)
+2. Ask the processor to register the existing A35 serial to the store's merchant
+   ID and provision the Payarc Connect app in V3 mode. Request the production Login
+   and V3 API origins. Payarc lists Connect as
+   a distinct application option for PAX devices.
+   [Payarc terminal setup questionnaire](https://sales.payarc.com/hubfs/Partner_Resource_Center/Forms/Payarc_TSQ.pdf)
+3. In Admin → Payments → Card readers, add **Front counter PAX A35** with the
+   device's 10-digit serial as its Device ID and leave it Active.
+4. Set the following server variables for the same environment and merchant as
+   the existing Payarc connection. Keep the existing Payarc website and keyed-card
+   settings in Admin → Payments.
+
+   | Variable | Value |
+   | --- | --- |
+   | `PAYARC_CONNECT_LOCATION_ID` | UUID of the POS location where the A35 is registered |
+   | `PAYARC_CONNECT_TERMINAL_SERIAL` | Registered 10-digit A35 serial |
+   | `PAYARC_CONNECT_MID` | 12-digit Payarc Connect V3 tenant ID provided for the terminal |
+   | `PAYARC_CONNECT_LOGIN_MID` | Merchant Profile MID when Payarc assigns a different ID for Connect Login |
+   | `PAYARC_CONNECT_EMAIL` | Payarc merchant dashboard sign-in email |
+   | `PAYARC_CONNECT_CLIENT_SECRET` | Merchant API Client Secret |
+   | `PAYARC_CONNECT_CALLBACK_ORIGIN` | Public POS HTTPS origin, with no path or trailing slash |
+   | `PAYARC_CONNECT_LOGIN_ORIGIN` | Provider-confirmed production Connect Login origin |
+   | `PAYARC_CONNECT_API_ORIGIN` | Provider-confirmed production Connect V3 origin |
+
+   The existing `PAYARC_API_TOKEN` and `PAYARC_ENVIRONMENT` are also used for
+   Connect. The sandbox origins default to the hosts in the documentation.
+   Payarc must be able to reach `/api/payments/payarc-connect/<payment-id>`
+   on the configured public origin. Each callback URL carries a per-payment
+   signature. The POS treats callbacks as notifications and verifies outcomes
+   through an authenticated Payarc Connect transaction lookup.
+   [Connect Login](https://docs.payarc.net/reference/login)
+   [V3 transaction callbacks](https://docs.payarc.net/reference/transaction-callback-v3)
+5. Apply `20261213080000_payarc_connect_counter_reader.sql` after the preceding
+   database migrations. Deploy the application with the reader variables, then
+   use **Check PAX connection** under Admin → Payments → Card readers. This
+   checks authentication and live terminal connectivity without sending a sale.
+   [Terminal connectivity](https://docs.payarc.net/reference/getterminalconnectivity)
+6. On the counter POS choose **Card reader → Pay** on a normal order. On the
+   paired customer tablet, select a tip or **No tip**. The register saves the
+   tip and automatically sends the final total to the A35. The A35 uses that
+   total for chip or contactless payment. Check the tablet total, the captured
+   payment in the POS, and the charge in the merchant dashboard. Verify the same
+   charge can be looked up by ID for voids and refunds through the merchant API.
+   The POS Test order toggle simulates reader payments.
+   [V3 sale](https://docs.payarc.net/reference/createsaletransaction)
+
+If the register loses the result, use **Check reader payment**. A reopened ticket
+can resume a pending payment on the same reader. If the result remains uncertain,
+check the terminal and Payarc records before collecting payment again.

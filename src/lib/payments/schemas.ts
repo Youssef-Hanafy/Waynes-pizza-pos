@@ -132,10 +132,12 @@ export const posKeyedCardConfirmSchema = z.object({ payment_id: z.uuid() });
 
 export const terminalActionSchema = z.object({
   amount_cents: z.number().int().positive().max(10_000_000).optional(),
+  expected_amount_cents: z.number().int().positive().max(10_000_000).optional(),
+  payment_id: z.uuid().optional(),
   order_id: z.uuid(),
   terminal_id: z.uuid(),
   idempotency_key: z.string().min(16).max(160),
-  action: z.enum(["start", "status", "cancel"]),
+  action: z.enum(["start", "status", "cancel", "resume"]),
 });
 
 export const refundRequestSchema = z.object({

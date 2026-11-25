@@ -27,18 +27,30 @@ function fakeScreen() {
   return { ask, asks };
 }
 
-function tipHarness(orderTotalCents = 2000) {
+function tipHarness(orderTotalCents = 2000, requireAnswer = false) {
   const screen = fakeScreen();
   const saves: Array<{ tip: number; reply: ReturnType<typeof deferred<{ total_cents: number }>> }> = [];
   const saveTip = vi.fn((tip: number) => { const reply = deferred<{ total_cents: number }>(); saves.push({ tip, reply }); return reply.promise; });
   const onDone = vi.fn();
   const showPay = vi.fn();
   const views: unknown[] = [];
-  const step = startTipStep({ orderTotalCents, ask: screen.ask, saveTip, showPay, onDone, onView: (view) => views.push(view) });
+  const step = startTipStep({ orderTotalCents, requireAnswer, ask: screen.ask, saveTip, showPay, onDone, onView: (view) => views.push(view) });
   return { step, screen, saves, saveTip, onDone, showPay, views };
 }
 
 describe("tip on the customer screen", () => {
+  it("holds a PAX payment after the tablet request is interrupted until a zero tip is explicitly saved", async () => {
+    const h = tipHarness(2000, true);
+    h.screen.asks[0]!.answer(null);
+    await flush();
+    expect(h.onDone).not.toHaveBeenCalled();
+    h.step.skip();
+    expect(h.saveTip).toHaveBeenCalledWith(0);
+    expect(h.onDone).not.toHaveBeenCalled();
+    h.saves[0]!.reply.resolve({ total_cents: 2000 });
+    await flush();
+    expect(h.onDone).toHaveBeenCalledWith(2000);
+  });
   it("a slow tip save and a Skip tap never complete the checkout twice or with two totals", async () => {
     const h = tipHarness(2000);
     h.screen.asks[0]!.answer({ request_id: "r1", kind: "tip", tip_cents: 500 });

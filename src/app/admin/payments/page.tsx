@@ -12,7 +12,7 @@ import { formatAdminDateTime } from "@/lib/orders/admin-format";
 import { paymentSecretsPresent } from "@/lib/payments/config";
 import { getPaymentConnectionsSummary, getPaymentConsole, getPaymentReconciliation } from "@/lib/payments/queries";
 import type { PaymentConsole, PaymentReconciliation } from "@/lib/payments/schemas";
-import { savePaymentSettings, savePaymentTerminal } from "./actions";
+import { checkPaxReader, savePaymentSettings, savePaymentTerminal } from "./actions";
 
 export const metadata: Metadata = { title: "Payments" };
 export const dynamic = "force-dynamic";
@@ -151,9 +151,12 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       </ul> : <p className="mt-4 text-sm text-wayne-muted">No card readers are registered yet.</p>}
       <form action={savePaymentTerminal} className="mt-5 grid gap-3 rounded-xl border border-dashed border-wayne-border p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Input id="new-terminal-label" label="New reader name" name="label" placeholder="Front counter" required />
-        <Input id="new-terminal-device" label="Device ID" name="device_id" placeholder="9fa747a2-…" required />
+        <Input id="new-terminal-device" label="Device ID" name="device_id" placeholder={access.location_id === process.env.PAYARC_CONNECT_LOCATION_ID ? "10-digit PAX serial" : "9fa747a2-…"} required />
         <Button type="submit">Add reader</Button>
       </form>
+      {access.location_id && access.location_id === process.env.PAYARC_CONNECT_LOCATION_ID ? <form action={checkPaxReader} className="mt-3">
+        <Button type="submit" variant="secondary">Check PAX connection</Button>
+      </form> : null}
     </Card>
 
     <section className="mt-10">

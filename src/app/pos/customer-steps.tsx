@@ -33,7 +33,7 @@ function ScreenTrouble({ what }: { what: string }) {
  * new total.  The cashier can skip it.  The step ends once, with the total the
  * server has (owner, 2026-10-29).
  */
-export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (order: OpenOrder) => void }) {
+export function CustomerTipStep({ order, onDone, requireAnswer }: { order: OpenOrder; onDone: (order: OpenOrder) => void; requireAnswer?: boolean }) {
   const [view, setView] = useState<TipView>({ stage: "waiting" });
   const error = view.stage === "failed" ? view.error : "";
   // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
@@ -43,6 +43,7 @@ export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (
   useEffect(() => {
     const started = startTipStep({
       orderTotalCents: order.total_cents,
+      requireAnswer,
       ask: () => askCustomer({ phase: "tip", order_number: ticketNumber(order), total_cents: order.total_cents, tip_base_cents: order.total_cents }),
       saveTip: async (tip) => {
         const response = await fetch(`/api/pos/orders/${order.id}/tip`, {
@@ -57,7 +58,7 @@ export function CustomerTipStep({ order, onDone }: { order: OpenOrder; onDone: (
     });
     step.current = started;
     return () => { started.stop(); };
-  }, [order, onDone]);
+  }, [order, onDone, requireAnswer]);
 
   const saving = view.stage === "saving";
   const note = view.stage === "waiting" ? "Waiting for the customer to choose a tip on the screen…"

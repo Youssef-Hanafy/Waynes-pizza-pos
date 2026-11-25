@@ -167,3 +167,70 @@ test("checkout preserves item notes and submits order notes", async ({ page }) =
   await expect(page.getByText("Fixture recorded", { exact: true })).toBeVisible();
   expect(payload).toMatchObject({ special_instructions: "Call before delivery", items: [{ special_instructions: "Please add extra cheese" }] });
 });
+
+test("PAX Pay waits for the tablet tip, sends the adjusted total once and waits for approval", async ({ page, context }) => {
+  const readerId = "7d000000-0000-4000-8000-000000000030";
+  const paymentId = "7d000000-0000-4000-8000-000000000031";
+  let screenState: Record<string, unknown> = {};
+  let answer: Record<string, unknown> = {};
+  let approve = false;
+  const sales: Array<Record<string, unknown>> = [];
+  let finishTipSave: () => void = () => {};
+  const tipSaveGate = new Promise<void>((resolve) => { finishTipSave = resolve; });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(document, "visibilityState", { get: () => "visible" });
+    localStorage.setItem("wayne-customer-screen-register", "Register 1");
+  });
+  await context.route("**/rest/v1/rpc/wayne_display_*", async (route) => {
+    const name = new URL(route.request().url()).pathname.split("/").pop();
+    const payload = route.request().postDataJSON();
+    if (name === "wayne_display_publish") {
+      screenState = payload.screen_state;
+      await route.fulfill({ json: { screen_online: true, response: answer } });
+    } else if (name === "wayne_display_respond") {
+      answer = payload.answer;
+      await route.fulfill({ json: { accepted: true } });
+    } else {
+      await route.fulfill({ json: { state: screenState, found: true, register_online: true } });
+    }
+  });
+  await page.route("**/api/pos/terminal", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: [{ id: readerId, label: "PAX A35", payarc_connect: true }] });
+    }
+    const payload = route.request().postDataJSON();
+    if (payload.action === "resume") return route.fulfill({ json: { state: "none" } });
+    if (payload.action === "start") sales.push(payload);
+    return route.fulfill({ json: { payment_id: paymentId, amount_cents: 3500, state: approve ? "captured" : "pending" } });
+  });
+  await page.route("**/api/pos/orders/*/tip", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ tip_cents: 500 });
+    await tipSaveGate;
+    await route.fulfill({ json: { tip_cents: 500, total_cents: 3500 } });
+  });
+
+  await page.goto("/reader");
+  const tablet = await context.newPage();
+  await tablet.goto("/tablet");
+  await tablet.getByRole("button", { name: "Tap anywhere to start" }).click();
+  await page.getByRole("button", { name: /^Card reader/ }).click();
+  await page.getByRole("button", { name: "Pay $30.00", exact: true }).click();
+  await expect(tablet.getByText("Add a tip?")).toBeVisible();
+  expect(sales).toHaveLength(0);
+  const saving = page.waitForRequest((request) => request.url().endsWith("/tip"));
+  await tablet.getByRole("button", { name: "$5", exact: true }).click();
+  await saving;
+  expect(sales).toHaveLength(0);
+  finishTipSave();
+
+  await expect.poll(() => sales.length).toBe(1);
+  expect(sales[0]).toMatchObject({ expected_amount_cents: 3500, terminal_id: readerId });
+  await expect(tablet.getByText("$35.00", { exact: true })).toBeVisible();
+  await expect(page.locator("output")).toHaveText("Order open");
+  approve = true;
+  await expect(page.getByText("Approved · $35.00", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Skip signature" }).click();
+  await expect(page.locator("output")).toHaveText("Finished");
+  expect(sales).toHaveLength(1);
+});

@@ -5,16 +5,21 @@ import { resolvePaymentProvider } from "@/lib/payments/config";
 import { PaymentProviderError } from "@/lib/payments/provider";
 import { paymentErrorMessage, terminalActionSchema } from "@/lib/payments/schemas";
 import { getPosTerminals } from "@/lib/payments/queries";
+import { getPayarcConnectReader, handlePayarcConnectPayment } from "@/lib/payments/payarc-connect-operation";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 /** Card readers the counter may charge. Empty when reader payment is switched off. */
 export async function GET() {
   const access = await getCurrentAccess();
-  if (!hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
+  if (!access || !hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
   try {
+    const setup = await getPayarcConnectReader(access);
+    if (setup) return setup.ready
+      ? Response.json([setup.reader], { headers: { "Cache-Control": "no-store" } })
+      : Response.json({ error: "The PAX reader setup is incomplete." }, { status: 503 });
     return Response.json(await getPosTerminals(), { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return Response.json([], { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ error: "The card reader configuration could not be loaded." }, { status: 503 });
   }
 }
 
@@ -25,11 +30,20 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   const access = await getCurrentAccess();
-  if (!hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
+  if (!access || !hasPermission(access, "pos.access")) return Response.json({ error: "POS access required." }, { status: 403 });
   if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
 
   const parsed = terminalActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid card reader request." }, { status: 400 });
+
+  try {
+    const setup = await getPayarcConnectReader(access);
+    if (setup) return await handlePayarcConnectPayment(access, parsed.data, setup);
+  } catch {
+    logger.warn("terminal.payarc_connect_unavailable", { order_id: parsed.data.order_id });
+    return Response.json({ error: "The PAX payment could not be checked. Check its status before charging again." }, { status: 503 });
+  }
+  if (parsed.data.action === "resume") return Response.json({ state: "none" });
 
   const resolved = await resolvePaymentProvider("terminal", access?.workspace_id ? { workspaceId: access.workspace_id, locationId: access.location_id ?? null } : undefined);
   if (!resolved.ok) return Response.json({ error: resolved.reason }, { status: 503 });

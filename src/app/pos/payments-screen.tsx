@@ -19,9 +19,32 @@ import { customerScreenRecentlyOnline, showOnCustomerScreen, useCustomerScreen }
 import { CustomerSignStep, CustomerTipStep, thankCustomer } from "./customer-steps";
 import { tipRoute, type TipRoute } from "@/lib/pos/checkout-steps";
 import { parseTipDollars, parseTipPercent, tipCentsFor } from "@/lib/pos/delivery-tip";
+import { beginCriticalWork } from "@/lib/pos/update-activity";
 
-const terminalSchema = z.object({ id: z.uuid(), label: z.string() });
+const terminalSchema = z.object({ id: z.uuid(), label: z.string(), payarc_connect: z.literal(true).optional() });
 type Terminal = z.infer<typeof terminalSchema>;
+const readerPaymentSchema = z.object({
+  state: z.enum(["none", "pending", "authorized", "captured", "failed", "voided"]),
+  payment_id: z.uuid().optional(),
+  amount_cents: z.number().int().positive().optional(),
+  reason: z.string().optional(),
+});
+
+function useTerminals() {
+  const [terminals, setTerminals] = useState<Terminal[] | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/pos/terminal", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const parsed = terminalSchema.array().safeParse(await response.json());
+        if (!controller.signal.aborted && parsed.success) setTerminals(parsed.data);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  return terminals;
+}
 
 export type Done = { order: OpenOrder; method: "cash" | "card"; changeCents: number; tenderedCents: number | null;
   /** A delivery card approved for the order — charged with the tip on the slip at the driver's cash-out. */
@@ -55,7 +78,7 @@ async function readError(response: Response, fallback: string) {
 export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfig, onAddItems }: { timeZone: string; initialOrderId?: string | null; keyedCardConfig: Extract<CheckoutPaymentConfig, { provider: "payarc" }> | null; /** Add items to an unpaid order, then pay it all at once. */ onAddItems?: (order: OpenOrder) => void }) {
   const { orders, loaded, error: listError, refresh: load } = useOpenOrders();
   const [selectedId, setSelectedId] = useState<string | null>(initialOrderId);
-  const [terminals, setTerminals] = useState<Terminal[]>([]);
+  const terminals = useTerminals();
   const [shiftId, setShiftId] = useState("");
   const [showPaid, setShowPaid] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
@@ -78,11 +101,6 @@ export function PaymentsScreen({ timeZone, initialOrderId = null, keyedCardConfi
   useEffect(() => {
     mounted.current = true;
     const first = window.setTimeout(() => { void loadDrawer(); }, 0);
-    // Readers linked to the POS (listed only when reader payment is switched on).
-    fetch("/api/pos/terminal", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : []))
-      .then((body: unknown) => { const parsed = terminalSchema.array().safeParse(body); if (mounted.current && parsed.success) setTerminals(parsed.data); })
-      .catch(() => undefined);
     return () => { mounted.current = false; window.clearTimeout(first); };
   }, [load, loadDrawer]);
 
@@ -177,7 +195,7 @@ function PaidSummary({ done, onNext }: { done: Done; onNext: () => void }) {
   </div>;
 }
 
-function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPayment, onDrawerChanged, keyedCardConfig, onPayLater, onAddItems }: { order: OpenOrder; shiftId: string; terminals: Terminal[]; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: KeyedConfig | null; /** Shown when the payment prompt opens right after an order is sent. */ onPayLater?: () => void; /** Back to the menu to add items to this same unpaid order, then one payment for everything (owner, 2026-10-16). */ onAddItems?: () => void }) {
+function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPayment, onDrawerChanged, keyedCardConfig, onPayLater, onAddItems }: { order: OpenOrder; shiftId: string; terminals: Terminal[] | null; onPaid: (done: Done) => void; onDrawerChanged: () => Promise<void>; keyedCardConfig: KeyedConfig | null; /** Shown when the payment prompt opens right after an order is sent. */ onPayLater?: () => void; /** Back to the menu to add items to this same unpaid order, then one payment for everything (owner, 2026-10-16). */ onAddItems?: () => void }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [error, setError] = useState("");
   // Every message shown here goes to the device log too, so a "couldn't" on the Elo can be read back (owner, 2026-10-28).
@@ -187,7 +205,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const screen = useCustomerScreen();
   // Items added after a payment (owner, 2026-10-19): the same order, and this screen takes only what is still owed.
   const [paidBefore, setPaidBefore] = useState(openedOrder.payment_status === "paid" ? 0 : Math.max(0, openedOrder.paid_cents));
-  const [cardPayment, setCardPayment] = useState<{ amountCents: number; partial: boolean } | null>(null);
+  const [cardPayment, setCardPayment] = useState<{ amountCents: number; partial: boolean; resumeId?: string } | null>(null);
   const [paymentIndex, setPaymentIndex] = useState(0);
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentLocked, setPaymentLocked] = useState(false);
@@ -220,6 +238,32 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
   const paymentOrder = partialCard ? { ...order, total_cents: cardPayment!.amountCents } : order;
   const cardProps = { ...(partialCard ? { amountCents: cardPayment!.amountCents } : {}), onLock: setPaymentLocked };
   const shownDue = due;
+  const pax = mode === "terminal" && !order.is_test ? terminals?.find((terminal) => terminal.payarc_connect) : null;
+
+  async function startCardPayment(amountCents: number) {
+    if (pax) {
+      setBusy(true); setError("");
+      try {
+        const response = await fetch("/api/pos/terminal", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(10_000),
+          body: JSON.stringify({ action: "resume", order_id: order.id, terminal_id: pax.id, idempotency_key: uuid() }),
+        });
+        if (!response.ok) throw new Error(await readError(response, "The reader could not be checked."));
+        const existing = readerPaymentSchema.parse(await response.json());
+        if (existing.state === "pending" && existing.payment_id && existing.amount_cents) {
+          setTipRouteTaken("card");
+          setCardPayment({ amountCents: existing.amount_cents, partial: existing.amount_cents < due, resumeId: existing.payment_id });
+          setPaymentLocked(true);
+          return;
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The reader could not be checked.");
+        return;
+      } finally { setBusy(false); }
+    }
+    setCardPayment({ amountCents, partial: amountCents < due });
+    setTipRouteTaken(tipRoute({ screenOnline: Boolean(pax) || screen.screenOnline, recentlyOnline: customerScreenRecentlyOnline(), tipAsked, paidBefore: amountCents < due ? 1 : paidBefore, current: null }));
+  }
 
   if (signing) return <CustomerSignStep onFinished={signed} order={signing.order} tipCents={Math.max(0, signing.order.total_cents - (openedOrder.total_cents - paidBefore))} />;
   const alreadyPaid = order.payment_status === "paid";
@@ -259,21 +303,18 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
       <div className={`grid grid-cols-2 ${compact ? "mt-2 gap-2" : "mt-5 gap-3"} ${buttonColumns}`}>
         {onAddItems && compact ? <button className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-wayne-green bg-white p-2 text-center font-black text-wayne-green transition active:scale-[0.99] disabled:opacity-40" disabled={busy || paymentLocked || tipAsked || mode === "terminal"} onClick={onAddItems} type="button"><span aria-hidden className="text-xl leading-none">＋</span><strong className="text-lg font-black leading-tight">Add items</strong></button> : null}
         {option("cash", "💵", "Cash", isDelivery ? "Paid now, at the counter" : "Change shown")}
-        {option("terminal", "💳", "Card reader", "Run on the separate terminal")}
+        {option("terminal", "💳", "Card reader", terminals?.length ? "Send payment to the reader" : terminals ? "Run on the separate terminal" : "Reader setup unavailable", !terminals && !order.is_test)}
         {option("keyed", "⌨️", "Key in card", isDelivery ? (keyedCardConfig || order.is_test ? keyedCardConfig?.provider === "payarc" ? "Phone order · add tip before payment" : `Phone order · add tip now or at cash-out${order.is_test ? " (test)" : ""}` : "Payment setup needed") : order.is_test ? "Test card" : keyedCardConfig ? "Card over the phone" : "Payment setup needed", !keyedCardConfig && !order.is_test)}
         {onPayLater ? <button className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-wayne-border-strong bg-white p-2 text-center transition hover:border-wayne-green disabled:opacity-40 ${compact ? "min-h-12 gap-2" : "min-h-24 flex-col"}`} disabled={busy || paymentLocked} onClick={onPayLater} type="button"><span aria-hidden className={`${compact ? "text-xl" : "text-2xl"} leading-none`}>{isDelivery ? "🚗" : "⏱"}</span><strong className={`${compact ? "" : "mt-1 "}text-lg font-black leading-tight`}>{isDelivery ? "Cash at the door" : "Pay later"}</strong>{compact ? null : <span className="text-xs font-bold text-wayne-muted">{isDelivery ? "Driver collects · cash out in Deliveries" : "At pickup / the door"}</span>}</button> : null}
       </div>
       {error ? <p className={`${compact ? "mt-2 p-2" : "mt-4 p-3"} rounded-xl bg-wayne-alert-soft font-bold text-wayne-alert`} role="alert">{error}</p> : null}
       {mode === "cash" ? <CashTender key={paymentIndex} busy={busy} due={due} onDrawerChanged={onDrawerChanged} onError={setError} onPaid={onPaid} order={order} setBusy={setBusy} shiftId={shiftId} /> : null}
-      {(mode === "terminal" || mode === "keyed") && !cardPayment ? <AmountKeypad key={`${mode}-${paymentIndex}`} busy={busy} cash={false} due={due} onPay={(amountCents) => {
-        setCardPayment({ amountCents, partial: amountCents < due });
-        setTipRouteTaken(tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: customerScreenRecentlyOnline(), tipAsked, paidBefore: amountCents < due ? 1 : paidBefore, current: null }));
-      }} /> : null}
+      {(mode === "terminal" || mode === "keyed") && !cardPayment ? <AmountKeypad key={`${mode}-${paymentIndex}`} busy={busy} cash={false} due={due} initialAmount={pax ? due : undefined} onPay={(amountCents) => { void startCardPayment(amountCents); }} /> : null}
       {mode === "terminal" && cardPayment ? (tipRoute({ screenOnline: screen.screenOnline, recentlyOnline: false, tipAsked, paidBefore: partialCard ? Math.max(1, paidBefore) : paidBefore, current: tipRouteTaken }) === "screen"
-        ? <CustomerTipStep onDone={tipDone} order={paymentOrder} />
+        ? <CustomerTipStep onDone={tipDone} order={paymentOrder} requireAnswer={Boolean(pax)} />
         // No second tap (owner, 2026-10-12): once the tip is picked the total goes straight to the reader.
         : order.is_test ? <TestCardTender key={paymentIndex} {...cardProps} autoStart busy={busy} entry="card_reader" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} />
-        : <CardTender key={paymentIndex} {...cardProps} autoStart busy={busy} onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} terminals={terminals} />) : null}
+        : <CardTender key={paymentIndex} {...cardProps} autoStart busy={busy} onError={setError} onPaid={onPaid} order={paymentOrder} resumeId={cardPayment.resumeId} setBusy={setBusy} terminals={terminals ?? []} />) : null}
       {mode === "keyed" && cardPayment && order.is_test ? <div className="mt-5"><TestCardTender key={paymentIndex} {...cardProps} busy={busy} entry="test_keyed" onError={setError} onPaid={onPaid} order={paymentOrder} setBusy={setBusy} /></div>
         : mode === "keyed" && cardPayment && keyedCardConfig ? <div className="mt-2"><PayarcKeyedTender key={paymentIndex} allowTip={paidBefore === 0 && !partialCard} busy={busy} config={keyedCardConfig} customerName={paymentOrder.customer_name || "Customer"} onError={setError} onLock={setPaymentLocked} onPaid={(totalCents) => onPaid({ order: { ...paymentOrder, total_cents: totalCents }, method: "card", changeCents: 0, tenderedCents: null })} onTotalChanged={(totalCents) => setOrder((current) => ({ ...current, total_cents: totalCents }))} orderId={paymentOrder.id} setBusy={setBusy} splitCents={partialCard ? cardPayment!.amountCents : undefined} totalCents={paymentOrder.total_cents} /></div> : null}
     </>}
@@ -286,7 +327,7 @@ function PaymentPage({ order: openedOrder, shiftId, terminals, onPaid: finishPay
  * leaves the order unpaid; it is in Payments whenever the customer pays.
  */
 export function PaymentPrompt({ order, keyedCardConfig, onPayLater, onFinished, onAddItems }: { order: OpenOrder; keyedCardConfig: KeyedConfig | null; onPayLater: () => void; /** Paid: straight back to taking orders, no "Next order" screen (owner, 2026-10-19). */ onFinished: (done: Done) => void; onAddItems?: () => void }) {
-  const [terminals, setTerminals] = useState<Terminal[]>([]);
+  const terminals = useTerminals();
   const [shiftId, setShiftId] = useState("");
   const mounted = useRef(true);
 
@@ -301,10 +342,6 @@ export function PaymentPrompt({ order, keyedCardConfig, onPayLater, onFinished, 
   useEffect(() => {
     mounted.current = true;
     const first = window.setTimeout(() => { void loadDrawer(); }, 0);
-    fetch("/api/pos/terminal", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : []))
-      .then((body: unknown) => { const parsed = terminalSchema.array().safeParse(body); if (mounted.current && parsed.success) setTerminals(parsed.data); })
-      .catch(() => undefined);
     return () => { mounted.current = false; window.clearTimeout(first); };
   }, [loadDrawer]);
 
@@ -314,8 +351,8 @@ export function PaymentPrompt({ order, keyedCardConfig, onPayLater, onFinished, 
 type TenderProps = { onLock?: (locked: boolean) => void; amountCents?: number; order: OpenOrder; busy: boolean; setBusy: (value: boolean) => void; onError: (message: string) => void; onPaid: (done: Done) => void };
 
 /** Both cash and cards use the same amount entry; a smaller payment leaves the balance open. */
-function AmountKeypad({ due, cash, busy, onPay }: { due: number; cash: boolean; busy: boolean; onPay: (cents: number) => void }) {
-  const [raw, setRaw] = useState("");
+function AmountKeypad({ due, cash, busy, initialAmount, onPay }: { due: number; cash: boolean; busy: boolean; initialAmount?: number; onPay: (cents: number) => void }) {
+  const [raw, setRaw] = useState(() => initialAmount === undefined ? "" : (initialAmount / 100).toFixed(2));
   const cents = parseMoneyToCents(raw) ?? 0;
   const valid = cents > 0 && cents <= 10_000_000 && (cash || cents <= due);
   const applied = Math.min(due, cents);
@@ -370,47 +407,75 @@ function CashTender({ order, due, shiftId, busy, setBusy, onError, onPaid, onDra
   return <AmountKeypad busy={busy} cash due={due} onPay={(cents) => { void record(cents); }} />;
 }
 
-function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onError, onPaid, autoStart = false }: TenderProps & { terminals: Terminal[]; autoStart?: boolean }) {
+function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onError, onPaid, resumeId, autoStart = false }: TenderProps & { terminals: Terminal[]; resumeId?: string; autoStart?: boolean }) {
   const requestKey = useRef(`pos-terminal-${order.id}-${uuid()}`);
   const [pickedTerminalId, setTerminalId] = useState(terminals[0]?.id ?? "");
   const terminalId = pickedTerminalId || terminals[0]?.id || "";
+  const pax = terminals.find((terminal) => terminal.id === terminalId)?.payarc_connect === true;
+  const attemptId = useRef(resumeId);
+  const [checking, setChecking] = useState(Boolean(resumeId));
   const [note, setNote] = useState("");
   const [charging, setCharging] = useState(false);
   const [last4, setLast4] = useState("");
   const [approval, setApproval] = useState("");
   const alive = useRef(true);
+  const inFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   /** A reader linked to the POS: send it the total, then wait for the customer. */
   async function sendToReader() {
-    if (!terminalId) return;
+    if (!terminalId || inFlight.current) return;
+    inFlight.current = true;
+    const finish = beginCriticalWork("card reader payment");
     onLock?.(true); setCharging(true); setBusy(true); onError(""); setNote("Sending the total to the reader…");
-    const idempotencyKey = requestKey.current;
-    const call = (action: "start" | "status") => fetch("/api/pos/terminal", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...(amountCents !== undefined ? { amount_cents: amountCents } : {}), order_id: order.id, terminal_id: terminalId, idempotency_key: idempotencyKey, action }),
-      signal: AbortSignal.timeout(20_000),
-    });
     try {
-      const start = await call("start");
-      if (!start.ok) throw new Error(await readError(start, "The card reader could not be reached."));
+      setChecking(true);
+      let action: "start" | "status" = attemptId.current ? "status" : "start";
       setNote("Waiting for the customer to tap, dip or swipe…");
       const deadline = Date.now() + 5 * 60_000;
       while (alive.current && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-        const poll = await call("status");
-        if (!poll.ok) throw new Error(await readError(poll, "The card reader could not be reached."));
-        const body = await poll.json().catch(() => ({})) as { state?: string };
-        if (body.state === "captured") { onPaid({ order, method: "card", changeCents: 0, tenderedCents: null }); return; }
-        if (body.state === "voided") { onLock?.(false); throw new Error("The customer cancelled at the reader."); }
-        if (body.state === "failed") { onLock?.(false); throw new Error("The card was declined at the reader."); }
+        const response = await callReader(action);
+        if (!alive.current) return;
+        if (!response.ok) {
+          const body = await response.json().catch(() => null) as { error?: string; retryable_start?: boolean } | null;
+          if (body?.retryable_start) { setChecking(false); onLock?.(false); }
+          throw new Error(body?.error ?? "The card reader could not be reached.");
+        }
+        const body = readerPaymentSchema.parse(await response.json());
+        if (pax && body.payment_id) attemptId.current = body.payment_id;
+        if (body.state === "captured") {
+          onPaid({ order: { ...order, total_cents: body.amount_cents ?? order.total_cents }, method: "card", changeCents: 0, tenderedCents: null });
+          return;
+        }
+        if (body.state === "voided" || body.state === "failed") {
+          attemptId.current = undefined;
+          requestKey.current = `pos-terminal-${order.id}-${uuid()}`;
+          setChecking(false); onLock?.(false);
+          throw new Error(body.reason ?? (body.state === "voided" ? "The customer cancelled at the reader." : "The card was declined at the reader."));
+        }
+        action = "status";
+        await new Promise((resolve) => setTimeout(resolve, pax ? 4000 : 2500));
       }
       throw new Error("The reader did not answer in time. Check it before charging again.");
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "The card reader could not be reached.");
+      if (alive.current) onError(cause instanceof Error ? cause.message : "The card reader could not be reached.");
     } finally {
+      inFlight.current = false;
+      finish();
       if (alive.current) { setCharging(false); setBusy(false); setNote(""); }
     }
+  }
+
+  function callReader(action: "start" | "status" | "cancel") {
+    return fetch("/api/pos/terminal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action, order_id: order.id, terminal_id: terminalId,
+        idempotency_key: !pax && action === "cancel" ? `pos-terminal-cancel-${order.id}-${Date.now()}` : requestKey.current,
+        amount_cents: amountCents, expected_amount_cents: pax ? order.total_cents : undefined, payment_id: attemptId.current,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
   }
 
   // A single linked reader: send it the total without waiting for a tap.
@@ -423,13 +488,8 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
   }, [autoStart, terminals.length, terminalId]);
 
   async function cancelOnReader() {
-    try {
-      await fetch("/api/pos/terminal", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: order.id, terminal_id: terminalId, idempotency_key: `pos-terminal-cancel-${order.id}-${Date.now()}`, action: "cancel" }),
-        signal: AbortSignal.timeout(15_000),
-      });
-    } catch { /* the wait loop reports whatever the reader ends up saying */ }
+    try { await callReader("cancel"); }
+    catch { /* the wait loop reports whatever the reader ends up saying */ }
   }
 
   /** A standalone reader (not linked yet): the total was keyed in and approved. */
@@ -469,10 +529,10 @@ function CardTender({ onLock, amountCents, order, terminals, busy, setBusy, onEr
       <h2 className="text-xl font-black">Send to the card reader</h2>
       {terminals.length > 1 ? <label className="mt-2 grid gap-1 text-sm font-bold">Reader<select className="min-h-11 rounded-lg border border-wayne-border bg-white px-3" onChange={(event) => setTerminalId(event.target.value)} value={terminalId}>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label}</option>)}</select></label> : null}
       {charging ? <div className="mt-3 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-lg font-bold">{note}</p><Button onClick={() => { void cancelOnReader(); }} variant="secondary">Cancel on reader</Button></div>
-        : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">Charge {formatCents(order.total_cents)} on the reader</Button>}
+        : <Button className="mt-3 w-full text-xl" disabled={busy} onClick={() => { void sendToReader(); }} size="lg">{checking && pax ? "Check reader payment" : `Charge ${formatCents(order.total_cents)} on the reader`}</Button>}
     </div> : null}
 
-    {manualReader}
+    {!pax ? manualReader : null}
   </div>;
 }
 

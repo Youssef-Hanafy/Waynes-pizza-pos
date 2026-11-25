@@ -1,7 +1,9 @@
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { CheckoutClient } from "../src/app/checkout/checkout-client";
 import { OrderMenuClient } from "../src/app/menu/order-menu-client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CustomerScreen } from "../src/app/pos/display/customer-screen";
+import { startCustomerDisplayLink } from "../src/stores/customer-display-link";
 import { createRoot } from "react-dom/client";
 import { PaymentPrompt } from "../src/app/pos/payments-screen";
 import { PosItemDialog } from "../src/app/pos/item-dialog";
@@ -13,6 +15,9 @@ const item = publicMenuItemSchema.parse({ id: id(2), name: "One Topping Pizza", 
 const order = openOrderSchema.parse({ id: id(1), order_number: "W000001", daily_number: 1, customer_name: "Split test", fulfillment_type: "pickup", source: "pos", status: "placed", payment_method: "cash", payment_status: "unpaid", total_cents: 3000, paid_cents: 0, placed_at: "2026-11-02T12:00:00Z", promised_at: null, ready_at: null, is_test: true });
 function Fixture() {
   const [done, setDone] = useState<unknown>(null);
+  const reader = location.pathname === "/reader";
+  useEffect(() => { if (reader) return startCustomerDisplayLink(); }, [reader]);
+  if (location.pathname === "/tablet") return <CustomerScreen storeName="Wayne's Pizza" />;
   if (location.pathname === "/modifiers") return <><PosItemDialog initialLine={null} item={item} onAdd={setDone} onClose={() => {}} /><output>{done ? JSON.stringify(done) : ""}</output></>;
   if (location.pathname === "/online-notes" || location.pathname === "/menu-notes") {
     const router = { bfcacheId: "fixture", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
@@ -23,6 +28,6 @@ function Fixture() {
   }
   const originalCard = location.pathname === "/online-extra";
   const payarc = location.pathname === "/payarc" || originalCard;
-  return <><PaymentPrompt keyedCardConfig={payarc ? { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } : null} onFinished={setDone} onPayLater={() => {}} order={originalCard ? { ...order, source: "online", is_test: false, total_cents: 3535, paid_cents: 3000 } : payarc ? { ...order, is_test: false } : order} /><output>{done ? "Finished" : "Order open"}</output></>;
+  return <><PaymentPrompt keyedCardConfig={payarc ? { provider: "payarc", client_id: "public-client", environment: "sandbox", online_card_enabled: true } : null} onFinished={setDone} onPayLater={() => {}} order={originalCard ? { ...order, source: "online", is_test: false, total_cents: 3535, paid_cents: 3000 } : payarc || reader ? { ...order, is_test: false } : order} /><output>{done ? "Finished" : "Order open"}</output></>;
 }
 createRoot(document.getElementById("root")!).render(<Fixture />);

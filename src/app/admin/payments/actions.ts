@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/access";
 import { readPaymentConnection } from "@/lib/payments/config";
+import { checkPayarcConnectReader } from "@/lib/payments/payarc-connect";
+import { getPayarcConnectReader } from "@/lib/payments/payarc-connect-operation";
 import { testPaymentConnection } from "@/lib/payments/registry";
 import { paymentErrorMessage } from "@/lib/payments/schemas";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
@@ -58,4 +60,18 @@ export async function savePaymentTerminal(form: FormData) {
   }
   revalidatePath("/admin/payments");
   back("Card reader saved.", "saved");
+}
+
+export async function checkPaxReader() {
+  const access = await requirePermission("payments.manage", "/admin/payments");
+  let online: boolean | null;
+  try {
+    const setup = await getPayarcConnectReader(access);
+    if (!setup?.ready) throw new Error("Register the active PAX serial and complete the Payarc Connect server settings.");
+    online = await checkPayarcConnectReader(setup.config);
+  } catch (error) {
+    return back(error instanceof Error ? error.message : "Payarc Connect could not verify the reader.");
+  }
+  if (online !== true) return back(online === false ? "The PAX reader is offline." : "Payarc Connect V3 has not seen the PAX reader yet.");
+  back("The PAX reader is online in Payarc Connect V3.", "saved");
 }

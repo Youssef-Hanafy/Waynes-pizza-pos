@@ -39,6 +39,7 @@ export type TipView =
 
 export type TipStepOptions = {
   orderTotalCents: number;
+  requireAnswer?: boolean;
   /** Shows the tip choice on the customer screen. */
   ask: () => CustomerRequest;
   /** Saves the tip on the order; resolves with the order's new total. */
@@ -99,15 +100,18 @@ export function startTipStep(options: TipStepOptions): TipStep {
   /** Go on with no tip.  Before any save was tried the order total is still right; after one, confirm $0 with the server. */
   const withoutTip = () => {
     if (settled || saving) return;
-    if (lastTried !== null) { void save(0); return; }
+    if (options.requireAnswer || lastTried !== null) { void save(0); return; }
     settle(options.orderTotalCents, 0);
   };
 
   void request.answer.then((answer) => {
     if (!alive || settled || saving || lastTried !== null) return;
-    if (!answer || typeof answer.tip_cents !== "number") { settle(options.orderTotalCents, null); return; }
+    if (!answer || typeof answer.tip_cents !== "number") {
+      if (!options.requireAnswer) settle(options.orderTotalCents, null);
+      return;
+    }
     const tip = Math.max(0, Math.round(answer.tip_cents));
-    if (tip === 0) { settle(options.orderTotalCents, null); return; }
+    if (tip === 0 && !options.requireAnswer) { settle(options.orderTotalCents, null); return; }
     void save(tip);
   });
 
